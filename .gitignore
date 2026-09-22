@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+
+# local saves and F12 screenshots
+ttmon_save.json
+ttmon_*.png
+docs/_tmp/

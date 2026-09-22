@@ -1,0 +1,4 @@
+# Tabula Mythos needs exactly one dependency.
+# pygame-ce is the maintained community fork and is a drop-in for pygame;
+# plain "pygame>=2.5" also works if you prefer it.
+pygame-ce>=2.5.0
