@@ -166,9 +166,9 @@ class Intro(Scene):
             ui.panel(surf, (x - 6, 26, 56, 62),
                      (56, 50, 84) if not sel else (88, 78, 128),
                      P.ICON_FULL if sel and self.game.blink else P.BLACK)
-            spr = MART.sprite(key)
+            spr = MART.icon(key, 40)
             bob = math.sin(self.game.time * 2 + i) * 1.5 if sel else 0
-            surf.blit(spr, (x + 4, 30 + bob))
+            surf.blit(spr, (x + 2, 28 + bob))
             name = Monster(key, 5).species.name
             font.draw_centered(surf, name, x + 22, 66, P.WHITE)
             font.draw_centered(surf, el, x + 22, 76, P.GREY_L)
@@ -321,7 +321,7 @@ class PartyMenu(Scene):
                 bg = (96, 88, 140)
             ui.panel(surf, (6, y, 228, 21), bg,
                      P.ICON_FULL if i == self.swap_from else P.BLACK)
-            spr = MART.sprite(mon.art)
+            spr = MART.icon(mon.art, 32)
             surf.blit(spr, (8, y - 6), pygame.Rect(0, 4, 32, 21))
             font.draw(surf, mon.name, 44, y + 2, P.WHITE)
             font.draw(surf, "Lv%d" % mon.level, 44, y + 12, P.GREY_L)
@@ -344,7 +344,7 @@ class PartyMenu(Scene):
         font = get_font()
         surf.fill((40, 38, 66))
         ui.panel(surf, (4, 4, 74, 74), (60, 56, 92))
-        surf.blit(MART.sprite(mon.art), (25, 22))
+        surf.blit(MART.icon(mon.art, 48), (17, 16))
         font.draw_centered(surf, mon.name, 41, 8, P.WHITE)
         font.draw_centered(surf, "%s  Lv%d" % (mon.species.race, mon.level),
                            41, 62, P.GREY_L)
@@ -542,41 +542,43 @@ class RecordScreen(Scene):
         surf.fill((44, 40, 70))
         font = get_font()
         p = self.game.player
-        font.draw(surf, "RECORD", 8, 5, P.WHITE)
+        font.draw(surf, "RECORD", 8, 4, P.WHITE)
         font.draw(surf, "met %d / bound %d of %d"
                   % (len(p.seen & set(self.keys)), len(p.bound & set(self.keys)),
-                     len(self.keys)), 90, 6, P.GREY_L)
+                     len(self.keys)), 96, 5, P.GREY_L)
+        cols = 7
         for i, key in enumerate(self.keys):
-            x = 8 + (i % 6) * 38
-            y = 18 + (i // 6) * 40
+            x = 5 + (i % cols) * 33
+            y = 14 + (i // cols) * 31
             seen = key in p.seen
             bound = key in p.bound
-            ui.panel(surf, (x, y, 34, 36), (60, 56, 92) if seen else (36, 34, 56),
+            ui.panel(surf, (x, y, 31, 29),
+                     (60, 56, 92) if seen else (36, 34, 56),
                      P.ICON_FULL if i == self.index and self.game.blink
                      else P.BLACK)
-            spr = MART.sprite(SPECIES[key].art)
+            spr = MART.icon(SPECIES[key].art, 28)
             if seen:
-                surf.blit(spr, (x + 1, y + 2))
+                surf.blit(spr, (x + 2, y + 1))
             else:
                 shadow = pygame.mask.from_surface(spr).to_surface(
                     setcolor=(28, 26, 44, 255), unsetcolor=(0, 0, 0, 0))
-                surf.blit(shadow, (x + 1, y + 2))
+                surf.blit(shadow, (x + 2, y + 1))
             if bound:
-                font.draw(surf, "\x03", x + 26, y + 26, P.ICON_FULL)
+                font.draw(surf, "\x03", x + 24, y + 21, P.ICON_FULL)
         key = self.keys[self.index]
         sp = SPECIES[key]
-        ui.window(surf, (4, 100, 232, 56))
+        ui.window(surf, (4, 108, 232, 48))
         if key in p.seen:
-            font.draw(surf, "%s  -  %s" % (sp.name, sp.race), 12, 106,
+            font.draw(surf, "%s  -  %s" % (sp.name, sp.race), 12, 113,
                       P.NEAR_BLACK)
             cx = 12
             for el in ATTACK_ELEMENTS:
                 aff = sp.affinity.get(el, NEUTRAL)
-                font.draw(surf, EL_NAMES[el][:2], cx, 118, P.GREY_D)
-                font.draw(surf, AFFINITY_TAGS[aff], cx + 2, 127,
+                font.draw(surf, EL_NAMES[el][:2], cx, 124, P.GREY_D)
+                font.draw(surf, AFFINITY_TAGS[aff], cx + 2, 133,
                           AFFINITY_COLORS[aff] if aff != NEUTRAL else P.GREY)
                 cx += 22
-            for i, line in enumerate(font.wrap(sp.desc, 216)[:2]):
-                font.draw(surf, line, 12, 136 + i * 9, P.GREY_D)
+            for i, line in enumerate(font.wrap(sp.desc, 216)[:1]):
+                font.draw(surf, line, 12, 144, P.GREY_D)
         else:
-            font.draw(surf, "Not yet met.", 12, 120, P.GREY_D)
+            font.draw(surf, "Not yet met.", 12, 124, P.GREY_D)

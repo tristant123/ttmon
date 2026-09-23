@@ -51,6 +51,12 @@ def main():
     p.map_key = "shrine"; ov._setup_render(); ov.banner_t = 0.0
     h.tick(30)
     shots.append(grab(h, "shrine"))
+    # the greek ruins
+    ov.map = maps.get("ruins"); ov.tx, ov.ty = 9, 8
+    ov.px, ov.py = 9.0, 8.0
+    p.map_key = "ruins"; ov._setup_render(); ov.banner_t = 0.0
+    h.tick(30)
+    shots.append(grab(h, "ruins"))
     ov.map = maps.get("route"); ov.tx, ov.ty = 13, 8
     ov.px, ov.py = 13.0, 8.0
     p.map_key = "route"; ov._setup_render(); ov.banner_t = 0.0
@@ -58,8 +64,9 @@ def main():
 
     # A battle, paused on the command window with a half icon earned.
     ov = h.scene
-    ov.start_battle([make_wild("mandrake", 11), make_wild("wisp", 12),
-                     make_wild("golem", 12)])
+    p.map_key = "ruins"
+    ov.start_battle([make_wild("minotaur", 12), make_wild("harpy", 11),
+                     make_wild("medusa", 12)])
     h.settle()
     for _ in range(300):
         h.tick(2)

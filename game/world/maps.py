@@ -12,6 +12,8 @@ LEGEND = {
     "+": ("sand", False, None),
     "F": ("floor", False, None),
     "S": ("sign", True, "sign"),
+    "C": ("column", True, None),
+    "r": ("rubble", True, None),
     "W": ("fountain", True, "fountain"),
     "w": ("wall", True, None),
     "v": ("window", True, None),
@@ -234,13 +236,13 @@ ROUTE_HEIGHTS = [
 ROUTE = GameMap(
     "route", "Mistgrass Road", ROUTE_ROWS,
     warps={(13, 0): ("village", 13, 16), (27, 19): ("shrine", 2, 13),
-           (27, 8): ("shrine", 2, 13)},
+           (27, 8): ("shrine", 2, 13), (2, 20): ("ruins", 22, 16)},
     rate=0.11, group=(1, 2), heights=ROUTE_HEIGHTS, grade="route",
     lights=[(6, 11, 66, (150, 210, 255), 0.35)],
     motes={"count": 34, "colour": (216, 255, 200), "speed": 7.0, "size": 2},
     signs={
         (11, 5): "MISTGRASS ROAD\nThe grass is tall. So is what lives\nin it.",
-        (11, 17): "EAST: SHRINE OF THE SCALE\nPilgrims welcome. Survivors rarer.",
+        (11, 17): "EAST: SHRINE OF THE SCALE\nPilgrims welcome. Survivors rarer.\nSOUTH-WEST: THE MARBLE STEPS",
     },
     encounters=[
         ("mandrake", 3, 6, 30),
@@ -308,6 +310,10 @@ SHRINE = GameMap(
         ("baku", 10, 14, 14),
         ("golem", 9, 13, 14),
         ("cerberus", 11, 15, 12),
+        ("nemean", 12, 16, 10),
+        ("chimera", 12, 16, 10),
+        ("talos", 12, 16, 8),
+        ("medusa", 11, 15, 8),
     ],
     npcs=[
         NPC(7, 6, "ward", [
@@ -315,7 +321,54 @@ SHRINE = GameMap(
         ], name="Spring", action="heal"),
     ])
 
-MAPS = {m.key: m for m in (VILLAGE, ROUTE, SHRINE)}
+# ---------------------------------------------------------------------------
+# The Marble Steps - a Greek ruin between the road and the shrine, and where
+# the Hellenic half of the bestiary lives.
+# ---------------------------------------------------------------------------
+RUINS_ROWS = [
+    "########################",
+    "#***...oo.........***..#",
+    "#***....o........****..#",
+    "#**.............*****..#",
+    "#.....CFFFFFFC.........#",
+    "#.....FFFFFFFF....rr...#",
+    "#..C..FFFFFFFF..C......#",
+    "#.....FFFFFFFF.........#",
+    "#.....FFFFFFFF......***#",
+    "#.....CFFFFFFC.....****#",
+    "#..r................***#",
+    "#........rr.S..........#",
+    "#***...................#",
+    "#****.........C....C...#",
+    "#***...................#",
+    "#.....................=#",
+    "#.....................=#",
+    "########################",
+]
+
+RUINS = GameMap(
+    "ruins", "The Marble Steps", RUINS_ROWS,
+    warps={(22, 15): ("route", 2, 19), (22, 16): ("route", 2, 19)},
+    rate=0.12, group=(1, 2), grade="ruins",
+    signs={(12, 11): "THE MARBLE STEPS\nRaised to gods who no longer answer.\nSomething else moved in."},
+    lights=[(9, 6, 70, (255, 206, 132), 0.55),
+            (16, 6, 54, (255, 198, 126), 0.40),
+            (6, 13, 54, (255, 198, 126), 0.35)],
+    motes={"count": 40, "colour": (255, 228, 172), "speed": 5.0, "size": 2},
+    encounters=[
+        ("satyr", 6, 9, 26),
+        ("harpy", 6, 10, 22),
+        ("medusa", 8, 11, 16),
+        ("minotaur", 8, 12, 14),
+        ("siren", 7, 11, 12),
+        ("cyclops", 9, 12, 8),
+        ("chimera", 10, 13, 6),
+        ("pegasus", 9, 12, 5),
+        ("talos", 10, 13, 4),
+        ("nemean", 11, 14, 3),
+    ])
+
+MAPS = {m.key: m for m in (VILLAGE, ROUTE, SHRINE, RUINS)}
 
 # The altar tile that starts the boss fight.
 BOSS_TILE = ("shrine", 7, 2)

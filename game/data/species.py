@@ -10,7 +10,7 @@ from .elements import (PHYS, FIRE, ICE, ELEC, WIND, LIGHT, DARK,
 
 class Species:
     def __init__(self, key, name, race, art, affinity, base, learn,
-                 catch=45, xp=24, flee=False, press=0, scale=2, desc=""):
+                 catch=45, xp=24, flee=False, press=0, scale=1, desc=""):
         self.key = key
         self.name = name
         self.race = race
@@ -22,7 +22,7 @@ class Species:
         self.xp = xp                  # xp yield coefficient
         self.flee = flee              # bosses cannot be fled from or bound
         self.press = press            # extra press turn icons per round
-        self.scale = scale            # sprite magnification on the battle stage
+        self.scale = scale            # extra magnification on the battle stage
         self.desc = desc
 
     def skills_at(self, level):
@@ -131,13 +131,99 @@ _sp("baku", "Baku", "Dream", "baku",
     catch=18, xp=58,
     desc="Eats bad dreams. Is not fussy about whose.")
 
+
+# ---------------------------------------------------------------------------
+# Greek and Roman myth. These fill the level gap between the road and the
+# shrine, and several exist to teach a specific lesson about affinities.
+# ---------------------------------------------------------------------------
+
+_sp("satyr", "Satyr", "Fairy", "satyr",
+    {PHYS: WEAK, ICE: WEAK, WIND: RESIST},
+    _b(34, 26, 9, 12, 9, 14, 13),
+    [(1, "gust"), (1, "lullaby"), (5, "haste"), (8, "sap"), (12, "cyclone"),
+     (16, "dispel")],
+    catch=38, xp=34,
+    desc="Pipes at all hours. Takes requests, ignores them.")
+
+_sp("harpy", "Harpy", "Avian", "harpy",
+    {ICE: WEAK, ELEC: WEAK, WIND: RESIST},
+    _b(36, 22, 12, 11, 8, 17, 11),
+    [(1, "gust"), (1, "rend"), (5, "gale_fang"), (8, "slow"), (11, "cyclone"),
+     (15, "maelstrom")],
+    catch=34, xp=36,
+    desc="Shrieks first. Considers the matter later, if at all.")
+
+_sp("medusa", "Medusa", "Gorgon", "medusa",
+    {FIRE: WEAK, DARK: RESIST, PHYS: RESIST},
+    _b(40, 28, 11, 15, 11, 12, 12),
+    [(1, "gloom"), (1, "venom"), (6, "dread"), (9, "snare"), (13, "oblivion"),
+     (16, "crack")],
+    catch=22, xp=46,
+    desc="Her hair is friendlier than she is. Marginally.")
+
+_sp("minotaur", "Minotaur", "Beast", "minotaur",
+    {ELEC: WEAK, PHYS: RESIST, DARK: RESIST},
+    _b(52, 14, 17, 7, 14, 9, 8),
+    [(1, "lunge"), (1, "snare"), (6, "skullcrack"), (10, "bolster"),
+     (13, "gale_fang"), (17, "stone_fist")],
+    catch=20, xp=48,
+    desc="Furious, cornered, and no longer sure why.")
+
+_sp("siren", "Siren", "Sea", "siren",
+    {ELEC: WEAK, ICE: RESIST, DARK: RESIST},
+    _b(40, 30, 10, 15, 10, 12, 12),
+    [(1, "frost"), (1, "lullaby"), (6, "dread"), (9, "rime"), (14, "glacier"),
+     (17, "mend_all")],
+    catch=26, xp=44,
+    desc="The song is the dangerous part. The rocks are incidental.")
+
+_sp("cyclops", "Cyclops", "Giant", "cyclops",
+    {LIGHT: WEAK, PHYS: RESIST, DARK: RESIST, ICE: RESIST},
+    _b(60, 10, 19, 6, 16, 5, 6),
+    [(1, "lunge"), (1, "stone_fist"), (7, "crack"), (11, "skullcrack"),
+     (16, "judgement_blade")],
+    catch=16, xp=55,
+    desc="One eye, and a blind side to match. Aim for the eye.")
+
+_sp("chimera", "Chimera", "Beast", "chimera",
+    {ICE: WEAK, FIRE: RESIST, DARK: RESIST},
+    _b(50, 22, 15, 13, 12, 13, 9),
+    [(1, "ember"), (1, "rend"), (6, "venom"), (10, "inferno"),
+     (13, "skullcrack"), (16, "pyre")],
+    catch=14, xp=58,
+    desc="Three animals, one very bad mood, no clear leader.")
+
+_sp("pegasus", "Pegasus", "Divine", "pegasus",
+    {DARK: WEAK, WIND: RESIST, LIGHT: RESIST, ELEC: RESIST},
+    _b(42, 30, 11, 14, 11, 16, 14),
+    [(1, "gust"), (1, "mend"), (5, "haste"), (9, "cyclone"), (13, "mend_all"),
+     (17, "maelstrom")],
+    catch=14, xp=54,
+    desc="Insufferably graceful. Knows it, too.")
+
+_sp("talos", "Talos", "Automaton", "talos",
+    {ELEC: WEAK, FIRE: NULL, PHYS: RESIST, ICE: RESIST},
+    _b(58, 16, 16, 10, 18, 6, 7),
+    [(1, "lunge"), (1, "ward"), (6, "stone_fist"), (9, "snare"),
+     (12, "crack"), (16, "judgement_blade")],
+    catch=8, xp=62,
+    desc="Bronze, tireless, and very slightly leaking.")
+
+_sp("nemean", "Nemean Lion", "Beast", "nemean",
+    {PHYS: NULL, ELEC: WEAK, FIRE: RESIST},
+    _b(54, 16, 18, 9, 15, 13, 10),
+    [(1, "rend"), (1, "lunge"), (6, "bolster"), (10, "skullcrack"),
+     (14, "gale_fang"), (18, "judgement_blade")],
+    catch=10, xp=68,
+    desc="Its hide has never once been cut. Do not try to be first.")
+
 _sp("anubis", "Anubis", "Deity", "anubis",
     {WIND: WEAK, LIGHT: REPEL, DARK: DRAIN, PHYS: RESIST, FIRE: RESIST,
      ICE: RESIST},
     _b(115, 60, 16, 18, 16, 15, 14),
     [(1, "scale_of_ma"), (1, "judgement_blade"), (1, "radiance"),
      (1, "mythos_ray"), (1, "crack"), (1, "bolster"), (1, "dread")],
-    catch=0, xp=300, flee=True, press=1, scale=3,
+    catch=0, xp=300, flee=True, press=1,
     desc="Keeper of the scale. He has already read your weight.")
 
 

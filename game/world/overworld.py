@@ -352,6 +352,7 @@ class Overworld(Scene):
         "village": ((126, 166, 214), (206, 214, 198)),
         "route": ((118, 162, 206), (198, 214, 196)),
         "shrine": ((46, 52, 104), (126, 118, 168)),
+        "ruins": ((148, 168, 210), (238, 214, 178)),
     }
 
     def _rustle_world(self, canvas, cam):

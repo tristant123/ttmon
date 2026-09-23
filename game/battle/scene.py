@@ -35,6 +35,7 @@ AREA_FLOOR = {
     "village": ("grass", ((104, 138, 196), (196, 206, 206))),
     "route": ("grass", ((110, 150, 202), (192, 208, 198))),
     "shrine": ("floor", ((44, 52, 106), (128, 126, 168))),
+    "ruins": ("floor", ((146, 166, 208), (236, 212, 176))),
 }
 
 
@@ -96,6 +97,8 @@ class BattleScene(Scene):
         props = [tiles["tree"], tiles["rock"]]
         if key == "shrine":
             props = [tiles["tree"], tiles["shrine_bl"], tiles["rock"]]
+        elif key == "ruins":
+            props = [tiles["column"], tiles["tree"], tiles["rubble"]]
         arena.add_backdrop(self.floor, props)
 
     # -- geometry ----------------------------------------------------------
@@ -110,14 +113,19 @@ class BattleScene(Scene):
         i = self.b.party.index(mon) if mon in self.b.party else 0
         return slots[i] if i < len(slots) else slots[-1]
 
+    def sprite_of(self, mon):
+        return self.game.assets["mon_scaled"](
+            mon.art, getattr(mon.species, "scale", 1))
+
     def crect_of(self, mon):
-        """Canvas-space sprite box. Bosses are drawn at a larger scale, and
-        stand further forward so their full height fits on the stage."""
+        """Canvas-space sprite box, sized by the art. Anything taller than a
+        standard sprite stands further forward so it still fits the stage."""
         cx, feet = self.stage_pos(mon)
-        size = 32 * getattr(mon.species, "scale", 2)
-        if mon in self.b.foes and size > C_SPRITE:
-            feet += (size - C_SPRITE) // 2
-        return pygame.Rect(cx - size // 2, feet - size, size, size)
+        spr = self.sprite_of(mon)
+        w, hgt = spr.get_size()
+        if mon in self.b.foes and hgt > C_SPRITE:
+            feet += min(28, (hgt - C_SPRITE) // 2)
+        return pygame.Rect(cx - w // 2, feet - hgt, w, hgt)
 
     def rect_of(self, mon):
         """The same box in UI space, for damage numbers and cursors."""
@@ -521,6 +529,9 @@ class BattleScene(Scene):
             lines.append("You wake at the Hollow, %d coin lighter." % lost)
         elif res == "fled":
             lines.append("You got away.")
+        elif res == "stalemate":
+            lines.append("Neither side can land a blow.")
+            lines.append("You disengage. Bring something it cannot shrug off.")
         for mon in self.b.captured:
             player.seen.add(mon.species.key)
             if player.add_monster(mon):
@@ -582,8 +593,7 @@ class BattleScene(Scene):
 
     def draw_monster(self, canvas, mon, enemy):
         rect = self.crect_of(mon)
-        spr = self.game.assets["mon_scaled"](mon.art,
-                                             getattr(mon.species, "scale", 2))
+        spr = self.sprite_of(mon)
         if not enemy:
             spr = pygame.transform.flip(spr, True, False)
         fade = self.fainting.get(id(mon))

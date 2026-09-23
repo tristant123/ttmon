@@ -29,7 +29,7 @@ HEIGHTS = {
 
 # Tiles that stand up as billboards instead of lying on the ground.
 PROPS = {
-    "tree", "rock", "sign", "fountain",
+    "tree", "rock", "sign", "fountain", "column", "rubble",
     "wall", "window", "door", "roof_l", "roof_m", "roof_r",
     "shrine_tl", "shrine_tm", "shrine_tr",
     "shrine_bl", "shrine_bm", "shrine_br",
@@ -43,6 +43,7 @@ LIFT = {
 
 # What ground shows underneath a prop tile.
 GROUND_UNDER = {
+    "column": "floor",
     "shrine_bl": "floor", "shrine_bm": "floor", "shrine_br": "floor",
     "shrine_tl": "floor", "shrine_tm": "floor", "shrine_tr": "floor",
     "fountain": "path",
@@ -319,6 +320,9 @@ class Diorama:
         elif name == "window":
             fx.add_light(sx + TILE / 2, sy + TILE * 0.4, 42,
                          (255, 190, 110), 0.45)
+        elif name == "column":
+            fx.add_light(sx + TILE / 2, sy + TILE * 0.3, 40,
+                         (255, 214, 150), 0.30)
         elif name == "fountain":
             fx.add_light(sx + TILE / 2, sy + TILE * 0.5, 52,
                          (150, 200, 255), 0.42)

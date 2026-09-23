@@ -26,6 +26,12 @@ from ..data.elements import (PHYS, HEAL, SUPPORT, ALMIGHTY, NEUTRAL, WEAK,
 PLAYER = "player"
 ENEMY = "enemy"
 
+# Consecutive rounds in which the player lands no damage at all before the
+# fight is called off. Neither side's HP total is a usable test - physical
+# arts cost their user HP, so both totals drift even when nothing is landing.
+# What matters is damage the player actually deals.
+STALEMATE_ROUNDS = 8
+
 # icon costs
 NORMAL, BONUS, MISS, NULLED, REFLECT = "normal", "bonus", "miss", "null", "reflect"
 
@@ -109,6 +115,12 @@ class Battle:
         self.xp_pool = 0
         self.gold_pool = 0
         self._log = []
+        # Deadlock guard. A party whose only damage is physical cannot hurt
+        # something that nulls physical, and the free Strike is physical too,
+        # so such a fight would otherwise run forever. After enough rounds in
+        # which nobody's HP moves at all, both sides disengage.
+        self._player_damage = 0
+        self._stale_rounds = 0
 
     # --- helpers ----------------------------------------------------------
     def members(self, side):
@@ -179,6 +191,16 @@ class Battle:
         self.guarding -= set(self.members(side))
         if side == PLAYER:
             self.round += 1
+            if self.round > 1:
+                if self._player_damage > 0:
+                    self._stale_rounds = 0
+                else:
+                    self._stale_rounds += 1
+            self._player_damage = 0
+            if self._stale_rounds >= STALEMATE_ROUNDS:
+                self.finished = "stalemate"
+                return [_ev("msg", text="Nothing you have can touch it."),
+                        _ev("end", result="stalemate")]
         ev = [_ev("phase", side=side, text="Your turn" if side == PLAYER
                   else "Foe's turn")]
         ev += self._settle()
@@ -395,6 +417,8 @@ class Battle:
             chance = max(0.02, min(0.45, chance))
             if self.rng.random() < chance:
                 t.take_damage(t.maxhp * 99)
+                if self.side_of(actor) == PLAYER:
+                    self._player_damage += 1
                 ev.append(_ev("instakill", target=t, element=skill.element))
                 ev.append(_ev("msg", text="%s is struck from the world!" % t.name))
                 ev.append(_ev("faint", target=t))
@@ -474,6 +498,8 @@ class Battle:
                     dmg *= 0.45
                 dmg = max(1, int(dmg))
                 t.take_damage(dmg)
+                if self.side_of(actor) == PLAYER:
+                    self._player_damage += dmg
                 ev.append(_ev("dmg", target=t, amount=dmg, affinity=aff,
                               crit=crit, element=skill.element,
                               hits=hits))

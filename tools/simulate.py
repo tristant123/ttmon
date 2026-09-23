@@ -45,16 +45,18 @@ def run_one(party_spec, foe_spec, seed, boss=False):
 
 
 def report(label, party_spec, foe_spec, runs, boss=False):
-    wins = rounds = 0
+    wins = rounds = stale = 0
     hp = []
     for i in range(runs):
         res, rnd, left = run_one(party_spec, foe_spec, 1000 + i, boss)
         wins += res == "win"
+        stale += res == "stalemate"
         rounds += rnd
         hp.append(left)
-    print("%-42s win %5.1f%%  rounds %4.1f  hp left %4.0f%%"
+    tail = "  (%d%% called off)" % (100 * stale / runs) if stale else ""
+    print("%-48s win %5.1f%%  rounds %4.1f  hp left %4.0f%%%s"
           % (label, 100.0 * wins / runs, rounds / runs,
-             100 * statistics.mean(hp)))
+             100 * statistics.mean(hp), tail))
 
 
 if __name__ == "__main__":
@@ -73,6 +75,22 @@ if __name__ == "__main__":
     report("3x Lv10 party vs 3x Lv11 wild",
            [("pixie", 10), ("kitsune", 10), ("golem", 10)],
            [("naga", 11), ("tengu", 11), ("cerberus", 11)], runs)
+    print("=== the marble steps (greek roster) ===")
+    report("3x Lv9 party vs 2x Lv9 ruins wild",
+           [("kitsune", 9), ("kappa", 9), ("pixie", 9)],
+           [("satyr", 9), ("harpy", 9)], runs)
+    report("3x Lv11 party vs 2x Lv11 ruins wild",
+           [("kitsune", 11), ("kappa", 11), ("tengu", 11)],
+           [("medusa", 11), ("minotaur", 11)], runs)
+    report("3x Lv12 all-physical vs Nemean Lv12 (nulls Phys)",
+           [("minotaur", 12), ("cyclops", 12), ("golem", 12)],
+           [("nemean", 12)], runs)
+    report("3x Lv12 with magic vs Nemean Lv12",
+           [("thunderbird", 12), ("kitsune", 12), ("kappa", 12)],
+           [("nemean", 12)], runs)
+    report("3x Lv12 vs Talos Lv12 (nulls Fire, weak Elec)",
+           [("thunderbird", 12), ("kappa", 12), ("tengu", 12)],
+           [("talos", 12)], runs)
     print("=== under-levelled (should hurt) ===")
     report("3x Lv8 party vs 3x Lv12 wild",
            [("pixie", 8), ("kitsune", 8), ("golem", 8)],

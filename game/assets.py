@@ -19,9 +19,11 @@ def scale2x(surf):
 _mon_scaled = {}
 
 
-def monster_scaled(key, scale=2):
-    """A monster sprite at battle size, built once per species and scale.
-    Nearest-neighbour, so a 3x boss keeps hard square pixels."""
+def monster_scaled(key, scale=1):
+    """A monster's battle sprite. The art pipeline already lights and doubles
+    it, so scale 1 is the normal size and larger values are for set pieces."""
+    if scale == 1:
+        return monsters.sprite(key)
     cached = _mon_scaled.get((key, scale))
     if cached is None:
         src = monsters.sprite(key)
@@ -32,7 +34,7 @@ def monster_scaled(key, scale=2):
 
 
 def monster2x(key):
-    return monster_scaled(key, 2)
+    return monster_scaled(key, 1)
 
 
 def build(game):
@@ -45,6 +47,7 @@ def build(game):
                              for d, frames in hero.items()}
     game.assets["npcs2x"] = {k: scale2x(v) for k, v in npcs.items()}
     game.assets["diorama"] = Diorama(tile_art)
+    monsters.prebuild()
     game.assets["mon2x"] = monster2x
     game.assets["mon_scaled"] = monster_scaled
     return game.assets

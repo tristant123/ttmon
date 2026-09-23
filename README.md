@@ -2,9 +2,10 @@
 
 A proof-of-concept monster-binding RPG for Windows PC, presented in **HD-2D**
 — the Octopath Traveler approach, where low-resolution pixel sprites are lit
-and composited in a higher-resolution 3D-ish diorama. Cutesy monsters drawn
-from world mythology, and a battle system built on Shin Megami Tensei's
-**Press Turn** rules rather than Pokémon's.
+and composited in a higher-resolution 3D-ish diorama. Twenty-two cutesy
+monsters drawn from world mythology, Greek and Roman included, and a battle
+system built on Shin Megami Tensei's **Press Turn** rules rather than
+Pokémon's.
 
 You bind creatures instead of catching them, you field three at once, and a
 single misread of an enemy's affinities can cost you the entire turn.
@@ -96,8 +97,11 @@ You carry six monsters; the **first three** fight, and you reorder them with
    from Pell, rest at Warden Isa.
 2. Mistgrass Road — tall grass, wild monsters around Lv3–8. Bind two more so
    you have three icons.
-3. Shrine of the Scale — deeper grass, Lv8–15 monsters, a healing spring.
-4. The altar — **Anubis**, who repels Light, drains Dark, resists Physical,
+3. The Marble Steps — a Greek ruin south-west of the road, Lv6–14, where the
+   Hellenic half of the bestiary lives. A raised marble plaza, standing
+   columns, and the lion.
+4. Shrine of the Scale — deeper grass, Lv8–16 monsters, a healing spring.
+5. The altar — **Anubis**, who repels Light, drains Dark, resists Physical,
    Fire and Ice, acts **twice per turn**, and is weak to exactly one thing:
    **Wind**. Bring a Tengu, a Pixie or a Mandrake, and bring draughts.
 
@@ -110,8 +114,12 @@ lose the entire round.
 
 ## The monsters
 
-Twelve species, each with an affinity table that is meant to be exploited in
-both directions:
+Twenty-two species, each with an affinity table meant to be exploited in both
+directions.
+
+![roster](docs/roster.png)
+
+**Japanese and general myth** — the road and the shrine:
 
 | Monster | Race | Notable |
 | --- | --- | --- |
@@ -127,6 +135,26 @@ both directions:
 | Cerberus | Beast | Resists Physical, Fire, Dark |
 | Baku | Dream | **Drains** Dark; weak to Light; sleeps your party |
 | Anubis | Deity | The boss. **Repels** Light. |
+
+**Greek and Roman** — the Marble Steps, and the deep grass beyond it:
+
+| Monster | Race | Notable |
+| --- | --- | --- |
+| Satyr | Fairy | Lullaby and buffs; weak to Physical and Ice |
+| Harpy | Avian | Very fast, very brittle; weak to Ice and Electric |
+| Medusa | Gorgon | Dark and ailments; resists Physical; weak to Fire |
+| Minotaur | Beast | Heavy Physical; resists Physical and Dark; weak to Electric |
+| Siren | Sea | Ice and sleep; resists Ice and Dark; weak to Electric |
+| Cyclops | Giant | Enormous damage, no speed. **Weak to Light** — aim for the eye |
+| Chimera | Beast | Fire and poison; resists Fire and Dark; weak to Ice |
+| Pegasus | Divine | Healer and haste; resists Wind/Light/Electric; weak to Dark |
+| Talos | Automaton | **Nulls Fire**, resists Physical and Ice; weak to Electric |
+| Nemean Lion | Beast | **Nulls Physical outright.** Its hide has never been cut |
+
+The Nemean Lion is the roster's teaching moment: the free Strike is physical,
+so a party carrying nothing but physical skills cannot scratch it. Bring
+magic, or walk away — if you land nothing at all for eight rounds the fight is
+called off rather than grinding on forever.
 
 ## The HD-2D renderer
 
@@ -147,6 +175,33 @@ wall billboard with a roof billboard lifted onto it.
 rows of the local terrain sampled at increasing depth toward a horizon, with
 rolling hills and two layers of silhouetted scenery behind. It costs one blit
 per frame thereafter.
+
+**The sprites** (`game/art/shading.py`). Monsters are not painted by hand.
+They are authored as flat *material* maps — this pixel is fur, that one is
+bronze, this one is an eye — and a lighting pass turns each into a finished
+sprite:
+
+1. **EPX upscale.** The character grid is doubled with the Scale2x rule, which
+   rounds stair-stepped diagonals, so a form authored at 32×32 gets a 64×64
+   silhouette without nearest-neighbour's blocky corners.
+2. **Distance fields** tell every pixel how deep it sits inside its own
+   material and inside the silhouette. Thin details like a blush or a belly
+   patch are deliberately *not* modelled as separate volumes — they inherit
+   the body's light, or the sprite breaks out in dark blotches.
+3. **Quantised Lambert shading** from a key light at the upper left. Banding
+   the result into five tones is what keeps it reading as pixel art instead of
+   an airbrushed bevel.
+4. **Hue-shifted ramps.** Shadows rotate toward blue and gain saturation;
+   highlights rotate toward warm light and lose it. Flat value ramps are the
+   single biggest thing separating amateur pixel art from this house style.
+5. **Rim light and coloured outlines** — a cool backlight on the edge facing
+   away from the key, and outlines taken from a dark, hue-shifted version of
+   whatever material they hug, never pure black.
+
+Every material also has a personality: metal gets a hard specular step, cloth
+stays matte, gems and flame are emissive and bleed into the bloom pass. Adding
+a monster means drawing a silhouette, not painting four shades of everything,
+and the whole roster stays lit by one consistent model.
 
 **The finish** (`game/render/postfx.py`), four passes over the frame:
 
@@ -199,7 +254,10 @@ game/
   monster.py            a monster instance: stats, growth, buffs, ailments
   player.py / save.py   party, bag, JSON save
   scenes.py             title, dialogue, party, bag, shop, bestiary
-  art/                  monsters.py, tiles.py, actors.py  (all ASCII art)
+  art/
+    shading.py          material maps -> lit sprites (EPX, normals, ramps)
+    monsters.py         22 species as material maps
+    tiles.py, actors.py terrain, props and overworld characters
   render/
     diorama.py          extruded terrain, billboards, depth sorting
     arena.py            the baked battle stage
@@ -223,6 +281,7 @@ python tools/simulate.py 300           # play 300 battles per matchup, print win
 python tools/run_playtest.py out/      # drive the real game headlessly, save screenshots
 python tools/run_world_test.py out/    # walk village -> route -> shrine, talk, shop, boss
 python tools/contact_sheet.py out.png  # render every monster sprite
+python tools/make_roster_image.py      # regenerate docs/roster.png
 python tools/shot_maps.py out/         # render each map in the diorama
 python tools/bench_frame.py            # frame cost, with and without post-processing
 ```
@@ -235,13 +294,14 @@ right element and the right defences.
 ## Scope
 
 This is a proof of concept, so it stops where the systems have been proven:
-three maps, twelve species, forty skills, one boss, a bestiary, a shop, saving,
-a complete Press Turn implementation and an HD-2D renderer. There is no fusion,
+four maps, twenty-two species, forty skills, one boss, a bestiary, a shop,
+saving, a complete Press Turn implementation and an HD-2D renderer. There is no fusion,
 no trading, no multi-area story, and the music is silence — those are the
 obvious next steps, not oversights.
 
-The sprites themselves are still authored at 16×16 and 32×32. That is on
-purpose — it is what Octopath does — but it does mean the monsters are chunkier
-than a commercial HD-2D game, where the same pixel sprites carry three or four
-times the detail. Redrawing the twelve species at 64×64 would be the single
-biggest visual upgrade available.
+Monsters are authored at 32×32 and finished at 64×64 by the shading pass.
+Authoring the forms directly at 64×64 would buy finer silhouettes — hands,
+feathers, individual teeth — but the lighting model would not change, and the
+per-sprite cost roughly quadruples. The terrain tiles are the more obvious
+next target: they are still 16×16 drawn at 2×, so the ground is chunkier than
+the monsters standing on it.

@@ -248,3 +248,37 @@ class TestAI(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestStalemate(unittest.TestCase):
+    """A party with only physical damage cannot hurt something that nulls it,
+    and the free Strike is physical too. The fight must still end."""
+
+    def test_physical_only_party_versus_null_physical_ends(self):
+        party = [Monster("golem", 12)]          # physical skills only
+        party[0].skills = ["lunge", "ward"]
+        foe = Monster("nemean", 12)             # nulls Physical
+        b = Battle(party, [foe], rng=random.Random(4))
+        b.begin()
+        guard = 0
+        while b.finished is None and guard < 2000:
+            guard += 1
+            if b.current_actor is None:
+                b._settle()
+                continue
+            b.execute(b.ai_pick(b.current_actor))
+        self.assertIsNotNone(b.finished)
+        self.assertLess(guard, 2000, "battle never resolved")
+
+    def test_a_fight_that_makes_progress_is_not_called_off(self):
+        b = Battle([Monster("kitsune", 14)], [Monster("mandrake", 10)],
+                   rng=random.Random(8))
+        b.begin()
+        guard = 0
+        while b.finished is None and guard < 400:
+            guard += 1
+            if b.current_actor is None:
+                b._settle()
+                continue
+            b.execute(b.ai_pick(b.current_actor))
+        self.assertEqual(b.finished, "win")

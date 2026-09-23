@@ -17,6 +17,7 @@ PAL = {
     "c": P.CREAM, "K": P.BLACK, "e": P.GREY_D, "E": P.GREY, "j": P.GREY_L,
     "i": P.SAND, "m": P.WHITE, "u": (136, 96, 56), "z": (96, 64, 40),
     "n": (152, 56, 56), "f": (248, 224, 128), "Y": (248, 240, 200),
+    "P": (238, 234, 222), "h": (150, 146, 138),
     "p": P.STONE, "y": (216, 176, 72),
 }
 
@@ -387,6 +388,55 @@ SHRINE_BOT_R = [
     "pppppppppppppppp",
 ]
 
+# Marble column, authored upright like the trees.
+COLUMN = [
+    "..pppppppppppp..",
+    ".pPPPPPPPPPPPPp.",
+    ".pPPPPPPPPPPPPp.",
+    "..pppppppppppp..",
+    "...pPPPPPPPPp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "...pPpPPpPPpp...",
+    "..pppppppppppp..",
+    ".pPPPPPPPPPPPPp.",
+    ".pPPPPPPPPPPPPp.",
+    "..pppppppppppp..",
+    "..hhhhhhhhhhhh..",
+    "................",
+]
+
+RUBBLE = [
+    "gggggggggggggggg",
+    "ggggggggggggggGg",
+    "gggppppgggggpppg",
+    "ggpPPPPpgggpPPpg",
+    "ggpPPPPpggpPPPpg",
+    "gghppppggghpppgg",
+    "gggggggggggggggg",
+    "ggpppppgggggggGg",
+    "gpPPPPPpgggppggg",
+    "gpPPPPPpggpPPpgg",
+    "ghpppppgghpppggg",
+    "gggggggggggggggg",
+    "gGggggggggggggGg",
+    "gggggggggggggggg",
+    "gggggggggggggggg",
+    "gggggggggggggggg",
+]
+
 FOUNTAIN = [
     "SSSSSSSSSSSSSSSS",
     "SxxxxxxxxxxxxxxS",
@@ -442,6 +492,7 @@ def build():
         ("shrine_tr", SHRINE_TOP_R), ("shrine_bl", SHRINE_BOT_L),
         ("shrine_bm", SHRINE_BOT_M), ("shrine_br", SHRINE_BOT_R),
         ("fountain", FOUNTAIN), ("ledge", LEDGE),
+        ("column", COLUMN), ("rubble", RUBBLE),
     ]:
         t[name] = make(art, PAL)
     return t
