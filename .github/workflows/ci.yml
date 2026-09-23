@@ -1,0 +1,44 @@
+# Runs the same checks as check.sh on every push, so GitHub tells you whether
+# a change broke anything without you having to remember to look.
+#
+# The screenshots each run produces are uploaded as a downloadable artifact:
+# open the run on github.com, scroll to "Artifacts", and download
+# "screenshots" to see what the game actually looked like at that commit.
+
+name: check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:        # lets you run it by hand from the Actions tab
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run checks
+        run: ./check.sh check_output
+
+      - name: Upload screenshots
+        if: always()        # upload them even when a check failed
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: check_output/
+          retention-days: 14

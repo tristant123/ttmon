@@ -317,10 +317,30 @@ tests/test_press_turns.py    26 tests over the turn economy and the engine
 tools/                  headless playtest + balance simulation harnesses
 ```
 
+## Checking a build
+
+One command runs everything and leaves you screenshots to look at:
+
+```
+check.bat          # Windows
+./check.sh         # macOS / Linux
+```
+
+It runs the engine tests, then three headless playthroughs that drive the real
+game loop — a full run from the title screen, a walk from the village to the
+boss, and a battle exercising skills, targeting and binding — and writes
+screenshots to `check_output/`. About 25 seconds. A game can pass every test
+and still look wrong, so the screenshots are the point: open them and look.
+
+The same script runs on GitHub automatically on every push
+(`.github/workflows/ci.yml`). A green tick next to a commit means it passed; a
+red cross means it did not. Either way the run page has a **screenshots**
+artifact you can download to see what that commit actually looked like.
+
 ## Development
 
 ```
-python -m unittest discover -s tests   # 26 tests, press turn rules and engine
+python -m unittest discover -s tests   # 28 tests, press turn rules and engine
 python tools/simulate.py 300           # play 300 battles per matchup, print win rates
 python tools/run_playtest.py out/      # drive the real game headlessly, save screenshots
 python tools/run_world_test.py out/    # walk village -> route -> shrine, talk, shop, boss
