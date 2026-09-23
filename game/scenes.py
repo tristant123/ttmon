@@ -18,6 +18,10 @@ from .player import new_game
 
 
 class Title(Scene):
+    """Title card, staged over a live diorama of the shrine at dusk."""
+
+    grade = "shrine"
+
     def __init__(self, game):
         super().__init__(game)
         items = ["New Game"]
@@ -26,6 +30,13 @@ class Title(Scene):
         items.append("Quit")
         self.menu = ui.Menu(items, (78, 104, 84, 46), dark=True)
         self.t = 0.0
+        self.motes = None
+        self.cam = (1.0, -4.6)
+
+    def enter(self):
+        from .render.particles import MoteField
+        self.motes = MoteField((config.INTERNAL_W, config.INTERNAL_H),
+                               count=44, colour=(210, 226, 255), speed=4.0)
 
     def handle(self, event):
         if event.type != pygame.KEYDOWN:
@@ -56,37 +67,44 @@ class Title(Scene):
 
     def update(self, dt):
         self.t += dt
+        if self.motes is None:
+            self.enter()
+        self.motes.update(dt)
+        # a slow drift across the shrine, so the card is never quite still
+        self.cam = (1.0 + math.sin(self.t * 0.10) * 0.7, -4.6)
 
-    def draw(self, surf):
+    def draw_world(self, canvas):
+        from .world import maps
+        dio = self.game.assets.get("diorama")
+        if dio is None:
+            return
+        gmap = maps.get("shrine")
         for y in range(config.INTERNAL_H):
             k = y / float(config.INTERNAL_H)
-            col = (int(24 + 40 * k), int(20 + 26 * k), int(48 + 60 * k))
-            pygame.draw.line(surf, col, (0, y), (240, y))
-        for i in range(40):
-            x = (i * 37 + 11) % 240
-            y = (i * 53 + 7) % 90
-            if (i + int(self.t * 2)) % 7:
-                surf.set_at((x, y), (200, 200, 230))
-        # a parade of silhouettes along the horizon
-        keys = ["kitsune", "pixie", "kappa", "tengu", "wisp", "naga"]
-        for i, key in enumerate(keys):
-            spr = MART.sprite(key)
-            shadow = pygame.mask.from_surface(spr).to_surface(
-                setcolor=(28, 24, 44, 255), unsetcolor=(0, 0, 0, 0))
-            bob = math.sin(self.t * 1.5 + i) * 2
-            surf.blit(shadow, (i * 40 + 4, 60 + bob))
+            canvas.fill((int(26 + 62 * k), int(24 + 52 * k), int(58 + 70 * k)),
+                        (0, y, config.INTERNAL_W, 1))
+        dio.draw(canvas, gmap, self.cam, [], self.t, self.game.fx,
+                 int(self.t * 2) % 2)
+        self.motes.draw(canvas, self.t)
+
+    def draw(self, surf):
         font = get_font()
+        # a scrim so the title reads against the scene behind it
+        scrim = pygame.Surface((config.UI_W, config.UI_H), pygame.SRCALPHA)
+        pygame.draw.rect(scrim, (12, 10, 26, 96), (0, 0, config.UI_W, 44))
+        pygame.draw.rect(scrim, (12, 10, 26, 104), (0, 96, config.UI_W, 64))
+        surf.blit(scrim, (0, 0))
         title = "TABULA MYTHOS"
-        for dx, dy in ((0, 1), (1, 0), (0, -1), (-1, 0)):
-            font.draw_centered(surf, title, 120 + dx, 26 + dy, P.BLACK)
-        font.draw_centered(surf, title, 120, 26, P.ICON_FULL)
-        font.draw_centered(surf, "a binder's proof of concept", 120, 40,
+        for dx, dy in ((0, 1), (1, 0), (0, -1), (-1, 0), (1, 1)):
+            font.draw_centered(surf, title, 120 + dx, 14 + dy, P.BLACK)
+        font.draw_centered(surf, title, 120, 14, P.ICON_FULL)
+        font.draw_centered(surf, "a binder's proof of concept", 120, 28,
                            P.GREY_L)
         ui.window(surf, (74, 100, 92, 52), dark=True)
         self.menu.rect = (74, 100, 92, 52)
         self.menu.draw(surf, draw_frame=False, x=94, y=106)
         font.draw_centered(surf, "Z confirm   X back   F11 fullscreen", 120,
-                           152, P.GREY)
+                           152, P.GREY_L)
 
 
 class Intro(Scene):
@@ -294,7 +312,7 @@ class PartyMenu(Scene):
             self.draw_detail(surf, party[self.index])
             return
         font.draw(surf, "PARTY", 8, 5, P.WHITE)
-        font.draw(surf, "first three fight - S to reorder", 74, 6, P.GREY_L)
+        font.draw(surf, "first 3 fight - S swaps", 74, 6, P.GREY_L)
         for i, mon in enumerate(party):
             y = 16 + i * 23
             active = i < config.BATTLE_SLOTS

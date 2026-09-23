@@ -21,6 +21,7 @@ def main():
     h.tick(10)
     shots = []
 
+    h.tick(50)          # let the title's diorama settle
     shots.append(grab(h, "title"))
 
     from game.player import PlayerState
@@ -35,13 +36,25 @@ def main():
     p.give("herb", 4); p.give("sigil_l", 5); p.give("sigil_g", 2)
     p.seen.update(["kitsune", "kappa", "tengu", "pixie", "mandrake", "wisp"])
     p.bound.update(["kitsune", "kappa", "tengu", "pixie"])
-    p.map_key = "village"; p.x, p.y = 11, 9
+    p.map_key = "village"; p.x, p.y = 9, 8
     h.game.player = p
     while h.game.scenes:
         h.game.pop()
     h.game.push(Overworld(h.game))
-    h.tick(20)
+    h.tick(30)
     shots.append(grab(h, "village"))
+    # the shrine, for the cold end of the lighting
+    from game.world import maps
+    ov = h.scene
+    ov.map = maps.get("shrine"); ov.tx, ov.ty = 7, 6
+    ov.px, ov.py = 7.0, 6.0
+    p.map_key = "shrine"; ov._setup_render(); ov.banner_t = 0.0
+    h.tick(30)
+    shots.append(grab(h, "shrine"))
+    ov.map = maps.get("route"); ov.tx, ov.ty = 13, 8
+    ov.px, ov.py = 13.0, 8.0
+    p.map_key = "route"; ov._setup_render(); ov.banner_t = 0.0
+    h.tick(20)
 
     # A battle, paused on the command window with a half icon earned.
     ov = h.scene
@@ -79,9 +92,10 @@ def main():
     shots.append(grab(h, "monster"))
     h.game.pop()
 
-    # The boss.
+    # The boss, on the shrine floor where it is actually fought.
     for m in p.party:
         m.full_restore()
+    p.map_key = "shrine"
     ov = h.scene
     ov.start_battle([Monster("anubis", 15)], boss=True)
     h.settle()
@@ -91,10 +105,10 @@ def main():
             break
     shots.append(grab(h, "boss"))
 
-    # Compose: 2 columns, 3 rows, 2x scale, with a little padding.
-    S, cols, pad = 2, 2, 8
+    # Compose: 2 columns, native scale (the canvas is already 480x320).
+    S, cols, pad = 1, 2, 10
     imgs = [pygame.image.load(s) for s in shots]
-    w, hgt = 240 * S, 160 * S
+    w, hgt = 480 * S, 320 * S
     rows = (len(imgs) + cols - 1) // cols
     sheet = pygame.Surface((cols * w + (cols + 1) * pad,
                             rows * hgt + (rows + 1) * pad))

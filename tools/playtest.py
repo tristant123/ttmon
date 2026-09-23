@@ -13,9 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pygame
 
-from game import config, sfx
+from game import assets, config, sfx
 from game.app import Game
-from game.art import actors, tiles
 from game.scenes import Title
 
 HELD = set()
@@ -40,10 +39,7 @@ class Harness:
         pygame.init()
         patch_keys()
         self.game = Game(scale=1)
-        self.game.assets["tiles"] = tiles.build()
-        hero, npcs = actors.build()
-        self.game.assets["hero"] = hero
-        self.game.assets["npcs"] = npcs
+        assets.build(self.game)
         self.game.push(Title(self.game))
         self.shots = 0
 

@@ -41,7 +41,8 @@ class NPC:
 
 class GameMap:
     def __init__(self, key, name, rows, warps=None, npcs=None, encounters=None,
-                 rate=0.0, signs=None, group=(1, 1), safe=False):
+                 rate=0.0, signs=None, group=(1, 1), safe=False,
+                 heights=None, grade=None, lights=None, motes=None):
         self.key = key
         self.name = name
         self.rows = rows
@@ -54,6 +55,23 @@ class GameMap:
         self.signs = signs or {}          # (x,y) -> text
         self.group = group                # min/max wild group size
         self.safe = safe
+        self.grade = grade or key         # post-processing profile
+        self.lights = lights or []        # (tx, ty, radius, colour, strength)
+        self.motes = motes or None        # ambient particle settings
+        # Elevation grid for the diorama. '.' means "derive from the tile",
+        # a digit is an explicit height in wall units. Purely visual.
+        self.heights = None
+        if heights:
+            if len(heights) != self.h:
+                raise ValueError("%s: height grid is %d rows, map is %d"
+                                 % (key, len(heights), self.h))
+            self.heights = []
+            for i, row in enumerate(heights):
+                if len(row) != self.w:
+                    raise ValueError("%s: height row %d is %d wide, map is %d"
+                                     % (key, i, len(row), self.w))
+                self.heights.append([None if c == "." else int(c)
+                                     for c in row])
         for i, r in enumerate(rows):
             if len(r) != self.w:
                 raise ValueError("%s row %d is %d wide, expected %d"
@@ -106,10 +124,36 @@ VILLAGE_ROWS = [
     "############.=.#########",
 ]
 
+VILLAGE_HEIGHTS = [
+    "..1111111...1111111.....",
+    "..1111111...1111111.....",
+    "..1111111...1111111.....",
+    "..1111111...1111111.....",
+    "..1111111...1111111.....",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    "..1111111...............",
+    "..1111111...............",
+    "..1111111...............",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+]
+
 VILLAGE = GameMap(
     "village", "Lantern Hollow", VILLAGE_ROWS,
     warps={(13, 17): ("route", 13, 1), (12, 17): ("route", 13, 1)},
-    safe=True,
+    safe=True, heights=VILLAGE_HEIGHTS, grade="village",
+    lights=[(5, 4, 60, (255, 196, 110), 0.75),
+            (14, 4, 60, (255, 196, 110), 0.75),
+            (11, 9, 58, (150, 205, 255), 0.40),
+            (17, 13, 54, (255, 208, 130), 0.55)],
+    motes={"count": 26, "colour": (255, 236, 190), "speed": 5.0, "size": 2},
     signs={(6, 15): "LANTERN HOLLOW\nBind what you meet. It is kinder than\nthe alternative."},
     npcs=[
         NPC(9, 6, "elder", [
@@ -162,11 +206,38 @@ ROUTE_ROWS = [
     "############################",
 ]
 
+ROUTE_HEIGHTS = [
+    "1111111111111.11111111111111",
+    "1111111111111.11111111111111",
+    "1111111111111.11111111111111",
+    "1111111111111.11111111111111",
+    "1111111111111.11111111111111",
+    "1111111111111.11111111111111",
+    "1111111111111.11111111111111",
+    "1111111111111.11111111111111",
+    "............................",
+    "...........................1",
+    "...........1..111111111...11",
+    "...........1..1111111111...1",
+    "...........1..11111111111..1",
+    "...........1...1111111111..1",
+    "...........1....11111111...1",
+    "................111111......",
+    "............................",
+    "............................",
+    "............................",
+    "............................",
+    "............................",
+    "............................",
+]
+
 ROUTE = GameMap(
     "route", "Mistgrass Road", ROUTE_ROWS,
     warps={(13, 0): ("village", 13, 16), (27, 19): ("shrine", 2, 13),
            (27, 8): ("shrine", 2, 13)},
-    rate=0.11, group=(1, 2),
+    rate=0.11, group=(1, 2), heights=ROUTE_HEIGHTS, grade="route",
+    lights=[(6, 11, 66, (150, 210, 255), 0.35)],
+    motes={"count": 34, "colour": (216, 255, 200), "speed": 7.0, "size": 2},
     signs={
         (11, 5): "MISTGRASS ROAD\nThe grass is tall. So is what lives\nin it.",
         (11, 17): "EAST: SHRINE OF THE SCALE\nPilgrims welcome. Survivors rarer.",
@@ -202,10 +273,33 @@ SHRINE_ROWS = [
     "####################",
 ]
 
+SHRINE_HEIGHTS = [
+    "....................",
+    "....2222222.........",
+    "....2222222.........",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+    "....................",
+]
+
 SHRINE = GameMap(
     "shrine", "Shrine of the Scale", SHRINE_ROWS,
     warps={(1, 13): ("route", 26, 19), (1, 14): ("route", 26, 19)},
-    rate=0.13, group=(1, 3),
+    rate=0.13, group=(1, 3), heights=SHRINE_HEIGHTS, grade="shrine",
+    lights=[(5, 8, 62, (130, 180, 255), 0.30),
+            (10, 8, 62, (130, 180, 255), 0.30),
+            (3, 12, 56, (150, 170, 255), 0.22)],
+    motes={"count": 40, "colour": (200, 220, 255), "speed": 4.0, "size": 2},
     signs={(16, 13): "THE SCALE WEIGHS ALL.\nIt has not yet been wrong."},
     encounters=[
         ("wisp", 8, 12, 22),

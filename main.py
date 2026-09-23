@@ -15,17 +15,13 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 import pygame
 
-from game import config, sfx
+from game import assets, config, sfx
 from game.app import Game
-from game.art import actors, tiles
 from game.scenes import Title
 
 
 def build_assets(game):
-    game.assets["tiles"] = tiles.build()
-    hero, npcs = actors.build()
-    game.assets["hero"] = hero
-    game.assets["npcs"] = npcs
+    assets.build(game)
 
 
 def main(argv=None):
@@ -34,6 +30,8 @@ def main(argv=None):
                     help="window scale factor (1-6)")
     ap.add_argument("--fullscreen", action="store_true")
     ap.add_argument("--mute", action="store_true")
+    ap.add_argument("--flat", action="store_true",
+                    help="disable HD-2D post-processing (faster on old GPUs)")
     args = ap.parse_args(argv)
 
     pygame.init()
@@ -42,6 +40,7 @@ def main(argv=None):
     game = Game(scale=max(config.MIN_SCALE, min(config.MAX_SCALE, args.scale)),
                 fullscreen=args.fullscreen)
     build_assets(game)
+    game.fx.enabled = not args.flat
     game.push(Title(game))
     game.run()
     return 0

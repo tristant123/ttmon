@@ -6,6 +6,7 @@ import time
 import pygame
 
 from . import config, palette as P, sfx
+from .render import postfx
 
 CONFIRM = (pygame.K_z, pygame.K_j, pygame.K_RETURN, pygame.K_KP_ENTER,
            pygame.K_SPACE)
@@ -30,12 +31,22 @@ def direction_of(key):
 
 
 class Scene:
-    """Base class. Scenes are stacked; only the top one gets input."""
+    """Base class. Scenes are stacked; only the top one gets input.
+
+    Drawing happens in two layers. `draw_world` paints the full-resolution
+    480x320 diorama and goes through the HD-2D post-processing stack;
+    `draw` paints the 240x160 UI layer, which is scaled up afterwards so text
+    and frames stay crisp and are never blurred or bloomed.
+    """
 
     opaque = True          # if False, the scene below is drawn first
+    grade = None           # postfx profile name, when this scene has a world
 
     def __init__(self, game):
         self.game = game
+
+    def draw_world(self, canvas):
+        pass
 
     def enter(self):
         pass
@@ -56,6 +67,7 @@ class Scene:
 class Game:
     def __init__(self, scale=config.DEFAULT_SCALE, fullscreen=False):
         self.canvas = pygame.Surface((config.INTERNAL_W, config.INTERNAL_H))
+        self.ui = pygame.Surface((config.UI_W, config.UI_H), pygame.SRCALPHA)
         self.scale = scale
         self.fullscreen = fullscreen
         self.screen = None
@@ -68,24 +80,42 @@ class Game:
         self._fade = None
         self._flash = None
         self.assets = {}
+        self._ui_big = pygame.Surface((config.INTERNAL_W, config.INTERNAL_H),
+                                      pygame.SRCALPHA)
+        self.present_rect = pygame.Rect(0, 0, config.INTERNAL_W,
+                                        config.INTERNAL_H)
         self._apply_mode()
+        self._present = pygame.Surface(self.present_rect.size)
+        # needs a display mode to exist, so it is built last
+        self.fx = postfx.PostFX((config.INTERNAL_W, config.INTERNAL_H))
 
     # --- display ----------------------------------------------------------
     def _apply_mode(self):
-        flags = pygame.SCALED | pygame.RESIZABLE
         if self.fullscreen:
             self.screen = pygame.display.set_mode(
-                (config.INTERNAL_W, config.INTERNAL_H),
-                flags | pygame.FULLSCREEN, vsync=1)
+                (0, 0), pygame.FULLSCREEN | pygame.RESIZABLE, vsync=1)
         else:
             size = (config.INTERNAL_W * self.scale,
                     config.INTERNAL_H * self.scale)
-            self.screen = pygame.display.set_mode(size, flags, vsync=1)
+            self.screen = pygame.display.set_mode(size, pygame.RESIZABLE,
+                                                  vsync=1)
         pygame.display.set_caption(config.TITLE)
+        self._recompute_present_rect()
+
+    def _recompute_present_rect(self):
+        """Largest aspect-correct rectangle the canvas fits into, centred."""
+        sw, sh = self.screen.get_size()
+        k = min(sw / float(config.INTERNAL_W), sh / float(config.INTERNAL_H))
+        w = max(1, int(config.INTERNAL_W * k))
+        h = max(1, int(config.INTERNAL_H * k))
+        self.present_rect = pygame.Rect((sw - w) // 2, (sh - h) // 2, w, h)
 
     def toggle_fullscreen(self):
         self.fullscreen = not self.fullscreen
         self._apply_mode()
+        self._present = pygame.Surface(self.present_rect.size)
+        # needs a display mode to exist, so it is built last
+        self.fx = postfx.PostFX((config.INTERNAL_W, config.INTERNAL_H))
 
     def set_scale(self, delta):
         if self.fullscreen:
@@ -93,6 +123,13 @@ class Game:
         self.scale = max(config.MIN_SCALE,
                          min(config.MAX_SCALE, self.scale + delta))
         self._apply_mode()
+        self._present = pygame.Surface(self.present_rect.size)
+        # needs a display mode to exist, so it is built last
+        self.fx = postfx.PostFX((config.INTERNAL_W, config.INTERNAL_H))
+
+    def on_resize(self):
+        self._recompute_present_rect()
+        self._present = pygame.Surface(self.present_rect.size)
 
     def screenshot(self, path=None):
         path = path or os.path.join(os.getcwd(),
@@ -239,8 +276,29 @@ class Game:
         start = len(self.scenes) - 1
         while start > 0 and not self.scenes[start].opaque:
             start -= 1
-        for s in self.scenes[start:]:
-            s.draw(self.canvas)
+        visible = self.scenes[start:]
+
+        # 1. the world, at full resolution, through the HD-2D stack
+        grade = None
+        for s in visible:
+            s.draw_world(self.canvas)
+            if s.grade:
+                grade = s.grade
+        if grade:
+            self.fx.apply(self.canvas, postfx.get(grade))
+        else:
+            self.fx.clear_lights()
+
+        # 2. the UI, authored at 240x160 and doubled, so it stays sharp
+        self.ui.fill((0, 0, 0, 0))
+        for s in visible:
+            s.draw(self.ui)
+        pygame.transform.scale(self.ui, self.canvas.get_size(), self._ui_big)
+        self.canvas.blit(self._ui_big, (0, 0))
+
         self._draw_fade(self.canvas)
-        self.screen.blit(self.canvas, (0, 0))
+        self.screen.fill(P.BLACK)
+        pygame.transform.scale(self.canvas, self.present_rect.size,
+                               self._present)
+        self.screen.blit(self._present, self.present_rect.topleft)
         pygame.display.flip()

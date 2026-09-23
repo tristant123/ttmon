@@ -6,6 +6,8 @@ import pygame
 
 from .. import config, palette as P, sfx, ui
 from ..app import Scene, CONFIRM, CANCEL, direction_of, RUN
+from ..render.diorama import Diorama, TILE, Y_STEP
+from ..render.particles import MoteField
 from ..font import get_font
 from ..monster import make_wild
 from ..battle.engine import Battle
@@ -37,11 +39,31 @@ class Overworld(Scene):
         self.since_encounter = 0
         self.banner_t = 2.0
         self.rustle = 0.0
+        self.dio = None
+        self.motes = None
+        self.cam = (0.0, 0.0)
 
     # -- helpers -----------------------------------------------------------
+    @property
+    def grade(self):
+        return self.map.grade
+
     def enter(self):
         self.map = maps.get(self.game.player.map_key)
         self.banner_t = 2.0
+        self._setup_render()
+
+    def _setup_render(self):
+        if self.dio is None:
+            self.dio = self.game.assets.get("diorama")
+            if self.dio is None:
+                self.dio = Diorama(self.game.assets["tiles"])
+                self.game.assets["diorama"] = self.dio
+        cfg = self.map.motes or {}
+        self.motes = MoteField(
+            (config.INTERNAL_W, config.INTERNAL_H),
+            count=cfg.get("count", 24), colour=cfg.get("colour", (255, 236, 190)),
+            speed=cfg.get("speed", 6.0), size_px=cfg.get("size", 2))
 
     def sync(self):
         p = self.game.player
@@ -50,12 +72,7 @@ class Overworld(Scene):
         p.facing = self.facing
 
     def camera(self):
-        cx = self.px * config.TILE + config.TILE // 2 - config.INTERNAL_W // 2
-        cy = self.py * config.TILE + config.TILE // 2 - config.INTERNAL_H // 2
-        max_x = self.map.w * config.TILE - config.INTERNAL_W
-        max_y = self.map.h * config.TILE - config.INTERNAL_H
-        return (max(0, min(max_x, int(cx))) if max_x > 0 else (max_x // 2),
-                max(0, min(max_y, int(cy))) if max_y > 0 else (max_y // 2))
+        return self.dio.camera(self.px, self.py, self.map)
 
     def blocked(self, x, y):
         if self.map.solid(x, y):
@@ -76,6 +93,9 @@ class Overworld(Scene):
     def update(self, dt):
         self.banner_t = max(0.0, self.banner_t - dt)
         self.rustle = max(0.0, self.rustle - dt)
+        if self.motes is None:
+            self._setup_render()
+        self.motes.update(dt)
         if self.game.busy:
             return
         if self.moving:
@@ -288,47 +308,64 @@ class Overworld(Scene):
         self.game.push(Dialogue(self.game, lines, "Anubis", on_close=go))
 
     # -- drawing ---------------------------------------------------------------
-    def draw(self, surf):
+    def draw_world(self, canvas):
+        if self.dio is None:
+            self._setup_render()
+        fx = self.game.fx
         tiles = self.game.assets["tiles"]
-        hero = self.game.assets["hero"]
-        npcs = self.game.assets["npcs"]
-        cam_x, cam_y = self.camera()
-        t = config.TILE
-        x0 = max(0, cam_x // t)
-        y0 = max(0, cam_y // t)
-        x1 = min(self.map.w, x0 + config.VIEW_TILES_W + 2)
-        y1 = min(self.map.h, y0 + config.VIEW_TILES_H + 2)
-        water_phase = int(self.game.time * 2) % 2
-        for y in range(y0, y1):
-            for x in range(x0, x1):
-                name = self.map.tile(x, y)
-                if name == "water" and water_phase:
-                    name = "water_b"
-                img = tiles.get(name)
-                if img is not None:
-                    surf.blit(img, (x * t - cam_x, y * t - cam_y))
-        # NPCs and the player, sorted so lower sprites overlap higher ones
-        drawables = []
+        hero = self.game.assets["hero2x"]
+        npc_art = self.game.assets["npcs2x"]
+        cam = self.camera()
+        self.cam = cam
+        self._sky(canvas)
+        actors = []
         for n in self.map.npcs:
-            drawables.append((n.y, n.x * t - cam_x, n.y * t - cam_y - 4,
-                              npcs[n.sprite]))
-        hx = self.px * t - cam_x
-        hy = self.py * t - cam_y - 4
-        drawables.append((self.py, hx, hy,
-                          hero[self.facing][self.frame if self.moving else 0]))
-        for _, dx, dy, img in sorted(drawables, key=lambda d: d[0]):
-            surf.blit(img, (int(dx), int(dy)))
+            actors.append({"x": float(n.x), "y": float(n.y),
+                           "sprite": npc_art[n.sprite]})
+        frame = self.frame if self.moving else 0
+        actors.append({"x": self.px, "y": self.py,
+                       "sprite": hero[self.facing][frame]})
+        water = int(self.game.time * 2) % 2
+        self.dio.draw(canvas, self.map, cam, actors, self.game.time, fx, water)
+        # map lights, placed in world space
+        for tx, ty, radius, colour, strength in self.map.lights:
+            h = self.dio.ground_height(self.map, tx, ty)
+            sx, sy = self.dio.project(tx, ty, h, cam)
+            if -120 < sx < config.INTERNAL_W + 120:
+                fx.add_light(sx + TILE / 2, sy + Y_STEP / 2, radius, colour,
+                             strength)
+        self.motes.draw(canvas, self.game.time)
         if self.map.tag(self.tx, self.ty) == "encounter":
-            self.draw_rustle(surf, hx, hy)
+            self._rustle_world(canvas, cam)
+
+    def _sky(self, canvas):
+        """A graded backdrop so the diorama sits in air rather than on black."""
+        top, bot = self.SKY.get(self.map.grade, self.SKY["route"])
+        h = config.INTERNAL_H
+        band = 8
+        for y in range(0, h, band):
+            k = y / float(h)
+            col = tuple(int(top[i] + (bot[i] - top[i]) * k) for i in range(3))
+            canvas.fill(col, (0, y, config.INTERNAL_W, band))
+
+    SKY = {
+        "village": ((126, 166, 214), (206, 214, 198)),
+        "route": ((118, 162, 206), (198, 214, 196)),
+        "shrine": ((46, 52, 104), (126, 118, 168)),
+    }
+
+    def _rustle_world(self, canvas, cam):
+        h = self.dio.ground_height(self.map, self.tx, self.ty)
+        sx, sy = self.dio.project(self.px, self.py, h, cam)
+        base = sy + Y_STEP - 4
+        for i in range(5):
+            x = int(sx) + 3 + i * 6
+            k = 4 + (i % 2) * 3
+            pygame.draw.line(canvas, P.TALLGRASS_L, (x, base), (x + 2, base - k))
+
+    def draw(self, surf):
         if self.banner_t > 0:
             self.draw_banner(surf)
-
-    def draw_rustle(self, surf, hx, hy):
-        col = P.TALLGRASS_L
-        for i in range(4):
-            x = int(hx) + 2 + i * 4
-            y = int(hy) + 17 + (i % 2)
-            pygame.draw.line(surf, col, (x, y + 3), (x + 1, y), 1)
 
     def draw_banner(self, surf):
         font = get_font()

@@ -1,8 +1,10 @@
 # Tabula Mythos
 
-A proof-of-concept monster-binding RPG for Windows PC: Game Boy Advance-era
-presentation, cutesy monsters drawn from world mythology, and a battle system
-built on Shin Megami Tensei's **Press Turn** rules rather than Pokémon's.
+A proof-of-concept monster-binding RPG for Windows PC, presented in **HD-2D**
+— the Octopath Traveler approach, where low-resolution pixel sprites are lit
+and composited in a higher-resolution 3D-ish diorama. Cutesy monsters drawn
+from world mythology, and a battle system built on Shin Megami Tensei's
+**Press Turn** rules rather than Pokémon's.
 
 You bind creatures instead of catching them, you field three at once, and a
 single misread of an enemy's affinities can cost you the entire turn.
@@ -36,7 +38,8 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Options: `--scale 1..6`, `--fullscreen`, `--mute`.
+Options: `--scale 1..4`, `--fullscreen`, `--mute`, `--flat` (turns off the
+post-processing on very old hardware).
 
 ## Controls
 
@@ -125,19 +128,69 @@ both directions:
 | Baku | Dream | **Drains** Dark; weak to Light; sleeps your party |
 | Anubis | Deity | The boss. **Repels** Light. |
 
+## The HD-2D renderer
+
+Octopath Traveler's look does not come from 3D character models — the
+characters are small pixel sprites. It comes from staging those sprites in a
+lit diorama and finishing the frame with modern post-processing. This build
+does the same thing in pygame:
+
+**The diorama** (`game/render/diorama.py`). The ground plane is foreshortened,
+tiles carry real elevation, and wherever terrain steps down a side face is
+drawn — earth or stone, graded, with a lip of the surface hanging over the
+edge and ambient occlusion pooling at the bottom. Trees, buildings, the shrine
+gate and every character are **billboards**: upright sprites with contact
+shadows, sorted back to front by the row they stand in. A building is just a
+wall billboard with a roof billboard lifted onto it.
+
+**The stage** (`game/render/arena.py`). Each battle bakes its own floor once:
+rows of the local terrain sampled at increasing depth toward a horizon, with
+rolling hills and two layers of silhouetted scenery behind. It costs one blit
+per frame thereafter.
+
+**The finish** (`game/render/postfx.py`), four passes over the frame:
+
+| Pass | What it does |
+| --- | --- |
+| Point lights | Additive radial sprites — lantern windows, the shrine's hanging scale, spell impacts — drawn *before* bloom so they bleed |
+| Bloom | Bright-pass, blurred twice, added back |
+| Tilt-shift DoF | The frame blurred and recomposited in bands, sharp at the focus line and soft toward the distance and the foreground — this is what makes it read as a miniature |
+| Fog, vignette, grade | Distance haze, corner falloff, and a per-location tint: warm afternoon in the village, cold dusk at the shrine |
+
+Every operation is a pygame blit, `smoothscale` or blend-flag fill, so it is
+all C-speed. Measured on a CPU-only container with `tools/bench_frame.py`:
+
+```
+scene            ms/frame      fps
+village +fx          4.78      209
+route +fx            4.65      215
+shrine +fx           4.79      209
+battle +fx           3.82      262
+(same scenes with --flat run about twice as fast)
+```
+
+60fps needs 16.6ms, so the whole stack uses under a third of the budget.
+
+**Resolution.** The world renders at 480×320, which is what gives bloom and
+depth of field enough pixels to read. The UI keeps its original 240×160 layout
+space and is scaled up by exactly 2 on top of the finished frame, so text and
+window frames stay sharp and are never blurred or bloomed.
+
 ## How it is built
 
 Everything is Python and pygame-ce, and **every asset is source code** — the
 sprites are ASCII art with palettes, the font is a hand-authored 5×8 bitmap,
-the maps are character grids, and the sound effects are square waves
-synthesised at start-up. There are no binary assets to lose, and the whole
-look can be retuned from `game/palette.py`.
+the maps are character grids (with a second grid for elevation), and the sound
+effects are square waves synthesised at start-up. There are no binary assets
+to lose, and the whole look can be retuned from `game/palette.py` and the
+grade profiles in `game/render/postfx.py`.
 
 ```
 main.py                 entry point
 game/
   app.py                window, scaling, scene stack, transitions
-  config.py             240x160 internal resolution and other constants
+  assets.py             builds every runtime surface once
+  config.py             resolutions, tile size, diorama projection
   palette.py            the whole colour scheme
   font.py               5x8 bitmap font, proportional spacing
   pixelart.py           ASCII art -> pygame surfaces
@@ -147,6 +200,11 @@ game/
   player.py / save.py   party, bag, JSON save
   scenes.py             title, dialogue, party, bag, shop, bestiary
   art/                  monsters.py, tiles.py, actors.py  (all ASCII art)
+  render/
+    diorama.py          extruded terrain, billboards, depth sorting
+    arena.py            the baked battle stage
+    postfx.py           bloom, depth of field, lights, grading
+    particles.py        ambient motes and impact sparks
   battle/
     engine.py           the Press Turn rules - no pygame, fully testable
     scene.py            battle presentation and input
@@ -165,6 +223,8 @@ python tools/simulate.py 300           # play 300 battles per matchup, print win
 python tools/run_playtest.py out/      # drive the real game headlessly, save screenshots
 python tools/run_world_test.py out/    # walk village -> route -> shrine, talk, shop, boss
 python tools/contact_sheet.py out.png  # render every monster sprite
+python tools/shot_maps.py out/         # render each map in the diorama
+python tools/bench_frame.py            # frame cost, with and without post-processing
 ```
 
 The balance numbers in `tools/simulate.py` are what the difficulty was tuned
@@ -176,6 +236,12 @@ right element and the right defences.
 
 This is a proof of concept, so it stops where the systems have been proven:
 three maps, twelve species, forty skills, one boss, a bestiary, a shop, saving,
-and a complete Press Turn implementation. There is no fusion, no trading, no
-multi-area story, and the music is silence — those are the obvious next steps,
-not oversights.
+a complete Press Turn implementation and an HD-2D renderer. There is no fusion,
+no trading, no multi-area story, and the music is silence — those are the
+obvious next steps, not oversights.
+
+The sprites themselves are still authored at 16×16 and 32×32. That is on
+purpose — it is what Octopath does — but it does mean the monsters are chunkier
+than a commercial HD-2D game, where the same pixel sprites carry three or four
+times the detail. Redrawing the twelve species at 64×64 would be the single
+biggest visual upgrade available.

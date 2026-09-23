@@ -10,7 +10,7 @@ from .elements import (PHYS, FIRE, ICE, ELEC, WIND, LIGHT, DARK,
 
 class Species:
     def __init__(self, key, name, race, art, affinity, base, learn,
-                 catch=45, xp=24, flee=False, press=0, desc=""):
+                 catch=45, xp=24, flee=False, press=0, scale=2, desc=""):
         self.key = key
         self.name = name
         self.race = race
@@ -22,6 +22,7 @@ class Species:
         self.xp = xp                  # xp yield coefficient
         self.flee = flee              # bosses cannot be fled from or bound
         self.press = press            # extra press turn icons per round
+        self.scale = scale            # sprite magnification on the battle stage
         self.desc = desc
 
     def skills_at(self, level):
@@ -136,7 +137,7 @@ _sp("anubis", "Anubis", "Deity", "anubis",
     _b(115, 60, 16, 18, 16, 15, 14),
     [(1, "scale_of_ma"), (1, "judgement_blade"), (1, "radiance"),
      (1, "mythos_ray"), (1, "crack"), (1, "bolster"), (1, "dread")],
-    catch=0, xp=300, flee=True, press=1,
+    catch=0, xp=300, flee=True, press=1, scale=3,
     desc="Keeper of the scale. He has already read your weight.")
 
 
