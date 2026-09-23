@@ -81,6 +81,27 @@ Practical consequences:
 - Buffs and debuffs stack three deep at 22% each; against the boss they matter
   more than raw damage.
 
+## Spell effects
+
+![effects](docs/effects.png)
+
+Each element is choreographed rather than being one shape scribbled over the
+target: a wind-up, a strike, an aftermath. Fire gathers embers at the feet
+before the column erupts and smoke curls off the top; ice shards converge from
+outside, flash, and shatter outward; lightning forks down from off-screen;
+dark collapses into a well of shadow and then bursts. Every effect also hands
+the scene a screen-flash colour on the frame it lands.
+
+Two rules do most of the work. Bright particles are drawn **additively** so
+the bloom pass catches them and they bleed light. And anything that fades out
+is drawn onto a scratch layer and *added* to the frame rather than blended —
+fading a colour toward black and drawing it normally is how a dissipating
+shockwave ends up as a hard black ring. Flame bodies are the exception and use
+alpha, because added light over a green field turns yellow and then white,
+which made the first version of the fire column read as a white pillar.
+
+A worst-case cast — three targets, particles at peak — costs under 0.6ms.
+
 ## Binding monsters
 
 Throw a sigil with the **Bind** command. The chance depends on how hurt the
@@ -171,6 +192,26 @@ gate and every character are **billboards**: upright sprites with contact
 shadows, sorted back to front by the row they stand in. A building is just a
 wall billboard with a roof billboard lifted onto it.
 
+**The ground** (`game/art/terrain.py`). Terrain is generated at native screen
+resolution — one source pixel per screen pixel — rather than 16×16 art
+stretched to fill a tile, which used to leave the floor visibly chunkier than
+anything standing on it. Each surface is built from seamless value noise
+quantised into tone bands, then dressed: grass gets blades and clover, paths
+get grit, flagstones get per-slab shading and cracks, water gets travelling
+swells with a lit crest.
+
+Two details matter more than the resolution. Every surface has **four
+variants** that the renderer picks per tile from its coordinates, because one
+tile repeated across a field reads as wallpaper however detailed it is. And
+each variant's noise is **normalised to a fixed mean** — without that, tiles
+drift lighter and darker than their neighbours and a meadow comes out looking
+like a patchwork quilt.
+
+Standing props — trees, columns, houses, the shrine — run through the same
+shading pipeline as the monsters, so they are lit by the same model, and their
+old top-down grass backgrounds are stripped so they stand on the ground rather
+than in a square patch of their own.
+
 **The stage** (`game/render/arena.py`). Each battle bakes its own floor once:
 rows of the local terrain sampled at increasing depth toward a horizon, with
 rolling hills and two layers of silhouetted scenery behind. It costs one blit
@@ -257,12 +298,15 @@ game/
   art/
     shading.py          material maps -> lit sprites (EPX, normals, ramps)
     monsters.py         22 species as material maps
-    tiles.py, actors.py terrain, props and overworld characters
+    terrain.py          procedural ground, seamless, four variants each
+    tiles.py            standing props, lit through shading.py
+    actors.py           overworld characters
   render/
     diorama.py          extruded terrain, billboards, depth sorting
     arena.py            the baked battle stage
     postfx.py           bloom, depth of field, lights, grading
     particles.py        ambient motes and impact sparks
+  battle/effects.py     per-element spell choreography
   battle/
     engine.py           the Press Turn rules - no pygame, fully testable
     scene.py            battle presentation and input
@@ -282,6 +326,7 @@ python tools/run_playtest.py out/      # drive the real game headlessly, save sc
 python tools/run_world_test.py out/    # walk village -> route -> shrine, talk, shop, boss
 python tools/contact_sheet.py out.png  # render every monster sprite
 python tools/make_roster_image.py      # regenerate docs/roster.png
+python tools/effect_strip.py out.png   # filmstrip of every spell effect
 python tools/shot_maps.py out/         # render each map in the diorama
 python tools/bench_frame.py            # frame cost, with and without post-processing
 ```
@@ -301,7 +346,10 @@ obvious next steps, not oversights.
 
 Monsters are authored at 32×32 and finished at 64×64 by the shading pass.
 Authoring the forms directly at 64×64 would buy finer silhouettes — hands,
-feathers, individual teeth — but the lighting model would not change, and the
-per-sprite cost roughly quadruples. The terrain tiles are the more obvious
-next target: they are still 16×16 drawn at 2×, so the ground is chunkier than
-the monsters standing on it.
+feathers, individual teeth — but the lighting model would not change and the
+per-sprite cost roughly quadruples. A few forms are merely adequate rather
+than good: the Satyr's pipes do not read, and the Chimera's three heads are
+muddled at this size. Those need redrawing, not better lighting.
+
+Terrain has no blending between surfaces yet — grass meets path on a hard tile
+edge. Fringed transition variants would be the next visible upgrade there.

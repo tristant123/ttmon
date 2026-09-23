@@ -61,6 +61,7 @@ class BattleScene(Scene):
         self.flash = {}
         self.fainting = {}
         self.effect = None
+        self.screen_flash = None
         self.sigil = None
         self.actor_mark = None
         self.menu = uimod.Menu([], (0, 0, 0, 0))
@@ -90,10 +91,12 @@ class BattleScene(Scene):
 
     def _build_stage(self):
         """Bake the arena floor for wherever this fight is happening."""
-        tiles = self.game.assets["tiles"]
+        props = self.game.assets["props"]
+        ground_sets = self.game.assets["ground"]
         key = self.game.player.map_key if self.game.player else "route"
         ground, sky = AREA_FLOOR.get(key, AREA_FLOOR["route"])
-        self.floor = arena.build_floor(tiles[ground], sky=sky)
+        self.floor = arena.build_floor(ground_sets[ground][0], sky=sky)
+        tiles = props
         props = [tiles["tree"], tiles["rock"]]
         if key == "shrine":
             props = [tiles["tree"], tiles["shrine_bl"], tiles["rock"]]
@@ -148,9 +151,16 @@ class BattleScene(Scene):
         for k in list(self.fainting):
             self.fainting[k] = min(1.0, self.fainting[k] + dt * 2.2)
         if self.effect:
-            self.effect["t"] += dt
-            if self.effect["t"] >= self.effect["dur"]:
+            self.effect.update(dt)
+            if self.effect.flash:
+                colour, alpha = self.effect.flash
+                self.screen_flash = [colour, alpha, 0.0]
+            if self.effect.done:
                 self.effect = None
+        if self.screen_flash:
+            self.screen_flash[2] += dt
+            if self.screen_flash[2] > 0.14:
+                self.screen_flash = None
         if self.sigil:
             self.sigil["t"] += dt
             if self.sigil["t"] >= self.sigil["dur"]:
@@ -201,20 +211,20 @@ class BattleScene(Scene):
         if t == "anim":
             skill = e.get("skill")
             targets = e.get("targets") or []
-            if targets:
-                r = self.crect_of(targets[0])
-                if len(targets) > 1:
-                    r = pygame.Rect(0, r.y, config.INTERNAL_W, C_SPRITE)
-                kind = "heal" if skill.kind in (SK.RECOVER, SK.REVIVE) else "attack"
-                self.effect = {"element": skill.element, "rect": r, "t": 0.0,
-                               "dur": 0.42, "kind": kind}
+            rects = [self.crect_of(m) for m in targets]
+            if not rects:
+                rects = [pygame.Rect(208, 40, C_SPRITE, C_SPRITE)]
+            kind = "heal" if skill.kind in (SK.RECOVER, SK.REVIVE) else "attack"
+            self.effect = effects.Effect(skill.element, rects, kind,
+                                         self.b.rng)
             if skill.element == PHYS:
                 sfx.play("hit")
             elif skill.kind in (SK.RECOVER, SK.REVIVE, SK.CURE):
                 sfx.play("heal")
             else:
                 sfx.play("magic")
-            return 0.34
+            # hand over to the damage event while the strike is still landing
+            return self.effect.life * 0.62
         if t == "dmg":
             tgt = e["target"]
             aff = e.get("affinity", NEUTRAL)
@@ -573,18 +583,24 @@ class BattleScene(Scene):
             self.draw_monster(canvas, mon, enemy=False)
         fx = self.game.fx
         if self.effect:
-            e = self.effect
-            k = e["t"] / e["dur"]
-            effects.draw_effect(canvas, e["element"], e["rect"], k, e["kind"])
-            col = EL_COLORS.get(e["element"], P.WHITE)
-            r = e["rect"]
-            fx.add_light(r.centerx, r.centery, 90,
-                         col, 0.85 * (1.0 - k))
+            self.effect.draw(canvas)
+            col = EL_COLORS.get(self.effect.element, P.WHITE)
+            glow = 0.5 * math.sin(min(1.0, self.effect.k) * math.pi)
+            for r in self.effect.rects:
+                fx.add_light(r.centerx, r.centery, 92, col, glow)
         if self.sigil:
             sg = self.sigil
             effects.draw_sigil_throw(canvas, sg["start"], sg["end"],
                                      sg["t"] / sg["dur"], sg["caught"])
         self.sparks.draw(canvas)
+        if self.screen_flash:
+            colour, alpha, age = self.screen_flash
+            k = max(0.0, 1.0 - age / 0.14)
+            v = int(alpha * k)
+            if v > 2:
+                canvas.fill((colour[0] * v // 255, colour[1] * v // 255,
+                             colour[2] * v // 255),
+                            special_flags=pygame.BLEND_RGB_ADD)
         if self.b.boss:
             for mon in self.b.foes:
                 c = self.crect_of(mon)

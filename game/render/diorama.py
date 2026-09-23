@@ -15,6 +15,7 @@ import math
 import pygame
 
 from .. import config, palette as P
+from ..art.terrain import WATER_FRAMES
 from ..pixelart import make
 
 TILE = config.TILE                       # 32px on screen
@@ -124,22 +125,30 @@ def _side_face(name, tile, height_px):
 
 
 class Diorama:
-    """Holds the projected art and draws a map."""
+    """Holds the projected art and draws a map.
 
-    def __init__(self, tiles):
+    Ground arrives as several variants per surface, generated at native
+    resolution; the renderer picks one per tile from its coordinates so a
+    field does not read as one texture repeated. Props arrive already lit.
+    """
+
+    def __init__(self, props, ground):
         self.tops = {}
         self.sides = {}
-        self.bills = {}
-        for name, art in tiles.items():
-            aw, ah = art.get_size()
-            self.tops[name] = pygame.transform.scale(art, (TILE, Y_STEP))
-            self.sides[name] = _side_face(name, art, WALL_H)
-            # props are drawn upright at 2x, keeping whatever height they were
-            # authored at, so a tall tree stays a tall tree
-            self.bills[name] = pygame.transform.scale(art, (aw * 2, ah * 2))
+        self.bills = dict(props)
+        for name, variants in ground.items():
+            self.tops[name] = [pygame.transform.scale(v, (TILE, Y_STEP))
+                               for v in variants]
+            self.sides[name] = [_side_face(name, v, WALL_H) for v in variants]
         self._shadow_cache = {}
         self._tuft = None
         self._sparkle_seed = 12345
+
+    @staticmethod
+    def variant(tx, ty, count):
+        if count <= 1:
+            return 0
+        return ((tx * 73856093) ^ (ty * 19349663)) % count
 
     # -- projection --------------------------------------------------------
     @staticmethod
@@ -253,17 +262,18 @@ class Diorama:
         name = gmap.tile(tx, ty)
         if name in PROPS:
             name = GROUND_UNDER.get(name, "grass")
-        if name == "water" and water_frame:
-            name = "water_b"
+        if name == "water":
+            name = WATER_FRAMES[water_frame % len(WATER_FRAMES)]
         h = self.height_at(gmap, tx, ty)
         sx, sy = self.project(tx, ty, h, cam)
         if sx < -TILE or sx > config.INTERNAL_W or sy < -80 or \
                 sy > config.INTERNAL_H + 80:
             return
-        top = self.tops.get(name)
-        if top is None:
+        tops = self.tops.get(name)
+        if not tops:
             return
-        surf.blit(top, (int(sx), int(sy)))
+        vi = self.variant(tx, ty, len(tops))
+        surf.blit(tops[vi], (int(sx), int(sy)))
         # side face wherever the tile in front is lower
         front = self.height_at(gmap, tx, ty + 1)
         gmap_front_name = gmap.tile(tx, ty + 1)
@@ -271,10 +281,11 @@ class Diorama:
             front = self.height_at(gmap, tx, ty + 2)
         drop = h - front
         if drop > 0:
-            face = self.sides.get(name, self.sides["grass"])
+            faces = self.sides.get(name) or self.sides["grass"]
+            face = faces[self.variant(tx, ty, len(faces))]
             for i in range(drop):
                 surf.blit(face, (int(sx), int(sy + Y_STEP + i * WALL_H)))
-        if name in ("water", "water_b"):
+        if name in WATER_FRAMES:
             self._sparkle(surf, tx, ty, sx, sy, t)
         if name == "tallgrass":
             surf.blit(self.tuft(), (int(sx), int(sy + Y_STEP - 20)))

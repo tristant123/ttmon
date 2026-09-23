@@ -27,9 +27,7 @@ def _tiled(tile, width, height):
 
 def build_floor(tile, horizon=HORIZON, sky=((104, 138, 196), (186, 198, 210))):
     """Bake the receding ground plane plus its sky."""
-    big = pygame.transform.scale(tile, (tile.get_width() * 2,
-                                        tile.get_height() * 2))
-    strip = _tiled(big, 2048, big.get_height())
+    strip = _tiled(tile, 2048, tile.get_height())
     sh = strip.get_height()
     floor = pygame.Surface((W, H))
 

@@ -1,8 +1,10 @@
 """Overworld tile art (16x16)."""
 
 import pygame
+
 from .. import palette as P
-from ..pixelart import make, ground_tile
+from . import shading
+from .shading import M
 
 PAL = {
     "g": P.GRASS, "G": P.GRASS_L, "h": P.GRASS_D,
@@ -476,23 +478,80 @@ LEDGE = [
 ]
 
 
+# --------------------------------------------------------------------------
+# Props are billboards in the diorama, so they run through the same lighting
+# pipeline as the monsters: material maps in, lit sprites at twice the size
+# out. Each entry also names the characters that are only background in the
+# original top-down art - those become transparent, or the prop would stand
+# in a square patch of its own grass.
+# --------------------------------------------------------------------------
+PROP_ART = {
+    "tree": (TREE, "gGh"),
+    "rock": (ROCK, "gGh"),
+    "sign": (SIGN, "gGh"),
+    "rubble": (RUBBLE, "gG"),
+    "column": (COLUMN, ""),
+    "fountain": (FOUNTAIN, ""),
+    "wall": (WALL_PLAIN, "gGh"),
+    "window": (WALL_WINDOW, "gGh"),
+    "door": (DOOR, "gGh"),
+    "roof_l": (ROOF_L_, "gGh"),
+    "roof_m": (ROOF_M, ""),
+    "roof_r": (ROOF_R, "gGh"),
+    "shrine_tl": (SHRINE_TOP_L, "gGh"),
+    "shrine_tm": (SHRINE_TOP_M, "gGh"),
+    "shrine_tr": (SHRINE_TOP_R, "gGh"),
+    "shrine_bl": (SHRINE_BOT_L, "p"),
+    "shrine_bm": (SHRINE_BOT_M, "p"),
+    "shrine_br": (SHRINE_BOT_R, "p"),
+}
+
+# One material table for every prop, since the art shares a palette.
+MATERIALS = {
+    "g": M(P.GRASS, "plant"), "G": M(P.GRASS_L, "plant"),
+    "h": M(P.GRASS_D, "plant"),
+    "l": M(P.TALLGRASS, "plant"), "L": M(P.TALLGRASS_L, "plant"),
+    "k": M(P.TALLGRASS_D, "plant"),
+    "t": M((62, 128, 82), "plant"), "T": M((104, 172, 100), "plant"),
+    "y": M((40, 92, 68), "plant"),
+    "r": M((112, 78, 50), "plant"), "R": M((150, 112, 76), "plant"),
+    "p": M(P.PATH, "stone"), "P": M((238, 234, 222), "stone"),
+    "q": M(P.PATH_D, "stone"),
+    "w": M(P.WATER, "gem", emissive=0.2),
+    "W": M(P.WATER_L, "gem", emissive=0.35),
+    "v": M(P.WATER_D, "gem"),
+    "s": M(P.STONE, "stone"), "S": M(P.STONE_L, "stone"),
+    "x": M(P.STONE_D, "stone"),
+    "b": M(P.WALL, "stone"), "B": M(P.WALL_L, "stone"),
+    "d": M(P.WALL_D, "stone"),
+    "o": M(P.ROOF, "stone"), "O": M(P.ROOF_L, "stone"),
+    "n": M((152, 56, 56), "stone"),
+    "f": M((248, 224, 128), "gem", emissive=0.6),
+    "Y": M((248, 240, 200), "gem", emissive=0.7),
+    "F": M(P.FLOWER_B, "plant"),
+    "c": M(P.CREAM, "cloth"), "K": M(P.BLACK, "matte"),
+    "e": M(P.GREY_D, "stone"), "E": M(P.GREY, "stone"),
+    "j": M(P.GREY_L, "stone"),
+    "i": M(P.SAND, "stone"), "m": M(P.WHITE, "cloth"),
+    "u": M((136, 96, 56), "plant"), "z": M((96, 64, 40), "plant"),
+}
+
+
+def _strip(rows, background):
+    if not background:
+        return rows
+    table = {ord(c): "." for c in background}
+    return [r.translate(table) for r in rows]
+
+
+def build_props():
+    """Every standing prop, lit and at twice its authored size."""
+    out = {}
+    for name, (rows, background) in PROP_ART.items():
+        out[name] = shading.render(_strip(rows, background), MATERIALS)
+    return out
+
+
 def build():
-    """Create every tile surface once, after the display is initialised."""
-    t = {}
-    t["grass"] = ground_tile(P.GRASS, P.GRASS_L, P.GRASS_D)
-    t["path"] = ground_tile(P.PATH, P.PATH_L, P.PATH_D)
-    t["sand"] = ground_tile(P.SAND, (244, 232, 190), (204, 188, 144))
-    t["floor"] = ground_tile(P.STONE, P.STONE_L, P.STONE_D)
-    for name, art in [
-        ("tallgrass", TALLGRASS), ("tree", TREE), ("flowers", FLOWERS),
-        ("water", WATER), ("water_b", WATER_B), ("rock", ROCK), ("sign", SIGN),
-        ("roof_l", ROOF_L_), ("roof_m", ROOF_M), ("roof_r", ROOF_R),
-        ("wall", WALL_PLAIN), ("window", WALL_WINDOW), ("door", DOOR),
-        ("shrine_tl", SHRINE_TOP_L), ("shrine_tm", SHRINE_TOP_M),
-        ("shrine_tr", SHRINE_TOP_R), ("shrine_bl", SHRINE_BOT_L),
-        ("shrine_bm", SHRINE_BOT_M), ("shrine_br", SHRINE_BOT_R),
-        ("fountain", FOUNTAIN), ("ledge", LEDGE),
-        ("column", COLUMN), ("rubble", RUBBLE),
-    ]:
-        t[name] = make(art, PAL)
-    return t
+    """Backwards-compatible flat surface table (used for silhouettes)."""
+    return build_props()

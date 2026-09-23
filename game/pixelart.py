@@ -54,38 +54,3 @@ def tint(surf, color, amount):
     )
     out.blit(add, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
     return out
-
-
-# A 16x16 dither mask reused by the ground tiles. Because it is a fixed
-# pattern (not random) the tiles seam perfectly when laid edge to edge.
-DITHER = [
-    "..1....2....1...",
-    ".....1....2....1",
-    "2....1.....1....",
-    "...2.....1....2.",
-    "1....2.1........",
-    "....1.....2....1",
-    ".2.......1....2.",
-    "1....2....1.....",
-    "....1....2....1.",
-    ".1.....2.....1..",
-    "2....1....2.....",
-    "...1....2....1..",
-    ".....2....1....2",
-    "1....1.....2....",
-    "..2.....1....1..",
-    "....1....2....1.",
-]
-
-
-def ground_tile(base, speck1, speck2):
-    """A flat 16x16 ground tile with two speckle shades."""
-    surf = pygame.Surface((16, 16))
-    surf.fill(base)
-    for y, row in enumerate(DITHER):
-        for x, ch in enumerate(row):
-            if ch == "1":
-                surf.set_at((x, y), speck1)
-            elif ch == "2":
-                surf.set_at((x, y), speck2)
-    return surf

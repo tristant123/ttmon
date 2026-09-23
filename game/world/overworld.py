@@ -57,7 +57,8 @@ class Overworld(Scene):
         if self.dio is None:
             self.dio = self.game.assets.get("diorama")
             if self.dio is None:
-                self.dio = Diorama(self.game.assets["tiles"])
+                self.dio = Diorama(self.game.assets["props"],
+                                   self.game.assets["ground"])
                 self.game.assets["diorama"] = self.dio
         cfg = self.map.motes or {}
         self.motes = MoteField(
@@ -325,7 +326,7 @@ class Overworld(Scene):
         frame = self.frame if self.moving else 0
         actors.append({"x": self.px, "y": self.py,
                        "sprite": hero[self.facing][frame]})
-        water = int(self.game.time * 2) % 2
+        water = int(self.game.time * 3) % 4
         self.dio.draw(canvas, self.map, cam, actors, self.game.time, fx, water)
         # map lights, placed in world space
         for tx, ty, radius, colour, strength in self.map.lights:

@@ -7,7 +7,7 @@ style. Scaling is nearest-neighbour so the pixels stay square and hard-edged.
 
 import pygame
 
-from .art import actors, monsters, tiles
+from .art import actors, monsters, terrain, tiles
 from .render.diorama import Diorama
 
 
@@ -38,15 +38,18 @@ def monster2x(key):
 
 
 def build(game):
-    tile_art = tiles.build()
+    props = tiles.build_props()
+    ground = terrain.build()
     hero, npcs = actors.build()
-    game.assets["tiles"] = tile_art
+    game.assets["props"] = props
+    game.assets["ground"] = ground
+    game.assets["tiles"] = props        # silhouettes and backdrops
     game.assets["hero"] = hero
     game.assets["npcs"] = npcs
-    game.assets["hero2x"] = {d: [scale2x(f) for f in frames]
-                             for d, frames in hero.items()}
-    game.assets["npcs2x"] = {k: scale2x(v) for k, v in npcs.items()}
-    game.assets["diorama"] = Diorama(tile_art)
+    # the art pipeline already delivers these at twice their authored size
+    game.assets["hero2x"] = hero
+    game.assets["npcs2x"] = npcs
+    game.assets["diorama"] = Diorama(props, ground)
     monsters.prebuild()
     game.assets["mon2x"] = monster2x
     game.assets["mon_scaled"] = monster_scaled
