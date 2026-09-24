@@ -44,7 +44,8 @@ class NPC:
 class GameMap:
     def __init__(self, key, name, rows, warps=None, npcs=None, encounters=None,
                  rate=0.0, signs=None, group=(1, 1), safe=False,
-                 heights=None, grade=None, lights=None, motes=None):
+                 heights=None, grade=None, lights=None, motes=None,
+                 music=None):
         self.key = key
         self.name = name
         self.rows = rows
@@ -58,6 +59,7 @@ class GameMap:
         self.group = group                # min/max wild group size
         self.safe = safe
         self.grade = grade or key         # post-processing profile
+        self.music = music or key         # track name in game/music.py
         self.lights = lights or []        # (tx, ty, radius, colour, strength)
         self.motes = motes or None        # ambient particle settings
         # Elevation grid for the diorama. '.' means "derive from the tile",

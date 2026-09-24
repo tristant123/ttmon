@@ -4,7 +4,7 @@ import math
 
 import pygame
 
-from .. import config, palette as P, sfx, ui as uimod
+from .. import config, music, palette as P, sfx, ui as uimod
 from ..app import Scene, CONFIRM, CANCEL, direction_of
 from ..render import arena
 from ..render.particles import Sparks
@@ -85,6 +85,7 @@ class BattleScene(Scene):
 
     def enter(self):
         sfx.play("encounter")
+        music.play("boss" if self.b.boss else "battle")
         self._build_stage()
         self.queue = list(self.b.begin())
         self.timer = 0.2
@@ -514,6 +515,7 @@ class BattleScene(Scene):
         lines = []
         if res == "win":
             sfx.play("victory")
+            music.play("victory")
             xp, gold = self.b.rewards()
             player.gold += gold
             lines.append("The field is yours.")

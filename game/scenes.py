@@ -4,7 +4,7 @@ import math
 
 import pygame
 
-from . import config, palette as P, save, sfx, ui
+from . import config, music, palette as P, save, sfx, ui
 from .app import Scene, CONFIRM, CANCEL, direction_of
 from .font import get_font, CURSOR, LINE_H
 from .art import monsters as MART
@@ -37,6 +37,7 @@ class Title(Scene):
         from .render.particles import MoteField
         self.motes = MoteField((config.INTERNAL_W, config.INTERNAL_H),
                                count=44, colour=(210, 226, 255), speed=4.0)
+        music.play("title")
 
     def handle(self, event):
         if event.type != pygame.KEYDOWN:

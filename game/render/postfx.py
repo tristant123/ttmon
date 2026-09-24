@@ -26,7 +26,8 @@ class Grade:
 
     def __init__(self, name, tint=(255, 255, 255), lift=(0, 0, 0),
                  bloom=0.85, threshold=118, dof=0.75, focus=0.58,
-                 vignette=0.5, fog=None, fog_strength=0.0, sat=1.0):
+                 vignette=0.5, fog=None, fog_strength=0.0, sat=1.0,
+                 dither=1.0, quantize=True):
         self.name = name
         self.tint = tint                 # multiplied over the frame
         self.lift = lift                 # added to the frame (a soft fill light)
@@ -38,29 +39,66 @@ class Grade:
         self.fog = fog                   # distance haze colour, or None
         self.fog_strength = fog_strength
         self.sat = sat
+        self.dither = dither        # ordered dither before the depth cut
+        self.quantize = quantize    # reduce to a 16-bit framebuffer
 
 
 PROFILES = {
-    "village": Grade("village", tint=(255, 248, 232), lift=(14, 10, 2),
-                     bloom=0.80, threshold=126, dof=0.70, focus=0.60,
-                     vignette=0.42, fog=(226, 214, 198), fog_strength=0.12),
-    "route": Grade("route", tint=(250, 252, 242), lift=(10, 12, 6),
-                   bloom=0.70, threshold=132, dof=0.66, focus=0.58,
-                   vignette=0.38, fog=(214, 228, 226), fog_strength=0.14),
-    "ruins": Grade("ruins", tint=(255, 240, 214), lift=(20, 12, 0),
-                   bloom=0.88, threshold=124, dof=0.72, focus=0.58,
-                   vignette=0.46, fog=(238, 216, 186), fog_strength=0.20),
-    "shrine": Grade("shrine", tint=(216, 228, 255), lift=(4, 12, 30),
-                    bloom=0.85, threshold=132, dof=0.74, focus=0.56,
-                    vignette=0.45, fog=(150, 166, 214), fog_strength=0.16),
-    "battle": Grade("battle", tint=(250, 246, 240), lift=(10, 8, 6),
-                    bloom=0.90, threshold=118, dof=0.82, focus=0.56,
-                    vignette=0.46, fog=(198, 206, 224), fog_strength=0.18),
-    "boss": Grade("boss", tint=(230, 220, 250), lift=(18, 8, 24),
-                  bloom=1.0, threshold=116, dof=0.84, focus=0.56,
-                  vignette=0.58, fog=(140, 120, 190), fog_strength=0.20),
-    "flat": Grade("flat", bloom=0.0, dof=0.0, vignette=0.0, fog=None),
+    "village": Grade("village", tint=(255, 248, 234), lift=(12, 8, 0),
+                     bloom=0.30, threshold=150, dof=0.0,
+                     vignette=0.34, fog=(214, 200, 176), fog_strength=0.34),
+    "route": Grade("route", tint=(250, 252, 244), lift=(8, 10, 4),
+                   bloom=0.26, threshold=154, dof=0.0,
+                   vignette=0.30, fog=(198, 214, 208), fog_strength=0.38),
+    "ruins": Grade("ruins", tint=(255, 242, 218), lift=(18, 10, 0),
+                   bloom=0.32, threshold=148, dof=0.0,
+                   vignette=0.34, fog=(226, 200, 166), fog_strength=0.40),
+    "shrine": Grade("shrine", tint=(218, 228, 255), lift=(4, 10, 26),
+                    bloom=0.36, threshold=146, dof=0.0,
+                    vignette=0.38, fog=(120, 138, 190), fog_strength=0.44),
+    "battle": Grade("battle", tint=(250, 246, 240), lift=(8, 6, 4),
+                    bloom=0.30, threshold=150, dof=0.0,
+                    vignette=0.32, fog=(186, 196, 216), fog_strength=0.34),
+    "boss": Grade("boss", tint=(230, 220, 250), lift=(16, 6, 22),
+                  bloom=0.38, threshold=144, dof=0.0,
+                  vignette=0.44, fog=(122, 104, 168), fog_strength=0.40),
+    "flat": Grade("flat", bloom=0.0, dof=0.0, vignette=0.0, fog=None,
+                  dither=0.0, quantize=False),
 }
+
+
+# The PS1 rendered into a 16-bit framebuffer, so its gradients banded badly.
+# Studios hid it by dithering before the depth cut, and that speckle is one of
+# the most recognisable things about the era's look.
+BAYER = (
+    (0, 8, 2, 10),
+    (12, 4, 14, 6),
+    (3, 11, 1, 9),
+    (15, 7, 13, 5),
+)
+
+
+def _dither_tiles(size, strength):
+    """Two tiled surfaces: what to add, and what to subtract, so the dither is
+    centred on zero instead of brightening the whole frame."""
+    w, h = size
+    step = 255.0 / 31.0                       # one level of a 5-bit channel
+    pos = pygame.Surface((4, 4))
+    neg = pygame.Surface((4, 4))
+    for y in range(4):
+        for x in range(4):
+            v = ((BAYER[y][x] + 0.5) / 16.0 - 0.5) * step * 2.0 * strength
+            a = int(max(0.0, v))
+            b = int(max(0.0, -v))
+            pos.set_at((x, y), (a, a, a))
+            neg.set_at((x, y), (b, b, b))
+    big_pos = pygame.Surface((w, h))
+    big_neg = pygame.Surface((w, h))
+    for ty in range(0, h, 4):
+        for tx in range(0, w, 4):
+            big_pos.blit(pos, (tx, ty))
+            big_neg.blit(neg, (tx, ty))
+    return big_pos.convert(), big_neg.convert()
 
 
 def _radial(size, inner=(255, 255, 255), outer=(0, 0, 0), power=1.6):
@@ -85,6 +123,8 @@ class PostFX:
         self._tint = pygame.Surface(size).convert()
         self._vignettes = {}
         self._light = _radial(96, (255, 255, 255), (0, 0, 0), 2.1)
+        self._dither = {}
+        self._lowbit = pygame.Surface(size, 0, 16)
         self._light_cache = {}
         self.lights = []          # (x, y, radius, colour, intensity)
         self.enabled = True
@@ -194,6 +234,20 @@ class PostFX:
             self._tint.fill(grade.lift)
             frame.blit(self._tint, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
 
+    def _ps1(self, frame, grade):
+        """Dither, then cut the frame to 16-bit colour."""
+        if grade.dither > 0.01:
+            key = round(grade.dither, 2)
+            tiles = self._dither.get(key)
+            if tiles is None:
+                tiles = _dither_tiles(self.size, grade.dither)
+                self._dither[key] = tiles
+            frame.blit(tiles[0], (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+            frame.blit(tiles[1], (0, 0), special_flags=pygame.BLEND_RGB_SUB)
+        if grade.quantize:
+            self._lowbit.blit(frame, (0, 0))
+            frame.blit(self._lowbit, (0, 0))
+
     # -- entry point -------------------------------------------------------
     def apply(self, frame, grade):
         """Run the stack in place on `frame`."""
@@ -206,6 +260,7 @@ class PostFX:
         self._dof(frame, grade)
         self._vignette(frame, grade)
         self._grade(frame, grade)
+        self._ps1(frame, grade)
         self.clear_lights()
         return frame
 

@@ -10,3 +10,6 @@ venv/
 ttmon_save.json
 ttmon_*.png
 docs/_tmp/
+
+# ./check.sh output
+check_output/

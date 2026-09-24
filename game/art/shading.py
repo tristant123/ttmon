@@ -46,6 +46,38 @@ _L = _norm(LIGHT)
 _R = _norm(RIM)
 
 
+def _detail(kind, x, y, depth, seed):
+    """A per-material surface texture, expressed as a nudge of +/-1 ramp step.
+
+    Deliberately faint. A regular lattice in screen space does not follow the
+    body it sits on, so anything stronger than this reads as brickwork painted
+    onto the creature rather than as scales. Real detail comes from drawing it;
+    this only keeps large flat areas from looking like poured plastic.
+    """
+    if depth <= 2:
+        return 0
+    # Mixed, not just multiplied: the low bits of a linear function of x and
+    # y repeat along parallel lines, and across a 64-pixel body those "random"
+    # speckles lined up into a single long crease.
+    h = (x * 374761393 + y * 668265263 + seed * 2654435761) & 0xFFFFFFFF
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+    h ^= h >> 16
+    if kind == "stone":
+        if (h & 15) == 0:
+            return -1
+        if (h & 63) == 1:
+            return 1
+        return 0
+    if kind == "metal":
+        return 1 if y % 9 == 0 else 0
+    if kind == "scale":
+        # sparse highlights on a diagonal, never the full lattice
+        return 1 if (x * 2 + y * 3) % 17 == 0 else 0
+    if kind in ("fur", "plant"):
+        return -1 if (h & 31) == 0 else 0
+    return 0
+
+
 def _lerp_hue(h, target, amount):
     """Rotate a hue the short way round the wheel."""
     d = target - h
@@ -88,13 +120,20 @@ class Material:
     }
 
     def __init__(self, color, kind="matte", flat=False, emissive=0.0,
-                 outline=None, rim=1.0):
+                 outline=None, rim=1.0, over=None):
         self.color = color
         self.kind = kind if kind in self.KINDS else "matte"
         self.flat = flat            # eyes and glints take no shading
         self.emissive = emissive    # 0..1, lifts the whole ramp and blooms
-        self.outline = outline      # explicit outline colour, else derived
+        # explicit outline colour, else derived; False for none at all, for
+        # sparks and motes that are light rather than objects
+        self.outline = outline
         self.rim = rim              # how strongly the backlight catches
+        # A marking painted onto another material's surface - a muzzle, a
+        # belly, stripes - names that material here and is lit as part of it.
+        # Without this the host bevels away from the marking as if it were a
+        # hole, and every muzzle grows a dark crease down one side.
+        self.over = over
         self._ramp = None
 
     def ramp(self):
@@ -209,7 +248,7 @@ def _grad(field, x, y, w, h):
 # the renderer
 # ---------------------------------------------------------------------------
 
-def render(rows, mats, upscale=True, outline=True):
+def render(rows, mats, upscale=True, outline=True, detail=True):
     """Turn a material map into a lit pygame surface."""
     grid = epx(rows) if upscale else [r for r in rows]
     h = len(grid)
@@ -218,6 +257,7 @@ def render(rows, mats, upscale=True, outline=True):
 
     solid = [[grid[y][x] != TRANSPARENT for x in range(w)] for y in range(h)]
     sil = _distance(solid, w, h)
+    seed_base = (w * 31 + h * 17) & 0xFFFF
 
     # Depth inside each material region, so interior forms are modelled too.
     # A region also records how chunky it is: thin details like a blush or a
@@ -226,22 +266,37 @@ def render(rows, mats, upscale=True, outline=True):
     # instead, weighted by `local`.
     mat_depth = [[0] * w for _ in range(h)]
     local = [[0.0] * w for _ in range(h)]
+
+    def host(ch):
+        m = mats.get(ch)
+        return m.over if m is not None and m.over else ch
+
+    def flat(ch):
+        m = mats.get(ch)
+        return m is not None and m.flat
+
     seen = set()
     for y in range(h):
         for x in range(w):
             ch = grid[y][x]
-            if ch == TRANSPARENT or ch in seen:
+            if ch == TRANSPARENT or host(ch) in seen:
                 continue
-            seen.add(ch)
-            region = [[grid[ry][rx] == ch for rx in range(w)]
-                      for ry in range(h)]
+            key = host(ch)
+            seen.add(key)
+            # Flat features - eyes, glints, mouths - count as part of every
+            # region, so a face is not bevelled around its own eyes. Left as
+            # holes they bend the field, and a shadow line runs from each eye
+            # to the nearest edge.
+            region = [[grid[ry][rx] != TRANSPARENT and
+                       (host(grid[ry][rx]) == key or flat(grid[ry][rx]))
+                       for rx in range(w)] for ry in range(h)]
             d = _distance(region, w, h)
             thickness = max((d[ry][rx] for ry in range(h) for rx in range(w)
                              if region[ry][rx]), default=0)
             weight = max(0.0, min(1.0, (thickness - 2.0) / 3.5))
             for ry in range(h):
                 for rx in range(w):
-                    if region[ry][rx]:
+                    if region[ry][rx] and host(grid[ry][rx]) == key:
                         mat_depth[ry][rx] = d[ry][rx]
                         local[ry][rx] = weight
 
@@ -287,6 +342,9 @@ def render(rows, mats, upscale=True, outline=True):
                 idx = 1
             else:
                 idx = 0
+            if detail:
+                idx = max(0, min(4, idx + _detail(mat.kind, x, y, depth,
+                                                  seed_base)))
             col = ramp[idx]
 
             # specular chip on the lit edge of hard materials
@@ -322,7 +380,7 @@ def _outline(surf, grid, mats, w, h):
                            (x - 1, y + 1)):
                 if 0 <= nx < w and 0 <= ny < h and grid[ny][nx] != TRANSPARENT:
                     mat = mats.get(grid[ny][nx])
-                    if mat is not None:
+                    if mat is not None and mat.outline is not False:
                         best = mat
                         break
             if best is not None:

@@ -4,7 +4,7 @@ import random
 
 import pygame
 
-from .. import config, palette as P, sfx, ui
+from .. import config, music, palette as P, sfx, ui
 from ..app import Scene, CONFIRM, CANCEL, direction_of, RUN
 from ..render.diorama import Diorama, TILE, Y_STEP
 from ..render.particles import MoteField
@@ -52,6 +52,7 @@ class Overworld(Scene):
         self.map = maps.get(self.game.player.map_key)
         self.banner_t = 2.0
         self._setup_render()
+        music.play(self.map.music)
 
     def _setup_render(self):
         if self.dio is None:
@@ -163,6 +164,8 @@ class Overworld(Scene):
             self.game.player.map_key = key
             self.sync()
             self.banner_t = 2.0
+            self._setup_render()
+            music.play(self.map.music)
 
         self.game.fade_to(arrive, 0.25)
 
@@ -229,6 +232,7 @@ class Overworld(Scene):
 
     def after_battle(self, result):
         player = self.game.player
+        music.play(self.map.music, restart=True)
         if result == "lose":
             def revive():
                 player.heal_all()

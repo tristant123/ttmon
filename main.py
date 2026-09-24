@@ -15,7 +15,7 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
 import pygame
 
-from game import assets, config, sfx
+from game import assets, config, music, sfx
 from game.app import Game
 from game.scenes import Title
 
@@ -37,6 +37,7 @@ def main(argv=None):
     pygame.init()
     if not args.mute:
         sfx.init()
+        music.init()          # rendered on a background thread
     game = Game(scale=max(config.MIN_SCALE, min(config.MAX_SCALE, args.scale)),
                 fullscreen=args.fullscreen)
     build_assets(game)
