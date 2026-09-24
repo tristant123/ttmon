@@ -23,7 +23,7 @@ from . import effects
 # 240x160 space, so every world coordinate here is exactly twice a UI one.
 C_ENEMY_FEET = 92           # where an enemy's feet meet the ground
 C_ALLY_FEET = 188
-C_SPRITE = 64               # 32x32 art drawn at 2x
+C_SPRITE = 64               # a standard monster sprite
 SPRITE = 32                 # UI-space sprite box
 
 # Slim party plates, so the stage keeps most of the screen
@@ -128,7 +128,7 @@ class BattleScene(Scene):
         spr = self.sprite_of(mon)
         w, hgt = spr.get_size()
         if mon in self.b.foes and hgt > C_SPRITE:
-            feet += min(28, (hgt - C_SPRITE) // 2)
+            feet += min(44, (hgt - C_SPRITE) * 3 // 4)
         return pygame.Rect(cx - w // 2, feet - hgt, w, hgt)
 
     def rect_of(self, mon):
@@ -672,9 +672,14 @@ class BattleScene(Scene):
         """A small health pip under each foe, in crisp UI pixels."""
         r = self.rect_of(mon)
         ratio = mon.hp / float(mon.maxhp)
-        uimod.gauge(ui, r.x + 3, r.bottom + 1, 26, 3, ratio,
-                    uimod.hp_color(ratio))
-        self.draw_ailment_dot(ui, mon, r.x + 1, r.bottom + 5)
+        # Under the feet as a rule; a foe drawn larger than standard stands
+        # forward into the party's row, so its gauge goes over its head.
+        y = r.bottom + 1
+        if r.h > C_SPRITE // 2:
+            y = max(2, r.y + 2)
+        x = r.centerx - 13
+        uimod.gauge(ui, x, y, 26, 3, ratio, uimod.hp_color(ratio))
+        self.draw_ailment_dot(ui, mon, x - 2, y + 4)
         if self.actor_mark is mon and self.mode in (
                 "command", "skill", "item", "sigil", "target"):
             if self.game.blink:

@@ -88,9 +88,18 @@ def _lerp_hue(h, target, amount):
     return (h + d * amount) % 1.0
 
 
+# Yellows are the exception to "shadows go blue": the short way from yellow
+# to blue runs through green, so gold and straw shaded that way look mouldy.
+# Their shadows go toward red instead, as a painter would take them.
+YELLOWS = (0.105, 0.24)
+YELLOW_SHADOW_HUE = 0.98
+
+
 def _shift(rgb, hue_target, hue_amt, sat_mul, val_mul):
     h, s, v = colorsys.rgb_to_hsv(rgb[0] / 255.0, rgb[1] / 255.0,
                                   rgb[2] / 255.0)
+    if hue_target == COOL_HUE and YELLOWS[0] < h < YELLOWS[1] and s > 0.15:
+        hue_target = YELLOW_SHADOW_HUE
     h = _lerp_hue(h, hue_target, hue_amt)
     s = max(0.0, min(1.0, s * sat_mul))
     v = max(0.0, min(1.0, v * val_mul))

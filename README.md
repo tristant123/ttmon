@@ -1,11 +1,11 @@
 # Tabula Mythos
 
-A proof-of-concept monster-binding RPG for Windows PC, presented in **HD-2D**
-— the Octopath Traveler approach, where low-resolution pixel sprites are lit
-and composited in a higher-resolution 3D-ish diorama. Twenty-two cutesy
-monsters drawn from world mythology, Greek and Roman included, and a battle
-system built on Shin Megami Tensei's **Press Turn** rules rather than
-Pokémon's.
+A proof-of-concept monster-binding RPG for Windows PC. Pixel sprites are lit
+and staged in a diorama, and the finished frame is dithered down to 15-bit
+colour the way a PlayStation framebuffer stored it. Twenty-two cutesy
+monsters drawn from world mythology, Greek and Roman included, a synthesised
+chiptune score, and a battle system built on Shin Megami Tensei's **Press
+Turn** rules rather than Pokémon's.
 
 You bind creatures instead of catching them, you field three at once, and a
 single misread of an enemy's affinities can cost you the entire turn.
@@ -136,7 +136,10 @@ lose the entire round.
 ## The monsters
 
 Twenty-two species, each with an affinity table meant to be exploited in both
-directions.
+directions, and each with a joke in how it is drawn: the Thunderbird is too
+pleased with itself to open its eyes fully, Medusa's snakes are delighted to
+meet you and she is not, the Nemean Lion sits among the arrows that bounced
+off it, and Talos's ankle is leaking.
 
 ![roster](docs/roster.png)
 
@@ -177,12 +180,31 @@ so a party carrying nothing but physical skills cannot scratch it. Bring
 magic, or walk away — if you land nothing at all for eight rounds the fight is
 called off rather than grinding on forever.
 
-## The HD-2D renderer
+## Music
 
-Octopath Traveler's look does not come from 3D character models — the
-characters are small pixel sprites. It comes from staging those sprites in a
-lit diorama and finishing the frame with modern post-processing. This build
-does the same thing in pygame:
+Eight tracks — title, village, road, ruins, shrine, battle, boss and victory —
+synthesised at start-up by a small tracker in `game/music.py` from pulse,
+triangle and noise voices. There are no audio files; the whole score is text
+patterns in that one module, and rendering it takes under two seconds on a
+background thread while the title screen comes up.
+
+The writing borrows three specific habits from Toby Fox's soundtracks. One
+seven-note motif (degrees 1 3 5 4 3 2 1 of the minor scale) runs through
+nearly every track: warm and major in the village, a walking bassline on the
+road, double-time in battle, slow and flattened for the boss. The melodies are
+plain and singable over a small set of chords. And held notes get vibrato and
+a little pitch drift, so a square wave sounds sung rather than beeped.
+
+To hear a track without playing through to it, `python tools/render_music.py
+out/` writes each one to a WAV.
+
+## The renderer
+
+The world is a lit diorama of pixel sprites, the Octopath Traveler approach,
+finished the way a PlayStation frame was. It is not a 3D renderer: there are
+no polygons and the camera does not rotate. What it takes from the PS1 is the
+finish — the ordered dither and the 15-bit colour — and the sprite
+proportions, which are taller and less chibi than a Game Boy's. In pygame:
 
 **The diorama** (`game/render/diorama.py`). The ground plane is foreshortened,
 tiles carry real elevation, and wherever terrain steps down a side face is
@@ -217,24 +239,41 @@ rows of the local terrain sampled at increasing depth toward a horizon, with
 rolling hills and two layers of silhouetted scenery behind. It costs one blit
 per frame thereafter.
 
-**The sprites** (`game/art/shading.py`). Monsters are not painted by hand.
-They are authored as flat *material* maps — this pixel is fur, that one is
-bronze, this one is an eye — and a lighting pass turns each into a finished
-sprite:
+**The sprites** (`game/art/monsters.py`, `game/art/shading.py`). Monsters are
+not painted by hand. Each is a 64×64 *material* map — this pixel is fur, that
+one is bronze, this one is an eye — and a lighting pass turns it into a
+finished sprite.
 
-1. **EPX upscale.** The character grid is doubled with the Scale2x rule, which
-   rounds stair-stepped diagonals, so a form authored at 32×32 gets a 64×64
-   silhouette without nearest-neighbour's blocky corners.
-2. **Distance fields** tell every pixel how deep it sits inside its own
-   material and inside the silhouette. Thin details like a blush or a belly
-   patch are deliberately *not* modelled as separate volumes — they inherit
-   the body's light, or the sprite breaks out in dark blotches.
+The maps are not typed out as 64-character rows either; that was tried, and a
+single miscounted dot bends a whole wing. Each creature is a set of parts
+stamped onto a canvas back to front — wings, then body, then arms, then
+head. Organic outlines come from `spans`, `ellipse` and `plume` (a curved,
+swelling tail or feather); limbs, necks, tails and snakes are swept along a
+path with `tube`; faces are written half-width and mirrored with `sym`; and
+parts are placed by anchor with `pin`, so a leaf's base lands on the crown
+wherever the leaf ends up. `tools/preview.py <name>` blows a sprite up to
+inspect it.
+
+The lighting pass:
+
+1. **Distance fields** tell every pixel how deep it sits inside its own
+   material and inside the silhouette. Two kinds of detail are deliberately
+   *not* modelled as separate volumes. Markings — a muzzle, a belly, stripes —
+   name the material they are painted on (`over=`) and are lit as part of it;
+   otherwise the host bevels around them as if they were holes, and every
+   muzzle grows a crease down one side. Flat features like eyes are ignored by
+   the field for the same reason.
+2. **Native resolution.** The art is drawn at the size it is shown, so there
+   is no upscale and no procedural texture: detail is drawn, not generated.
+   (The pipeline still accepts 32×32 art and doubles it with the EPX rule.)
 3. **Quantised Lambert shading** from a key light at the upper left. Banding
    the result into five tones is what keeps it reading as pixel art instead of
    an airbrushed bevel.
 4. **Hue-shifted ramps.** Shadows rotate toward blue and gain saturation;
    highlights rotate toward warm light and lose it. Flat value ramps are the
    single biggest thing separating amateur pixel art from this house style.
+   Yellows are the exception: the short way from yellow to blue runs through
+   green, so gold shaded that way looks mouldy. Their shadows go toward red.
 5. **Rim light and coloured outlines** — a cool backlight on the edge facing
    away from the key, and outlines taken from a dark, hue-shifted version of
    whatever material they hug, never pure black.
@@ -244,40 +283,45 @@ stays matte, gems and flame are emissive and bleed into the bloom pass. Adding
 a monster means drawing a silhouette, not painting four shades of everything,
 and the whole roster stays lit by one consistent model.
 
-**The finish** (`game/render/postfx.py`), four passes over the frame:
+**The finish** (`game/render/postfx.py`), passes over the frame in order:
 
 | Pass | What it does |
 | --- | --- |
 | Point lights | Additive radial sprites — lantern windows, the shrine's hanging scale, spell impacts — drawn *before* bloom so they bleed |
+| Fog | Distance haze toward the horizon |
 | Bloom | Bright-pass, blurred twice, added back |
-| Tilt-shift DoF | The frame blurred and recomposited in bands, sharp at the focus line and soft toward the distance and the foreground — this is what makes it read as a miniature |
-| Fog, vignette, grade | Distance haze, corner falloff, and a per-location tint: warm afternoon in the village, cold dusk at the shrine |
+| Vignette, grade | Corner falloff, and a per-location tint: warm afternoon in the village, cold dusk at the shrine |
+| PS1 framebuffer | A 4×4 ordered (Bayer) dither, then quantisation to 15-bit colour — five bits a channel, as the PlayStation stored its frame. The dither is what turns smooth gradients into that era's fine crosshatch |
+
+The pass stack still supports tilt-shift depth of field, but every grade has
+it switched off: a PS1 frame is sharp edge to edge, and the blur fought the
+dither.
 
 Every operation is a pygame blit, `smoothscale` or blend-flag fill, so it is
 all C-speed. Measured on a CPU-only container with `tools/bench_frame.py`:
 
 ```
 scene            ms/frame      fps
-village +fx          4.78      209
-route +fx            4.65      215
-shrine +fx           4.79      209
-battle +fx           3.82      262
-(same scenes with --flat run about twice as fast)
+village +fx          4.52      221
+route +fx            4.39      228
+shrine +fx           4.66      214
+battle +fx           3.55      282
+(the same scenes with no post-processing run in about 1-2ms)
 ```
 
 60fps needs 16.6ms, so the whole stack uses under a third of the budget.
 
 **Resolution.** The world renders at 480×320, which is what gives bloom and
-depth of field enough pixels to read. The UI keeps its original 240×160 layout
+the dither enough pixels to read. The UI keeps its original 240×160 layout
 space and is scaled up by exactly 2 on top of the finished frame, so text and
 window frames stay sharp and are never blurred or bloomed.
 
 ## How it is built
 
 Everything is Python and pygame-ce, and **every asset is source code** — the
-sprites are ASCII art with palettes, the font is a hand-authored 5×8 bitmap,
-the maps are character grids (with a second grid for elevation), and the sound
-effects are square waves synthesised at start-up. There are no binary assets
+sprites are material maps composed from parts, the font is a hand-authored 5×8
+bitmap, the maps are character grids (with a second grid for elevation), and
+the sound effects and all eight music tracks are synthesised at start-up. There are no binary assets
 to lose, and the whole look can be retuned from `game/palette.py` and the
 grade profiles in `game/render/postfx.py`.
 
@@ -291,20 +335,21 @@ game/
   font.py               5x8 bitmap font, proportional spacing
   pixelart.py           ASCII art -> pygame surfaces
   ui.py                 windows, gauges, press turn icons, menus
-  sfx.py                procedural chiptune sound
+  sfx.py                procedural sound effects
+  music.py              a small tracker and the score, synthesised at load
   monster.py            a monster instance: stats, growth, buffs, ailments
   player.py / save.py   party, bag, JSON save
   scenes.py             title, dialogue, party, bag, shop, bestiary
   art/
-    shading.py          material maps -> lit sprites (EPX, normals, ramps)
-    monsters.py         22 species as material maps
+    shading.py          material maps -> lit sprites (fields, normals, ramps)
+    monsters.py         22 species, composed from parts
     terrain.py          procedural ground, seamless, four variants each
     tiles.py            standing props, lit through shading.py
     actors.py           overworld characters
   render/
     diorama.py          extruded terrain, billboards, depth sorting
     arena.py            the baked battle stage
-    postfx.py           bloom, depth of field, lights, grading
+    postfx.py           lights, fog, bloom, grading, PS1 dither
     particles.py        ambient motes and impact sparks
   battle/effects.py     per-element spell choreography
   battle/
@@ -345,6 +390,8 @@ python tools/simulate.py 300           # play 300 battles per matchup, print win
 python tools/run_playtest.py out/      # drive the real game headlessly, save screenshots
 python tools/run_world_test.py out/    # walk village -> route -> shrine, talk, shop, boss
 python tools/contact_sheet.py out.png  # render every monster sprite
+python tools/preview.py kitsune        # one sprite, blown up for inspection
+python tools/render_music.py out/      # export every music track to WAV
 python tools/make_roster_image.py      # regenerate docs/roster.png
 python tools/effect_strip.py out.png   # filmstrip of every spell effect
 python tools/shot_maps.py out/         # render each map in the diorama
@@ -360,16 +407,16 @@ right element and the right defences.
 
 This is a proof of concept, so it stops where the systems have been proven:
 four maps, twenty-two species, forty skills, one boss, a bestiary, a shop,
-saving, a complete Press Turn implementation and an HD-2D renderer. There is no fusion,
-no trading, no multi-area story, and the music is silence — those are the
-obvious next steps, not oversights.
+saving, a complete Press Turn implementation, eight music tracks and a
+diorama renderer with a PS1 finish. There is no fusion, no trading and no
+multi-area story — those are the obvious next steps, not oversights.
 
-Monsters are authored at 32×32 and finished at 64×64 by the shading pass.
-Authoring the forms directly at 64×64 would buy finer silhouettes — hands,
-feathers, individual teeth — but the lighting model would not change and the
-per-sprite cost roughly quadruples. A few forms are merely adequate rather
-than good: the Satyr's pipes do not read, and the Chimera's three heads are
-muddled at this size. Those need redrawing, not better lighting.
+The world is still 2.5D: sprites on a fixed-angle diorama. A Xenogears-style
+world — real low-poly terrain and buildings the camera can orbit, with the
+sprites standing in it — needs a 3D renderer, which pygame does not have. It
+is the one part of the PS1 look this build does not attempt; the path there
+is OpenGL through `moderngl`, drawing the same sprites as camera-facing
+quads.
 
 Terrain has no blending between surfaces yet — grass meets path on a hard tile
 edge. Fringed transition variants would be the next visible upgrade there.
