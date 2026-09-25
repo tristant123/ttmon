@@ -22,7 +22,7 @@ single misread of an enemy's affinities can cost you the entire turn.
 run_windows.bat
 ```
 
-That installs the one dependency and launches the game.
+That installs the two dependencies (pygame-ce and numpy) and launches the game.
 
 **Windows, as a standalone .exe:**
 
@@ -251,40 +251,72 @@ real battle scene, frame by frame.
 
 ![portraits](docs/portraits.png)
 
-Everyone who speaks has a bust in the Fire Emblem idiom: a three-quarter
-face beside the text box, shoulders tucked behind it, sliding in as the
-dialogue opens. Anubis speaks from the right, turned to face you, and the
-pause menu shows the binder.
+Everyone who speaks has a bust modelled on the GBA Fire Emblems. They are
+authored in a 96×80 frame at the UI's 240×160 resolution, which is the size
+Fire Emblem's portraits have on that screen, and doubled like the rest of the
+UI, so every pixel is a deliberate cluster. A bust sits beside the text box
+with its shoulders tucked behind it, slides in as the dialogue opens,
+**blinks every few seconds and moves its mouth while its line is
+printing**. Anubis speaks from the right, turned to face you, and his jaw
+drops when he talks. The pause menu shows the binder.
 
-They come from their own renderer (`game/art/portraits.py`) because the
-lighting they want is the opposite of the sprites'. Instead of normals and
-banded Lambert shading, it is cel shading: a flat base, one shadow and one
-light. Form shadows are crisp bands down the side away from the key light;
-cast shadows fall under the fringe and the chin; the silhouette gets a dark
-line and overlapping shapes get a softer one. Hair is built from tapered
-locks that each end in a point. The eyes are stamped by hand, because in
-anime faces they carry the character: lidded for the trader, narrowed for
-the elder, sharp for the warden, round for Nen. Portraits are drawn at the
-world's full 480×320 resolution through a `draw_front` hook, after the
-colour grade but under the UI.
+The renderer (`game/art/portraits.py`) is cel shading with five tones a
+material: deep shadow, shadow, base, light and highlight. Form shadows are
+hard bands down the side away from the light with the deep tone packed
+against the outline; hair takes cast shadows onto the brow and a jagged
+band of gloss across its clumps; metal gets a bright edge. Every shape is
+outlined in a dark, hue-tinted line, inside as well as out, while flat marks
+— eyes, mouths, a scar — sit on the surface without one. Faces are built
+from shared head shapes (young, sharp, round, old) so that each character
+has their own jaw and chin, and each has their own eyes: narrowed for the
+elder, lidded for the trader, sharp for the warden, wide for Nen.
 
 ## Music
 
-Eight tracks — title, village, road, ruins, shrine, battle, boss and victory —
-synthesised at start-up by a small tracker in `game/music.py` from pulse,
-triangle and noise voices. There are no audio files; the whole score is text
-patterns in that one module, and rendering it takes under two seconds on a
-background thread while the title screen comes up.
+Eight pieces — title, village, road, ruins, shrine, battle, boss and
+victory — written in `game/score.py` and synthesised at start-up by
+`game/music.py`. There are no audio files. Rendering the whole score takes
+about six seconds on a background thread, title theme first.
 
-The writing borrows three specific habits from Toby Fox's soundtracks. One
-seven-note motif (degrees 1 3 5 4 3 2 1 of the minor scale) runs through
-nearly every track: warm and major in the village, a walking bassline on the
-road, double-time in battle, slow and flattened for the boss. The melodies are
-plain and singable over a small set of chords. And held notes get vibrato and
-a little pitch drift, so a square wave sounds sung rather than beeped.
+Each piece has an intro that plays once and a loop body of several sections
+(A, A′, B, a bridge), so a map theme runs a minute to nearly two before it
+repeats, and each repeat changes something — who carries the tune, what
+harmonises it, how the drums fill into the next section:
+
+| Track | Key, tempo | Loop | Built like |
+| --- | --- | --- | --- |
+| Title | A minor, 84 | 80 s | a music box over broken piano, strings on the reprise |
+| Lantern Hollow | C major, 104 | 92 s | a GBA town theme: flute over off-beat stabs and a walking bass, a piano bridge for the evening |
+| Mistgrass Road | D major, 138 | 70 s | a route march: square lead, arpeggios, a counter-melody on the repeat, a brass bridge |
+| Marble Steps | D dorian, in 3 | 69 s | a harp and flute waltz, the tune passed to piano, strings and celesta |
+| Shrine of the Scale | A phrygian dominant, 76 | 114 s | a reed over a drone and a frame drum, bells in the dark |
+| Wild battle | E minor, 172 | 56 s | a chromatic run-in, pumping octave bass, a half-time strings bridge |
+| Anubis | E phrygian dominant, 150 | 64 s | brass stabs, a galloping bass, a toms-and-reed breakdown |
+| Victory | C major, 140 | 27 s | a fanfare into a tune that loops until you leave |
+
+The models are the GBA Pokémon games and Undertale. From Undertale comes one
+tune in many clothes: the motif A–C–E–D–C–B–A (scale degrees 1 3 5 4 3 2 1)
+opens the title theme and comes back as the boss theme's B section, its
+fifth raised into the Egyptian-sounding phrygian dominant.
+
+**The synthesiser.** Pulse, saw and triangle voices are read from
+band-limited wavetables, so a square lead is bright without the fizz of
+aliasing. Around them are a piano (partials that decay faster the higher
+they are), a celesta and a music box (FM), a breathy flute, detuned strings,
+a brass whose brightness swells and settles, a harp, a reed and a choir, and
+a drum kit made of pitched sine sweeps and shaped noise. Voices are panned
+across the stereo field and sent to a convolution reverb. A loop's ring-out
+is folded back onto its start, so it repeats without a seam.
+
+**The notation.** Melodies are written note by note (`e5/8 g5 c6/4.`), with
+bar lines that are checked: a bar that does not add up is an error at load,
+not a wrong note found by ear. Bass lines, arpeggios, pads, stabs and drums
+are generated from each section's chord symbols, the way a band reads a lead
+sheet, and harmony lines follow the chords a third or fourth below the tune.
 
 To hear a track without playing through to it, `python tools/render_music.py
-out/` writes each one to a WAV.
+out/` writes each one to a WAV: the intro, then the loop twice, so you can
+hear the loop point.
 
 ## The renderer
 
@@ -406,7 +438,7 @@ window frames stay sharp and are never blurred or bloomed.
 
 ## How it is built
 
-Everything is Python and pygame-ce, and **every asset is source code** — the
+Everything is Python, pygame-ce and numpy, and **every asset is source code** — the
 sprites are material maps composed from parts, the font is a hand-authored 5×8
 bitmap, the maps are character grids (with a second grid for elevation), and
 the sound effects and all eight music tracks are synthesised at start-up. There are no binary assets
@@ -424,7 +456,8 @@ game/
   pixelart.py           ASCII art -> pygame surfaces
   ui.py                 windows, gauges, press turn icons, menus
   sfx.py                procedural sound effects
-  music.py              a small tracker and the score, synthesised at load
+  music.py              the synthesiser, sequencer and playback
+  score.py              the eight pieces, written as lead sheets
   monster.py            a monster instance: stats, growth, buffs, ailments
   player.py / save.py   party, bag, JSON save
   scenes.py             title, dialogue, party, bag, shop, bestiary
@@ -432,7 +465,7 @@ game/
     shading.py          material maps -> lit sprites (fields, normals, ramps)
     parts.py            sprite authoring: tubes, feathers, wings, rotation
     monsters.py         22 species, three poses each, composed from parts
-    portraits.py        cel-shaded dialogue portraits
+    portraits.py        Fire Emblem-style portraits, with blink and talk frames
     terrain.py          procedural ground, seamless, four variants each
     tiles.py            standing props, lit through shading.py
     actors.py           overworld characters
@@ -450,8 +483,8 @@ game/
     effects.py          damage numbers, element bursts, sigil throws
   data/                 elements, skills, species, items
   world/                maps.py, overworld.py
-tests/                  39 tests: the turn economy, the engine, stages and
-                        the boss, and that every speaker has a portrait
+tests/                  45 tests: the turn economy, the engine, stages and
+                        the boss, portraits and their frames, the score
 tools/                  headless playtest + balance simulation harnesses
 ```
 
@@ -478,7 +511,7 @@ artifact you can download to see what that commit actually looked like.
 ## Development
 
 ```
-python -m unittest discover -s tests   # 39 tests: press turns, engine, boss, portraits
+python -m unittest discover -s tests   # 45 tests: press turns, engine, boss, portraits, score
 python tools/simulate.py 300           # play 300 battles per matchup, print win rates
 python tools/run_playtest.py out/      # drive the real game headlessly, save screenshots
 python tools/run_world_test.py out/    # walk village -> route -> shrine, talk, shop, boss

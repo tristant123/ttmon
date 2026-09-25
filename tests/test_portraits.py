@@ -29,7 +29,7 @@ class TestPortraits(unittest.TestCase):
 
     def test_every_portrait_renders_at_size(self):
         for key in portraits.CAST:
-            surf = portraits.portrait(key)
+            surf = portraits.portrait(key, scale=1)
             self.assertEqual(surf.get_size(), (portraits.W, portraits.H))
             # something was drawn, and the corners stay clear
             self.assertIsNotNone(surf.get_bounding_rect())
@@ -37,9 +37,20 @@ class TestPortraits(unittest.TestCase):
 
     def test_every_ink_used_is_defined(self):
         for key, build in portraits.CAST.items():
-            cv, inks = build()
-            used = {ch for row in cv for ch in row} - {portraits.CLEAR}
-            self.assertFalse(used - set(inks), key)
+            for eye in ("open", "half", "shut"):
+                for talk in ("shut", "open"):
+                    cv, inks = build(eye, talk)
+                    used = {ch for row in cv for ch in row} - {portraits.CLEAR}
+                    self.assertFalse(used - set(inks), (key, eye, talk))
+
+    def test_they_blink_and_talk(self):
+        for key in portraits.CAST:
+            still = portraits.portrait(key, "open", "shut", scale=1)
+            for eye, talk in (("shut", "shut"), ("open", "open")):
+                frame = portraits.portrait(key, eye, talk, scale=1)
+                self.assertNotEqual(pygame.image.tobytes(still, "RGBA"),
+                                    pygame.image.tobytes(frame, "RGBA"),
+                                    (key, eye, talk))
 
 
 if __name__ == "__main__":

@@ -179,16 +179,30 @@ class Intro(Scene):
         self.box.draw(surf, blink_on=self.game.blink)
 
 
-def draw_portrait(canvas, key, bottom, t=1.0, right=None):
-    """A bust beside a text box, Fire Emblem style: full resolution, its
-    shoulders tucked behind the box, sliding in as it fades up."""
-    surf = PORTRAIT.portrait(key)
+def portrait_frame(t, talking):
+    """Which eyes and mouth a portrait shows at time `t`. Fire Emblem's
+    busts blink every few seconds and flap their mouths while their line is
+    printing; the rhythm below is close to theirs."""
+    phase = (t + 1.3) % 3.7
+    eye = "open"
+    if phase > 3.58:
+        eye = "half" if phase < 3.61 or phase > 3.67 else "shut"
+    talk = "open" if talking and int(t * 9) % 2 else "shut"
+    return eye, talk
+
+
+def draw_portrait(canvas, key, bottom, t=1.0, right=None, talking=False):
+    """A bust beside a text box, Fire Emblem style: authored at UI size and
+    doubled, its shoulders tucked behind the box, sliding in as it fades
+    up, blinking, and moving its mouth while it talks."""
+    eye, talk = portrait_frame(t, talking)
+    surf = PORTRAIT.portrait(key, eye, talk, scale=config.UI_SCALE)
     if right is None:
         right = key in PORTRAIT.RIGHT
     k = min(1.0, t / 0.18)
     ease = 1 - (1 - k) ** 3
     slide = int((1 - ease) * 14)
-    x = config.INTERNAL_W - 16 - surf.get_width() + slide if right else 16 - slide
+    x = config.INTERNAL_W - 4 - surf.get_width() + slide if right else 4 - slide
     if k < 1.0:
         surf = surf.copy()
         surf.set_alpha(int(255 * ease))
@@ -233,8 +247,8 @@ class Dialogue(Scene):
 
     def draw_front(self, canvas):
         if self.portrait:
-            draw_portrait(canvas, self.portrait, 108 * config.UI_SCALE + 14,
-                          self.t)
+            draw_portrait(canvas, self.portrait, 108 * config.UI_SCALE + 18,
+                          self.t, talking=not self.box.done)
 
     def draw(self, surf):
         if self.speaker:
@@ -243,7 +257,7 @@ class Dialogue(Scene):
             # the name plate sits beside a portrait on the left, not on it
             x = 8
             if self.portrait and self.portrait not in PORTRAIT.RIGHT:
-                x = 74
+                x = PORTRAIT.W + 6
             ui.panel(surf, (x, 98, w, 13), P.NEAR_BLACK, P.WIN_EDGE_D)
             font.draw(surf, self.speaker, x + 6, 101, P.ICON_FULL)
         self.box.draw(surf, blink_on=self.game.blink)
@@ -262,7 +276,7 @@ class PauseMenu(Scene):
         self.t += dt
 
     def draw_front(self, canvas):
-        draw_portrait(canvas, "hero", 116 * config.UI_SCALE + 12, self.t)
+        draw_portrait(canvas, "hero", 116 * config.UI_SCALE + 14, self.t)
 
     def handle(self, event):
         if event.type != pygame.KEYDOWN:

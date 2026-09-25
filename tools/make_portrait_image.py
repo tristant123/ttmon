@@ -13,7 +13,7 @@ OUT = os.path.join(ROOT, "docs", "portraits.png")
 
 NAMES = {v: k for k, v in portraits.SPEAKERS.items()}
 NAMES["hero"] = "The binder"
-Z, PAD = 2, 10
+Z, PAD = 3, 10
 w, h = portraits.W * Z, portraits.H * Z
 keys = list(portraits.CAST)
 sheet = pygame.Surface((len(keys) * (w + PAD) + PAD, h + PAD * 2 + 14))
@@ -22,7 +22,7 @@ font = get_font()
 for i, key in enumerate(keys):
     x = PAD + i * (w + PAD)
     pygame.draw.rect(sheet, (58, 54, 82), (x, PAD, w, h))
-    sheet.blit(pygame.transform.scale(portraits.portrait(key), (w, h)), (x, PAD))
+    sheet.blit(portraits.portrait(key, scale=Z), (x, PAD))
     font.draw(sheet, NAMES.get(key, key), x + 4, PAD + h + 4, (226, 224, 238))
 pygame.image.save(sheet, OUT)
 print("wrote", OUT, sheet.get_size())
