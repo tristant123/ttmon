@@ -13,7 +13,7 @@ try:
 except ImportError:      # pragma: no cover
     pygame = None
 
-RATE = 22050
+RATE = 32000
 _enabled = False
 _sounds = {}
 _volume = 0.35

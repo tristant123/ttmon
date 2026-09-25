@@ -8,6 +8,6 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-python -m pip show pygame-ce >nul 2>nul || python -m pip install -r requirements.txt
+python -c "import pygame, numpy" >nul 2>nul || python -m pip install -r requirements.txt
 python main.py %*
 if errorlevel 1 pause

@@ -5,7 +5,7 @@ import time
 
 import pygame
 
-from . import config, palette as P, sfx
+from . import config, music, palette as P, sfx
 from .render import postfx
 
 CONFIRM = (pygame.K_z, pygame.K_j, pygame.K_RETURN, pygame.K_KP_ENTER,
@@ -270,6 +270,7 @@ class Game:
             if not self.busy and self.scene:
                 self.scene.handle(event)
         self._update_fade(dt)
+        music.update()
         # Only the top scene updates. Anything below is frozen, which is what
         # keeps the overworld from walking around underneath an open battle.
         if self.scene:

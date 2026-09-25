@@ -1,4 +1,6 @@
-# Tabula Mythos needs exactly one dependency.
+# Tabula Mythos needs two dependencies.
 # pygame-ce is the maintained community fork and is a drop-in for pygame;
 # plain "pygame>=2.5" also works if you prefer it.
 pygame-ce>=2.5.0
+# numpy synthesises the score. Without it the game runs, silently.
+numpy>=1.21
