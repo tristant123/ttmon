@@ -19,17 +19,17 @@ def scale2x(surf):
 _mon_scaled = {}
 
 
-def monster_scaled(key, scale=1):
-    """A monster's battle sprite. The art pipeline already lights and doubles
-    it, so scale 1 is the normal size and larger values are for set pieces."""
+def monster_scaled(key, scale=1, pose="idle"):
+    """A monster's battle sprite in one pose. Scale 1 is the normal size;
+    larger values are for set pieces."""
     if scale == 1:
-        return monsters.sprite(key)
-    cached = _mon_scaled.get((key, scale))
+        return monsters.sprite(key, pose)
+    cached = _mon_scaled.get((key, scale, pose))
     if cached is None:
-        src = monsters.sprite(key)
+        src = monsters.sprite(key, pose)
         cached = pygame.transform.scale(
             src, (src.get_width() * scale, src.get_height() * scale))
-        _mon_scaled[(key, scale)] = cached
+        _mon_scaled[(key, scale, pose)] = cached
     return cached
 
 

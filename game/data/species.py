@@ -223,7 +223,7 @@ _sp("anubis", "Anubis", "Deity", "anubis",
     _b(105, 60, 16, 18, 16, 15, 14),
     [(1, "scale_of_ma"), (1, "judgement_blade"), (1, "radiance"),
      (1, "mythos_ray"), (1, "crack"), (1, "bolster"), (1, "dread")],
-    catch=0, xp=300, flee=True, press=1, scale=2,
+    catch=0, xp=300, flee=True, press=1,
     desc="Keeper of the scale. He has already read your weight.")
 
 

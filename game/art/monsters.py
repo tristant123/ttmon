@@ -14,515 +14,39 @@ half-width (sym), and parts are placed by anchor (pin) or corner (stamp).
 
 from . import shading
 from .shading import M
-
-# The one shared material: the catch-light in an eye. Flat, because light
-# must not bevel it.
-GLINT = M((255, 255, 255), "gem", flat=True)
+from .parts import *                       # noqa: F401,F403 - the authoring kit
+from .parts import GLINT
 
 
-def canvas(w=64, h=64):
-    """A blank grid to stamp parts onto.
-
-    Placing wings, tails and limbs as separate pieces at chosen coordinates is
-    far less error-prone than writing one 64-character line per row and
-    counting dots, and it makes a part reusable between creatures."""
-    return [["."] * w for _ in range(h)]
+POSES = ("idle", "attack", "cast")
 
 
-def stamp(cv, x, y, rows, onto=False):
-    """Paint a part onto the canvas; '.' in the part leaves what was there.
+class Creature:
+    """A monster's art: one build function, many poses.
 
-    With `onto`, the part only paints where the canvas already has something:
-    markings, rings and stripes can be drawn loosely and clip to the body."""
-    for j, row in enumerate(rows):
-        for i, ch in enumerate(row):
-            if ch == "." or not (0 <= y + j < len(cv)):
-                continue
-            if 0 <= x + i < len(cv[0]) and not (onto and cv[y + j][x + i] == "."):
-                cv[y + j][x + i] = ch
-    return cv
+    `build(pose)` returns the material rows for that pose - the same parts
+    moved: an arm swung, wings flared, a head lowered to charge. Poses a
+    creature does not draw fall back to its idle pose, and the battle scene
+    covers the gap with motion alone."""
 
+    def __init__(self, build, mats, poses=POSES):
+        self.build = build
+        self.mats = mats
+        self.poses = tuple(poses)
 
-def spans(w, rows, fill, edge=None):
-    """Build a part from per-row (start, end) inclusive spans.
-
-    Organic silhouettes - wings, fins, tails, manes - are the one thing that
-    is genuinely harder to author as literal rows than as an outline, because
-    a single miscounted dot bends the whole curve. Giving the outline and
-    letting this fill it keeps those shapes smooth. `edge` traces the first
-    and last pixel of every run, which is where a membrane wants its rib.
-    A width of None fits the part to its widest span.
-    """
-    if w is None:
-        w = max(s[1] for s in rows if s is not None) + 1
-    out = []
-    for span in rows:
-        line = ["."] * w
-        if span is not None:
-            x0, x1 = span
-            for x in range(x0, x1 + 1):
-                line[x] = fill
-            if edge:
-                line[x0] = line[x1] = edge
-        out.append("".join(line))
-    return out
-
-
-def vein(rows, a, b, ch):
-    """Draw a line onto a part, for wing ribs and similar tracery.
-
-    Only paints where the part already has something, so a rib can be aimed
-    past the rim without spilling into the transparent surround."""
-    grid = [list(r) for r in rows]
-    (x0, y0), (x1, y1) = a, b
-    n = max(abs(x1 - x0), abs(y1 - y0))
-    for i in range(n + 1):
-        t = i / n if n else 0.0
-        x = round(x0 + (x1 - x0) * t)
-        y = round(y0 + (y1 - y0) * t)
-        if 0 <= y < len(grid) and 0 <= x < len(grid[y]) and grid[y][x] != ".":
-            grid[y][x] = ch
-    return ["".join(r) for r in grid]
-
-
-def rows_of(w, *lines):
-    """Literal rows for a part, checked for width so a miscount fails loudly
-    at import instead of shearing the sprite."""
-    for ln in lines:
-        if len(ln) != w:
-            raise ValueError("part row is %d wide, expected %d: %r" % (len(ln), w, ln))
-    return list(lines)
-
-
-def sym(*halves):
-    """Rows mirrored about the centre: author the left half, get both.
-
-    Faces and bodies are symmetric, and half the characters is half the
-    chances to miscount. Anything that must not mirror - the glint in each
-    eye sits on the same side, because the light does - is patched after."""
-    return [h + h[::-1] for h in halves]
-
-
-def plume(h, x0, x1, bow, w_max, w_base=2, w_tip=1, peak=0.55):
-    """Spans for a curved plume - a tail, a feather, a flame - base at the
-    bottom row and tip at the top.
-
-    The centre line runs from x0 at the base to x1 at the tip and bows out by
-    `bow`; the width swells from `w_base` to `w_max` at `peak` of the way up
-    and closes to `w_tip`. Feed the result to spans()."""
-    import math
-    out = []
-    for y in range(h):
-        t = 1 - y / (h - 1)
-        cx = x0 + (x1 - x0) * t + bow * math.sin(math.pi * t)
-        if t < peak:
-            w = w_base + (w_max - w_base) * math.sin(0.5 * math.pi * t / peak)
-        else:
-            w = w_tip + (w_max - w_tip) * math.cos(
-                0.5 * math.pi * (t - peak) / (1 - peak))
-        out.append((max(0, int(round(cx - w / 2))), int(round(cx + w / 2))))
-    return out
-
-
-def recolour(rows, band, frm, to):
-    """Swap one material for another within a range of rows."""
-    out = list(rows)
-    for y in range(*band):
-        if 0 <= y < len(out):
-            out[y] = out[y].replace(frm, to)
-    return out
-
-
-def inset(rows, frm, to, by=1):
-    """Recolour the interior of a region, leaving a border `by` pixels wide.
-
-    Used for the inside of an ear, the belly of a shell, the pale core of a
-    flame: anything that is the same shape as its container, but smaller."""
-    grid = [list(r) for r in rows]
-    h, w = len(grid), max(len(r) for r in grid)
-    def at(x, y):
-        return rows[y][x] if 0 <= y < h and 0 <= x < len(rows[y]) else "."
-    for y in range(h):
-        for x in range(len(grid[y])):
-            if rows[y][x] != frm:
-                continue
-            if all(at(x + dx, y + dy) == frm
-                   for dx in range(-by, by + 1) for dy in range(-by, by + 1)):
-                grid[y][x] = to
-    return ["".join(r) for r in grid]
-
-
-def turn(rows):
-    """Rotate a part a quarter-turn anticlockwise: what pointed up now points
-    left. plume() only grows vertically; this lays one on its side."""
-    w = max(len(r) for r in rows)
-    rows = [r.ljust(w, ".") for r in rows]
-    return ["".join(rows[j][w - 1 - i] for j in range(len(rows)))
-            for i in range(w)]
-
-
-def pin(cv, rows, anchor, at, flip=False):
-    """Stamp a part so that its `anchor` pixel lands on canvas point `at`.
-
-    Composing by anchor - the base of a leaf goes on the crown, the root of a
-    tail on the hip - survives resizing a part, and `flip` mirrors it with the
-    anchor mirrored too, so a pair of limbs is one call each."""
-    ax, ay = anchor
-    if flip:
-        rows = mirror(rows)
-        ax = max(len(r) for r in rows) - 1 - ax
-    return stamp(cv, at[0] - ax, at[1] - ay, rows)
-
-
-def base_of(rows):
-    """The anchor at the middle of a part's bottom row: where a plume grows
-    from."""
-    last = rows[-1]
-    xs = [i for i, c in enumerate(last) if c != "."]
-    return ((xs[0] + xs[-1]) // 2, len(rows) - 1)
-
-
-def ellipse(w, h):
-    """Spans filling a w x h ellipse: bodies, heads, shells, dishes."""
-    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
-    out = []
-    for y in range(h):
-        t = (y - cy) / (h / 2.0)
-        half = (w / 2.0) * max(0.0, 1.0 - t * t) ** 0.5
-        a, b = int(round(cx - half + 0.5)), int(round(cx + half - 0.5))
-        out.append((a, b) if b >= a else None)
-    return out
-
-
-def tube(cv, path, fill, belly=None, steps=6):
-    """Sweep a disc along a path of (x, y, radius) points: serpents, tails,
-    tentacles, necks. The radius is interpolated between points, so a body
-    can thicken and taper along its length.
-
-    `belly` paints a narrower stripe offset toward the viewer - the pale
-    underside of a snake - after the whole body is down, so a coil passing
-    in front of itself keeps its underside on the near side."""
-    pts = []
-    for (x0, y0, r0), (x1, y1, r1) in zip(path, path[1:]):
-        n = max(1, int(max(abs(x1 - x0), abs(y1 - y0)) * steps / 4))
-        for i in range(n):
-            t = i / n
-            pts.append((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t,
-                        r0 + (r1 - r0) * t))
-    pts.append(path[-1])
-
-    def disc(cx, cy, r, ch, onto=False):
-        for y in range(int(cy - r) - 1, int(cy + r) + 2):
-            for x in range(int(cx - r) - 1, int(cx + r) + 2):
-                if not (0 <= y < len(cv) and 0 <= x < len(cv[0])):
-                    continue
-                if (x - cx) ** 2 + (y - cy) ** 2 <= r * r:
-                    if not onto or cv[y][x] != ".":
-                        cv[y][x] = ch
-
-    for cx, cy, r in pts:
-        disc(cx, cy, r, fill)
-    if belly:
-        for cx, cy, r in pts:
-            if r >= 2.5:
-                disc(cx, cy + r * 0.5, r * 0.42, belly, onto=True)
-    return cv
-
-
-def scales(cv, frm, to, period=5, box=None):
-    """Draw a diamond scale lattice over one material. Snakes really are
-    patterned like this; it is drawn, not a shader texture, so it can be
-    confined to the back and kept off the belly."""
-    x0, y0, x1, y1 = box or (0, 0, len(cv[0]), len(cv))
-    for y in range(y0, y1):
-        for x in range(x0, x1):
-            if cv[y][x] == frm and ((x + y) % period == 0 or (x - y) % period == 0):
-                cv[y][x] = to
-    return cv
-
-
-def feather(length, width, fill, edge="N"):
-    """A flight feather pointing right, for stacking into a wing. Its long
-    edges are traced in `N`, the wing's crease colour."""
-    sp = plume(length, 2, 3, 1, width, w_base=2, peak=0.6)
-    return mirror(turn(spans(None, sp, fill, edge=edge)))
-
-
-def wing(lengths, tones, gap=3, edge="N"):
-    """Feathers stacked top to bottom, all rooted at the left edge. The lower
-    feather is laid over the one above, and neighbours alternate tone, so
-    each one reads on its own instead of the wing fusing into a paddle."""
-    cv = canvas(max(lengths) + 2, gap * len(lengths) + 6)
-    for i, n in enumerate(lengths):
-        fill, tip = tones[i % len(tones)]
-        f = feather(n, 6, fill, edge)
-        f = [r[:n - 5] + r[n - 5:].replace(fill, tip) for r in f]
-        stamp(cv, 0, i * gap, f)
-    return finish(cv)
-
-
-def mirror(rows):
-    return ["".join(reversed(r)) for r in rows]
-
-
-def finish(cv):
-    return ["".join(r) for r in cv]
+    def rows(self, pose):
+        return self.build(pose if pose in self.poses else "idle")
 
 
 # ===========================================================================
 # THE ROSTER
 #
-# Each creature is a block of parts and a function that stamps them onto a
-# 64x64 canvas back to front. Letters are materials, and each block has its
+# Each creature is a block of parts and a function that stamps them onto an
+# 80x80 canvas back to front, once per pose. Letters are materials, and each block has its
 # own material table, so the same letter means different things in
 # different creatures - but never two things within one.
 # ===========================================================================
 
-_PIXIE_UP = [(8,14),(6,17),(5,19),(4,20),(3,21),(2,21),(2,21),(1,21),(1,21),(1,21),
-      (0,21),(0,21),(0,20),(0,20),(0,19),(0,19),(0,18),(0,18),(0,17),(0,17),
-      (0,16),(0,15),(0,14),(0,13),(0,12),(0,11),(0,9),(0,7),(0,5),(0,3)]
-_PIXIE_WING = spans(22, _PIXIE_UP, "w", "c")
-for end in ((13,2),(21,10),(15,22)):
-    _PIXIE_WING = vein(_PIXIE_WING, (2,28), end, "v")
-
-_PIXIE_LO = [(0,4),(0,6),(0,9),(0,11),(0,12),(0,13),(0,14),(0,14),(0,15),(0,15),
-      (0,14),(1,14),(1,13),(2,12),(3,11),(4,9),(5,8),(6,7)]
-_PIXIE_HIND = spans(16, _PIXIE_LO, "w", "c")
-for end in ((14,7),(9,16)):
-    _PIXIE_HIND = vein(_PIXIE_HIND, (2,1), end, "v")
-
-_PIXIE_HEAD = rows_of(22,
-    ".......hhhhhhhh.......",
-    ".....hhhhhhhhhhhh.....",
-    "...hhHHHHhhhhhhhhh....",
-    "..hHHHHHHhhhhhhhhhhh..",
-    ".hHHHHHHhhhhhhhhhhhhh.",
-    ".hhHHHHhhhhhhhhhhhhhh.",
-    "hhhhHHhhhhhhhhhhhhhhhh",
-    "hhhhhhhhhhhhhhhhhhhhhh",
-    "jhhhaahhhaaaahhhaahhhj",
-    "jhhaaaaaaaaaaaaaaaahhj",
-    "jhhaaaaaaaaaaaaaaaahhj",
-    "jhhakkkkkaaaakkkkkahhj",
-    "jhhak+iikaaaak+iikahhj",
-    "jhhakiiikaaaakiiikahhj",
-    "jhhakiIikaaaakiIikahhj",
-    "jhhaakkkaaaaaakkkaahhj",
-    "jhhappaaaaaaaaaappahhj",
-    "jhhaaaaaaammaaaaaaahhj",
-    "jhhhaaaaaaaaaaaaaahhhj",
-    "jhhhhaaaaaaaaaaaahhhhj",
-    ".jhhhhaaaaaaaaaahhhhj.",
-    "..jhhh.aaaaaaaa.hhhj..",
-    "...jhj..........jhj...",
-)
-
-_PIXIE_SPROUT = rows_of(12,
-    "..eE....Ee..",
-    ".eEEe..eEEe.",
-    ".eEEe..eEEe.",
-    "..eee..eee..",
-    "....eeee....",
-    ".....ee.....",
-)
-
-_PIXIE_DRESS = [(12,15),(12,15),(10,17),(10,17),(10,17),(10,17),(10,17),(10,17),
-                (10,17),(9,18),(8,19),(7,20),(6,21),(5,22),(4,23),(3,24),(2,25),
-                (2,25),(2,25)]
-_PIXIE_BODY = spans(28, _PIXIE_DRESS, "d")
-_PIXIE_BODY[0] = _PIXIE_BODY[0].replace("d", "a")
-_PIXIE_BODY[1] = _PIXIE_BODY[1].replace("d", "a")
-_PIXIE_BODY[2] = "..........gggggggg.........."
-_PIXIE_BODY[8] = "..........gggggggg.........."
-# the hem breaks into petal tips
-_PIXIE_BODY[16] = ".." + "g" * 24 + ".."
-_PIXIE_BODY[17] = "..ggggg.ggggg..ggggg.ggggg.."
-_PIXIE_BODY[18] = "...ggg...ggg....ggg...ggg..."
-_PIXIE_BODY = rows_of(28, *_PIXIE_BODY)
-
-_PIXIE_ARM = rows_of(3, "ggg","ggg","ggg","aaa","aaa","aaa",".aa",".aa",".aa","aaa","aaa",".a.")
-_PIXIE_LEG = rows_of(4, "aaaa","aaaa","aaaa",".aaa",".aaa",".aaa",".aaa",".aaa",".aaa","bbbb","ssss","ssss","ssss",".sss")
-
-
-def _pixie():
-    cv = canvas(64, 64)
-    # back to front: wings, dress and legs, arms, head
-    stamp(cv, 38, 2, _PIXIE_WING)
-    stamp(cv, 4, 2, mirror(_PIXIE_WING))
-    stamp(cv, 40, 30, _PIXIE_HIND)
-    stamp(cv, 8, 30, mirror(_PIXIE_HIND))
-    stamp(cv, 18, 28, _PIXIE_BODY)
-    stamp(cv, 27, 47, _PIXIE_LEG)
-    stamp(cv, 33, 47, mirror(_PIXIE_LEG))
-    stamp(cv, 36, 31, _PIXIE_ARM)
-    stamp(cv, 25, 31, mirror(_PIXIE_ARM))
-    stamp(cv, 21, 7, _PIXIE_HEAD)
-    stamp(cv, 26, 2, _PIXIE_SPROUT)
-    return finish(cv)
-
-
-PIXIE64 = _pixie()
-PIXIE64_MAT = {
-    "a": M((250, 222, 196), "skin"), "b": M((226, 188, 162), "skin"),
-    "p": M((248, 168, 172), "skin"), "m": M((196, 110, 120), "skin", flat=True),
-    "h": M((96, 190, 116), "fur"), "H": M((164, 232, 160), "fur"),
-    "j": M((46, 118, 80), "fur"),
-    "e": M((70, 160, 96), "plant"), "E": M((132, 214, 120), "plant"),
-    "d": M((246, 248, 240), "cloth"), "g": M((92, 176, 120), "cloth"),
-    "s": M((84, 150, 110), "cloth"),
-    # Wings glow faintly and carry their ribs in a deeper tone of the same
-    # hue, so they read as membrane rather than as a second outline.
-    "w": M((150, 232, 222), "gem", emissive=0.35),
-    "c": M((70, 170, 176), "gem", emissive=0.20),
-    "v": M((96, 196, 200), "gem", emissive=0.25),
-    "k": M((44, 40, 62), "gem", flat=True),
-    "i": M((96, 178, 214), "gem", flat=True),
-    "I": M((170, 230, 240), "gem", flat=True),
-    "+": GLINT,
-}
-
-# --------------------------------------------------------------------------
-# KITSUNE (64) - a fox kit sitting up, two brushes swept out behind it with
-# the tips already alight. It wears a shrine collar and a bell, because
-# something once tried to keep it.
-# --------------------------------------------------------------------------
-def _brush(h, x0, x1, bow, w_max, w_base, burn):
-    """A tail that burns down from its tip: fur, then ember, then flame."""
-    sp = plume(h, x0, x1, bow, w_max, w_base=w_base)
-    rows = spans(max(b for _, b in sp) + 1, sp, "t")
-    rows = inset(rows, "t", "u", 2)
-    rows = recolour(rows, (0, burn + 4), "u", "F")
-    rows = recolour(rows, (0, burn), "t", "F")
-    rows = recolour(rows, (0, burn), "F", "f")
-    return recolour(rows, (0, burn // 2), "f", "W")
-
-
-# One brush curls up behind; the other is wrapped round the front paws, as a
-# cat does. Two matching tails either side read as raised arms.
-_KITSUNE_TAIL = _brush(42, 2, 12, 9, 16, 5, 9)
-_KITSUNE_WRAP = turn(_brush(28, 2, 7, 4, 11, 4, 7))
-
-_KITSUNE_FLAME = rows_of(9,
-    "..f......",
-    "..ff...f.",
-    ".fWf..ff.",
-    ".fWf.fWf.",
-    "fWWffWWf.",
-    "fWWWWWWf.",
-    "fWWWWWWff",
-    ".fWWWWWf.",
-    ".ffWWWff.",
-    "..fffff..",
-)
-_KITSUNE_WISP = rows_of(6, "..f...", ".fWf..", ".fWWf.", "fWWWf.", "fWWWff", ".ffff.")
-
-_KITSUNE_EAR = spans(11, [(8, 8), (7, 9), (6, 9), (5, 10), (5, 10), (4, 10),
-                          (3, 10), (3, 10), (2, 10), (1, 10), (1, 10), (0, 10),
-                          (0, 10), (0, 10), (0, 10)], "a")
-_KITSUNE_EAR = inset(_KITSUNE_EAR, "a", "i", 1)
-_KITSUNE_EAR = recolour(_KITSUNE_EAR, (0, 4), "a", "b")
-_KITSUNE_EAR = recolour(_KITSUNE_EAR, (0, 4), "i", "b")
-
-_KITSUNE_HEAD = sym(
-    "..........aaaaa",
-    ".......aaaaaaaa",
-    ".....aaaaaaaaar",
-    "....aaaaaaaaarR",
-    "...aaaaaaaaaaar",
-    "..aaaaaaaaaaaaa",
-    ".aaaaaaaaaaaaaa",
-    ".aaaaaaaaaaaaaa",
-    "aaaaakkkkaaaaaa",
-    "aaaak++yykaaaaa",
-    "aaaak++yykaaaaa",
-    "maaakyyyykaaaaa",
-    "mmaakyIIykaaaaa",
-    "mmaaaakkkkaaaaa",
-    "mmmaaaaaaaammmn",
-    "mmaaapppaammmmm",
-    ".maaaaaaammmmmq",
-    "..maaaaaammmmmm",
-    "...aaaaaammmmmm",
-    ".....aaaammmmmm",
-    "......aaammmmmm",
-    "........aammmmm",
-    "..........ammmm",
-)
-for _y in (9, 10):
-    _KITSUNE_HEAD[_y] = _KITSUNE_HEAD[_y][:20] + "k++yyk" + _KITSUNE_HEAD[_y][26:]
-_KITSUNE_HEAD = rows_of(30, *_KITSUNE_HEAD)
-
-_KITSUNE_COLLAR = sym(
-    "cccccccc",
-    ".ccccccc",
-    "......gg",
-    ".....ggG",
-    ".....ggg",
-    "......gk",
-)
-
-_KITSUNE_BODY = spans(28, [(8, 19), (7, 20), (6, 21), (5, 22), (5, 22), (4, 23),
-                           (4, 23), (3, 24), (3, 24), (3, 24), (2, 25), (2, 25),
-                           (2, 25), (2, 25), (2, 25), (2, 25), (3, 24), (3, 24),
-                           (4, 23), (5, 22)], "a")
-_KITSUNE_RUFF = spans(28, [None, None, (10, 17), (9, 18), (9, 18), (9, 18),
-                           (10, 17), (10, 17), (11, 16), (11, 16), (12, 15),
-                           (12, 15), (13, 14)], "m")
-
-_KITSUNE_LEG = rows_of(5,
-    ".lll.", "lllll", "lllll", "lllll", "lllll", "lllll", "lllll", "lllll",
-    "lllll", "lllll", "mmmmm", "mmmmm", "mmmmm", ".m.m.",
-)
-_KITSUNE_HAUNCH = rows_of(9,
-    "...bbb...", ".bbbbbbb.", "bbbbbbbbb", "bbbbbbbbb", "bbbbbbbbb",
-    "bbbbbbbbb", "bbbbbbbbb", ".bbbbbbbb", "..mmmmmmm", "...mmmmm.",
-)
-
-
-def _kitsune():
-    cv = canvas(64, 64)
-    stamp(cv, 38, 12, _KITSUNE_TAIL)
-    stamp(cv, 46, 3, _KITSUNE_FLAME)
-    stamp(cv, 16, 50, _KITSUNE_HAUNCH)
-    stamp(cv, 39, 50, mirror(_KITSUNE_HAUNCH))
-    stamp(cv, 18, 38, _KITSUNE_BODY)
-    stamp(cv, 18, 38, _KITSUNE_RUFF)
-    stamp(cv, 24, 46, _KITSUNE_LEG)
-    stamp(cv, 35, 46, mirror(_KITSUNE_LEG))
-    stamp(cv, 35, 3, _KITSUNE_EAR)
-    stamp(cv, 18, 3, mirror(_KITSUNE_EAR))
-    stamp(cv, 17, 14, _KITSUNE_HEAD)
-    stamp(cv, 24, 36, _KITSUNE_COLLAR)
-    stamp(cv, 1, 48, _KITSUNE_WRAP)
-    stamp(cv, 2, 43, _KITSUNE_WISP)
-    return finish(cv)
-
-
-KITSUNE64 = _kitsune()
-KITSUNE64_MAT = {
-    "a": M((244, 146, 62), "fur"), "b": M((206, 98, 46), "fur"),
-    "l": M((240, 140, 60), "fur"),
-    "t": M((232, 124, 52), "fur"), "u": M((250, 176, 96), "fur"),
-    "m": M((252, 244, 232), "fur", over="a"), "i": M((246, 176, 180), "skin"),
-    "p": M((250, 128, 110), "skin", over="a"),
-    "n": M((58, 36, 40), "gem", flat=True),
-    "q": M((150, 70, 60), "skin", flat=True),
-    "r": M((232, 58, 44), "gem", emissive=0.55),
-    "R": M((255, 190, 90), "gem", emissive=0.9),
-    "f": M((255, 150, 60), "gem", emissive=0.85),
-    "F": M((255, 104, 44), "gem", emissive=0.7),
-    "W": M((255, 244, 200), "gem", emissive=1.0),
-    "c": M((204, 44, 52), "cloth"),
-    "g": M((236, 190, 70), "metal"), "G": M((255, 244, 190), "metal"),
-    "k": M((52, 30, 34), "gem", flat=True),
-    "y": M((236, 150, 40), "gem", flat=True),
-    "I": M((255, 214, 120), "gem", flat=True),
-    "+": GLINT,
-}
-
-# --------------------------------------------------------------------------
-# MANDRAKE (64) - pulled up mid-scream: eyes screwed shut, arms flung up,
-# leaves standing on end. The rings round its middle are how old it is.
 # --------------------------------------------------------------------------
 def _leaf(h, x0, x1, bow, w, fill, rib):
     sp = plume(h, x0, x1, bow, w, w_base=2, peak=0.45)
@@ -615,151 +139,6 @@ MANDRAKE64_MAT = {
 }
 
 # --------------------------------------------------------------------------
-# KAPPA (64) - a river imp holding up a cucumber like a prize. The water in
-# the dish on its head has frozen over; spill it and a kappa loses its
-# strength, which is why it never bows.
-# --------------------------------------------------------------------------
-_KAPPA_DISH = rows_of(18,
-    "....dddddddddd....",
-    "..ddwwwwwwwwwwdd..",
-    ".dwwWWwwwwwfwwwwd.",
-    "dwwWWwwwwwwwwwwwwd",
-    "ddwwwwwwfwwwwwwwdd",
-    ".dddwwwwwwwwwwddd.",
-    "...dddddddddddd...",
-)
-_KAPPA_HEAD = sym(
-    "........hhhhhh",
-    ".....hhhhhhhhh",
-    "...hhhhhhhhhhh",
-    "..hhhhhhhhhhhh",
-    ".hhhhhhhhhhhhh",
-    ".hhhhhhhhhhhhh",
-    ".hhhhhhhhhhhhh",
-    "hhhahhhahhhahh",
-    "hhaaahaaahaaaa",
-    "hhaaaaaaaaaaaa",
-    "hhaaaaaaaaaaaa",
-    "hhaakkkkaaaaaa",
-    "hhak++iikaaaaa",
-    "hhak++iikaaaaa",
-    "hhakiiiikaaaaa",
-    "hhakiIIikaaaaa",
-    "hhaakkkkaaaaaa",
-    "hhapppaaaaaayy",
-    "hhaaaaaaaaayYy",
-    ".haaaaaaaaaqqq",
-    "..aaaaaaaaaayy",
-    "...aaaaaaaaaaa",
-    "....aaaaaaaaaa",
-    "......aaaaaaaa",
-    ".........aaaaa",
-)
-for _y in (12, 13):
-    _KAPPA_HEAD[_y] = _KAPPA_HEAD[_y][:19] + "k++iik" + _KAPPA_HEAD[_y][25:]
-_KAPPA_HEAD = rows_of(28, *_KAPPA_HEAD)
-
-_KAPPA_SHELL = spans(34, [(8, 25), (5, 28), (3, 30), (2, 31), (1, 32), (1, 32)]
-                     + [(0, 33)] * 12 + [(1, 32), (3, 30)], "s")
-_KAPPA_SCUTES = rows_of(34,
-    "..................................",
-    "......S....................S......",
-    ".....S......................S.....",
-    "SSSSS........................SSSSS",
-    "....S........................S....",
-    "....S........................S....",
-    "....S........................S....",
-    "...S..........................S...",
-    "SSS............................SSS",
-    "...S..........................S...",
-    "....S........................S....",
-    "....S........................S....",
-    "....S........................S....",
-    "SSSSS........................SSSSS",
-    ".....S......................S.....",
-)
-_KAPPA_TORSO = spans(22, [(6, 15), (4, 17), (3, 18), (2, 19), (2, 19)]
-                     + [(1, 20)] * 10 + [(2, 19), (3, 18), (4, 17), (6, 15)], "a")
-_KAPPA_PLASTRON = spans(22, [None, (7, 14), (6, 15), (5, 16), (5, 16), (5, 16),
-                             (5, 16), (5, 16), (5, 16), (5, 16), (5, 16), (5, 16),
-                             (5, 16), (5, 16), (6, 15), (7, 14), (8, 13)], "p")
-for _y in (5, 9, 13):
-    _KAPPA_PLASTRON[_y] = _KAPPA_PLASTRON[_y].replace("p", "P")
-_KAPPA_PLASTRON[3] = _KAPPA_PLASTRON[3][:10] + "PP" + _KAPPA_PLASTRON[3][12:]
-
-# raised up and out to the side, clear of the head
-_KAPPA_ARM_UP = spans(None, [(i * 5 // 4, i * 5 // 4 + 4) for i in range(10)], "l")
-_KAPPA_ARM_DOWN = rows_of(5,
-    ".lll.", "lllll", "lllll", "lllll", ".llll", ".llll", ".llll", ".llll",
-    ".llll", ".llll", "bbbbb", "b.b.b",
-)
-_KAPPA_HAND_UP = rows_of(6, "b.b.b.", "bbbbbb", ".bbbbb", "..bbb.")
-_KAPPA_CUCUMBER = rows_of(7,
-    "..nn...",
-    ".cccc..",
-    "cCcccc.",
-    "ccccCc.",
-    "cCcccc.",
-    "cccccc.",
-    "ccCccc.",
-    "cccccC.",
-    "cCcccc.",
-    "ccccCc.",
-    "cccccc.",
-    "cCcccc.",
-    ".cccc..",
-    "..cc...",
-)
-_KAPPA_LEG = rows_of(8,
-    ".aaaaa..", ".aaaaa..", ".aaaaa..", ".aaaaa..", "..aaaa..",
-    "..aaaa..", ".bbbbbb.", "bbbbbbbb", "b.bb.bb.",
-)
-
-
-def _kappa():
-    cv = canvas(64, 64)
-    stamp(cv, 15, 30, _KAPPA_SHELL)
-    stamp(cv, 15, 31, _KAPPA_SCUTES, onto=True)
-    stamp(cv, 22, 49, _KAPPA_LEG)
-    stamp(cv, 34, 49, mirror(_KAPPA_LEG))
-    stamp(cv, 11, 24, _KAPPA_ARM_UP)
-    stamp(cv, 21, 31, _KAPPA_TORSO)
-    stamp(cv, 21, 31, _KAPPA_PLASTRON, onto=True)
-    stamp(cv, 42, 34, _KAPPA_ARM_DOWN)
-    stamp(cv, 7, 7, _KAPPA_CUCUMBER)
-    stamp(cv, 8, 20, _KAPPA_HAND_UP)
-    stamp(cv, 18, 7, _KAPPA_HEAD)
-    stamp(cv, 23, 3, _KAPPA_DISH)
-    return finish(cv)
-
-
-KAPPA64 = _kappa()
-KAPPA64_MAT = {
-    "a": M((132, 200, 124), "scale"), "b": M((104, 176, 110), "scale"),
-    "l": M((126, 194, 120), "scale"),
-    "h": M((52, 118, 104), "fur"),
-    "s": M((112, 120, 64), "scale"), "S": M((78, 84, 46), "scale", over="s"),
-    "p": M((236, 222, 150), "scale", over="a"),
-    "P": M((196, 178, 108), "scale", over="a"),
-    "y": M((244, 206, 96), "scale"), "Y": M((255, 238, 170), "scale"),
-    "q": M((140, 96, 52), "scale", flat=True),
-    "d": M((228, 222, 206), "stone"),
-    "w": M((150, 214, 246), "gem", emissive=0.3),
-    "W": M((226, 248, 255), "gem", emissive=0.6),
-    "f": M((255, 255, 255), "gem", emissive=0.7),
-    "c": M((62, 138, 66), "plant"), "C": M((150, 206, 110), "plant", over="c"),
-    "n": M((240, 212, 80), "plant"),
-    "k": M((30, 40, 52), "gem", flat=True),
-    "i": M((70, 150, 210), "gem", flat=True),
-    "I": M((150, 214, 246), "gem", flat=True),
-    "+": GLINT,
-}
-
-# --------------------------------------------------------------------------
-# WISP (64) - a grave-light: fire burning violet at the edges and white at
-# the heart, trailing the tail a hitodama leaves when it moves. The face is
-# the hollow in the middle where something used to be.
-# --------------------------------------------------------------------------
 def _flame(sp, *layers):
     """Concentric flame: each layer is the last one shrunk by `by` pixels."""
     rows = spans(None, sp, layers[0][0])
@@ -816,96 +195,6 @@ WISP64_MAT = {
     "S": M((255, 250, 220), "gem", flat=True, outline=False),
 }
 
-# --------------------------------------------------------------------------
-# THUNDERBIRD (64) - a storm chick, far too pleased with itself: one wing
-# flexed higher than the other, eyes half-shut, one brow up. The crest is
-# not a feather.
-# --------------------------------------------------------------------------
-_TBIRD_WING = wing([19, 22, 21, 18, 15], [("b", "n"), ("d", "N")])
-_TBIRD_COVERT = spans(None, ellipse(9, 11), "B")
-_TBIRD_BODY = spans(32, ellipse(32, 30), "a")
-_TBIRD_CHEST = spans(32, [None] * 16 + [(9, 22), (8, 23), (7, 24), (7, 24),
-                                        (7, 24), (8, 23), (9, 22), (10, 21),
-                                        (12, 19)], "c")
-_TBIRD_FACE = rows_of(32,
-    "....................kkkk........",
-    "........kkkk....................",
-    "................................",
-    ".......kkkkkk......kkkkkk.......",
-    ".......kiiiik......kiiiik.......",
-    ".......k+iiik......k+iiik.......",
-    "........kkkk........kkkk........",
-    "......ppp..............ppp......",
-    "..............yyyy..............",
-    ".............yYyyyy.............",
-    "..............yyyq..............",
-)
-_TBIRD_BOLT = rows_of(8,
-    "....zzzz",
-    "...zzzz.",
-    "..zZzz..",
-    ".zzZzzzz",
-    "....zZz.",
-    "...zzz..",
-    "..zzz...",
-    ".zz.....",
-    "z.......",
-)
-_TBIRD_TAIL = rows_of(12,
-    "b.....b.....",
-    "bb...bb...b.",
-    ".bb.bbb..bb.",
-    "..bbbbbbbb..",
-    "...bbbbbb...",
-)
-_TBIRD_FOOT = rows_of(7, "..oo...", "..oo...", ".oooo..", "o.o.o..")
-_TBIRD_SPARK = rows_of(3, ".s.", "sSs", ".s.")
-
-
-def _thunderbird():
-    cv = canvas(64, 64)
-    stamp(cv, 26, 52, _TBIRD_TAIL)
-    # the right wing is flexed up; the left hangs lower and more relaxed
-    stamp(cv, 40, 14, _TBIRD_WING)
-    stamp(cv, 40, 24, _TBIRD_COVERT)
-    left = mirror(_TBIRD_WING)
-    stamp(cv, 24 - len(left[0]), 26, left)
-    stamp(cv, 15, 32, mirror(_TBIRD_COVERT))
-    stamp(cv, 24, 55, _TBIRD_FOOT)
-    stamp(cv, 34, 55, mirror(_TBIRD_FOOT))
-    stamp(cv, 16, 24, _TBIRD_BODY)
-    stamp(cv, 16, 24, _TBIRD_CHEST, onto=True)
-    stamp(cv, 16, 30, _TBIRD_FACE, onto=True)
-    stamp(cv, 29, 16, _TBIRD_BOLT)
-    for x, y in ((24, 12), (40, 9), (37, 19)):
-        stamp(cv, x, y, _TBIRD_SPARK)
-    return finish(cv)
-
-
-THUNDERBIRD64 = _thunderbird()
-THUNDERBIRD64_MAT = {
-    "a": M((252, 222, 110), "fur"), "c": M((255, 244, 200), "fur", over="a"),
-    "b": M((64, 106, 200), "fur"), "B": M((110, 160, 240), "fur"),
-    "n": M((40, 60, 140), "fur"),
-    "d": M((84, 130, 224), "fur"), "N": M((52, 78, 166), "fur"),
-    "y": M((250, 150, 50), "scale", over="a"),
-    "Y": M((255, 206, 120), "scale", over="a"),
-    "q": M((150, 80, 30), "scale", flat=True),
-    "o": M((250, 150, 50), "scale"),
-    "z": M((255, 250, 170), "gem", emissive=0.9),
-    "Z": M((255, 255, 255), "gem", emissive=1.0),
-    "p": M((250, 160, 120), "skin", over="a"),
-    "k": M((50, 36, 30), "gem", flat=True),
-    "i": M((80, 140, 230), "gem", flat=True),
-    "+": GLINT,
-    "s": M((200, 230, 255), "gem", flat=True, outline=False),
-    "S": M((255, 255, 255), "gem", flat=True, outline=False),
-}
-
-# --------------------------------------------------------------------------
-# ANUBIS (64) - the boss. Jackal-headed, sun at his back, sceptre in one
-# hand and the scales in the other. The heart in the low pan is yours; it
-# weighs more than the feather, and so the fight begins.
 # --------------------------------------------------------------------------
 _ANUBIS_HALO = inset(spans(None, ellipse(32, 32), "h"), "h", ".", 2)
 
@@ -2707,20 +1996,898 @@ TALOS64_MAT = {
     "S": M((255, 255, 255), "gem", flat=True, outline=False),
 }
 
+# --------------------------------------------------------------------------
+# PIXIE (80) - a hedge-sprite grown into something with an edge: slight,
+# sharp-eyed, twin tails of leaf-green hair and dragonfly wings, a little wind
+# held in one palm like a knife she has not decided to use.
+# --------------------------------------------------------------------------
+_PIXIE_HEAD = rows_of(19,
+    "..........jh.......",
+    "....j.jjhhj...j....",
+    "...jhjhhhhHhhjhj...",
+    "..jhhhhHHHHHhhhhj..",
+    ".jhhhhHHHhhhhhhhhj.",
+    "jhhhhhhhhhhhhhhhhhj",
+    "jhhhhhhhhhhhhhhhhhh",
+    "jhjhhhjhhhhjhhhhhhh",
+    "hjbbhhjbbhhbjhhhhhh",
+    "jhbaajaaaabbhhhhhhh",
+    "hjakkkaakkkkkhhhhhh",
+    "hja+ikaai+iiekhhhhh",
+    "hjaiIkaaiIIieahhhhh",
+    "hjaakaaaakkkaahhhhh",
+    "hjaaanaaaaaaaabhhhh",
+    "hj.aaaaaaaaaabbhhhj",
+    "hj.aammaaaaaabhhhhj",
+    "hj..aaaaaaaabbhhhj.",
+    "hj...aaaaaabbhhhj..",
+    ".j....aaaabbhhhj...",
+    ".j.....abb..hhj....",
+    "........bbb.hj.....",
+    ".........bbb.......",
+)
+_PIXIE_TORSO = spans(14, [(5, 8), (5, 8), (2, 11), (1, 12), (1, 12), (1, 12),
+                          (2, 11), (2, 11), (3, 10), (3, 10), (3, 10)], "a")
+_PIXIE_BODICE = spans(14, [None, None, None, (1, 12), (1, 12), (2, 11), (2, 11),
+                           (2, 11), (3, 10), (3, 10), (3, 10)], "d")
+_PIXIE_BODICE[3] = "." + "g" * 12 + "."
+_PIXIE_SKIRT = spans(20, [(6, 13), (5, 14), (4, 15), (3, 16), (2, 17), (1, 18),
+                          (0, 19), (0, 19)], "d")
+_PIXIE_SKIRT += ["dd.ddd.dddd.ddd.dd.".ljust(20, "."), "d...d...dd...d...d.".ljust(20, ".")]
+_PIXIE_SKIRT = [r[:10] + r[10:].replace("d", "D") for r in _PIXIE_SKIRT]
+
+
+def _pixie_wing(length, width, fill, rib, rim):
+    """A dragonfly wing: long, narrow, round at the tip, ribbed along its
+    length - light enough to read as membrane, not as a paddle."""
+    sp = plume(length, 1, width // 2 + 1, 2, width, w_base=2, w_tip=3, peak=0.7)
+    rows = spans(None, sp, fill, edge=rim)
+    rows = recolour(rows, (0, 2), fill, rim)
+    for k in (0.35, 0.65):
+        tip = int(sp[2][0] + (sp[2][1] - sp[2][0]) * k)
+        rows = vein(rows, (2, length - 1), (tip, 2), rib)
+    return rows
+
+
+_PIXIE_WING_UP = _pixie_wing(32, 11, "w", "v", "c")
+_PIXIE_WING_LO = _pixie_wing(26, 9, "w", "v", "c")
+_PIXIE_WING_FAR = [r.replace("w", "x").replace("v", "y").replace("c", "z")
+                   for r in _pixie_wing(26, 9, "w", "v", "c")]
+
+# arm paths per pose: (shoulder, elbow, hand) for the far and near arm
+_PIXIE_ARMS = {
+    "idle":   (((35, 31), (29, 36), (25, 33)), ((44, 31), (48, 37), (45, 42))),
+    "attack": (((34, 31), (26, 31), (17, 30)), ((44, 31), (48, 36), (47, 41))),
+    "cast":   (((35, 31), (31, 22), (32, 13)), ((44, 31), (49, 22), (47, 13))),
+}
+_PIXIE_WIND = rows_of(7, "..s....", ".sSs.s.", "sSWSsSs", ".sSs.s.", "..s....")
+
+
+def _pixie(pose):
+    cv = canvas(80, 80)
+    lean = -3 if pose == "attack" else 0          # the whole body leans in
+    lift = -2 if pose == "cast" else 0
+    ox, oy = lean, lift
+    # wings: flared up to cast, swept back to strike
+    tilt = {"idle": 0, "attack": 16, "cast": -14}[pose]
+    pin_rotated(cv, _PIXIE_WING_FAR, (2, 25), (37 + ox, 30 + oy), 38 - tilt, flip=True)
+    pin_rotated(cv, _PIXIE_WING_FAR, (2, 25), (38 + ox, 33 + oy), 70 - tilt, flip=True)
+    pin_rotated(cv, _PIXIE_WING_UP, (2, 31), (45 + ox, 30 + oy), 28 + tilt)
+    pin_rotated(cv, _PIXIE_WING_LO, (2, 25), (45 + ox, 33 + oy), 72 + tilt)
+    # twin tails stream back, further when she strikes
+    fling = 6 if pose == "attack" else 0
+    for dy, r in ((0, 1.9), (6, 1.6)):
+        tube(cv, [(45 + ox, 12 + oy + dy, r + 0.6), (52 + ox + fling, 19 + oy + dy, r),
+                  (56 + ox + fling, 31 + oy + dy, r * 0.9), (53 + ox + fling, 42 + oy + dy, r * 0.7),
+                  (56 + ox + fling, 49 + oy + dy, 0.6)], "t")
+    # far leg bent back, near leg pointed straight: she is hovering
+    tube(cv, [(36 + ox, 45 + oy, 2.3), (35 + ox, 56 + oy, 2.0), (40 + ox, 63 + oy, 1.7),
+              (46 + ox, 66 + oy, 1.3)], "b")
+    tube(cv, [(46 + ox, 65 + oy, 1.5), (49 + ox, 67 + oy, 1.0)], "O")
+    tube(cv, [(41 + ox, 45 + oy, 2.4), (42 + ox, 58 + oy, 2.1), (43 + ox, 70 + oy, 1.6),
+              (42 + ox, 76 + oy, 1.1)], "a")
+    tube(cv, [(43 + ox, 69 + oy, 1.8), (42 + ox, 76 + oy, 1.2)], "o")
+    far, near = _PIXIE_ARMS[pose]
+    tube(cv, [(x + ox, y + oy, r) for (x, y), r in zip(far, (2.0, 1.8, 1.5))], "b")
+    stamp(cv, 32 + ox, 26 + oy, _PIXIE_TORSO)
+    stamp(cv, 32 + ox, 26 + oy, _PIXIE_BODICE, onto=True)
+    stamp(cv, 29 + ox, 36 + oy, _PIXIE_SKIRT)
+    tube(cv, [(x + ox, y + oy, r) for (x, y), r in zip(near, (2.1, 1.9, 1.6))], "a")
+    stamp(cv, 28 + ox, 4 + oy, _PIXIE_HEAD)
+    hand = far[2]
+    if pose == "attack":
+        stamp(cv, 8 + ox, 27 + oy, rows_of(9, "..s.s....", ".sSsSs.s.", "sSWWWSsSs",
+                                            ".sSsSs.s.", "..s.s...."))
+    elif pose == "cast":
+        stamp(cv, 35 + ox, 5 + oy, _PIXIE_WIND)
+    else:
+        stamp(cv, hand[0] - 4 + ox, hand[1] - 6 + oy, _PIXIE_WIND)
+    return finish(cv)
+
+
+PIXIE_MAT = {
+    "a": M((252, 228, 212), "cel"), "b": M((226, 190, 182), "cel"),
+    "h": M((70, 170, 110), "fur"), "H": M((160, 232, 170), "fur", over="h"),
+    "j": M((36, 100, 76), "fur"),
+    "t": M((48, 140, 96), "fur"),
+    "e": M((250, 250, 250), "gem", flat=True),
+    "k": M((30, 22, 40), "gem", flat=True),
+    "i": M((50, 150, 120), "gem", flat=True), "I": M((150, 240, 200), "gem", flat=True),
+    "+": GLINT,
+    "n": M((210, 160, 150), "cel", flat=True), "m": M((200, 110, 120), "cel", flat=True),
+    "d": M((50, 130, 90), "cloth"), "D": M((80, 170, 110), "cloth"),
+    "g": M((230, 190, 90), "metal", outline=(80, 56, 30)),
+    "o": M((40, 90, 70), "cloth"), "O": M((34, 76, 60), "cloth"),
+    # the wings are light, not objects: thin ribs, a faint glow, no weight
+    "W2": None,
+}
+PIXIE_MAT.update({
+    "w": M((196, 244, 240), "gem", emissive=0.3),
+    "v": M((70, 170, 170), "gem", over="w"),
+    "c": M((40, 120, 130), "gem"),
+    "x": M((130, 200, 204), "gem", emissive=0.15),
+    "y": M((60, 140, 150), "gem", over="x"), "z": M((34, 100, 112), "gem"),
+    "s": M((210, 255, 240), "gem", flat=True, outline=False),
+    "S": M((240, 255, 250), "gem", flat=True, outline=False),
+    "W": M((255, 255, 255), "gem", flat=True, outline=False),
+})
+del PIXIE_MAT["W2"]
+
+# --------------------------------------------------------------------------
+# KITSUNE (80) - a fox of the shrines, long and low, a rope of office round
+# its throat and three tails already burning. It does not so much attack as
+# decide to.
+# --------------------------------------------------------------------------
+def _kitsune_tail(length, width, fill, core):
+    sp = plume(length, 3, 9, 5, width, w_base=5, peak=0.5)
+    rows = spans(None, sp, fill)
+    rows = inset(rows, fill, core, 2)
+    # the tip burns: ember, then flame, then white heat
+    rows = recolour(rows, (0, 13), core, "F")
+    rows = recolour(rows, (0, 10), fill, "F")
+    rows = recolour(rows, (0, 10), "F", "f")
+    return recolour(rows, (0, 5), "f", "W")
+
+
+_KITSUNE_TAILS = [_kitsune_tail(30, 11, "t", "u"), _kitsune_tail(34, 12, "s", "v"),
+                  _kitsune_tail(28, 10, "t", "u")]
+_KITSUNE_HEAD = rows_of(24,
+    "..............kk.....kk.",
+    ".............kki....kik.",
+    "............kaii...kaik.",
+    "............aaii...aaia.",
+    "...........aaaai..aaaia.",
+    "...........aaaaiaaaaaia.",
+    "..........aaaaaaaaaaaaa.",
+    ".........aaaaaaaaaaaaaaa",
+    "........aaarrkkkaaaaaaaa",
+    ".......aaaakyykaaaaaaaaa",
+    "......aaaaaakkaaraaaaaaa",
+    "...aaaaaaaaaaaarraaaaaaa",
+    ".aaaaaaaaaaaaaaaaaaaaaa.",
+    "naaaaaaaaaaaaaaaaaaaaa..",
+    "nmmmmmmmmaaaaaaaaaaaa...",
+    ".mmmmmmmmmmmmaaaaaaa....",
+    "..mmmmmmmmmmmmmaaaa.....",
+    "....mmmmmmmmmmmm........",
+)
+_KITSUNE_JAW_OPEN = rows_of(24,
+    "..............kk.....kk.",
+    ".............kki....kik.",
+    "............kaii...kaik.",
+    "............aaii...aaia.",
+    "...........aaaai..aaaia.",
+    "...........aaaaiaaaaaia.",
+    "..........aaaaaaaaaaaaa.",
+    ".........aaaaaaaaaaaaaaa",
+    "........aaarrkkkaaaaaaaa",
+    ".......aaaakyykaaaaaaaaa",
+    "......aaaaaakkaaraaaaaaa",
+    "...aaaaaaaaaaaarraaaaaaa",
+    ".aaaaaaaaaaaaaaaaaaaaaa.",
+    "naaaaaaaaaaaaaaaaaaaaa..",
+    ".TqTqTqTqqqqaaaaaaaaa...",
+    "..qqqqqqqqqqqqmaaaaa....",
+    "..TqTqTqqqqqmmmmmaa.....",
+    "...mmmmmmmmmmmm.........",
+    ".....mmmmmmmm...........",
+)
+_KITSUNE_ROPE = rows_of(14,
+    "..cccccccccc..",
+    ".cCcCcCcCcCcc.",
+    "..cccccccccc..",
+    "....p..p..p...",
+    "...pp..pp.pp..",
+    "....p...p..p..",
+)
+# (shoulder, knee, paw) per pose for each leg
+_KITSUNE_LEGS = {
+    "idle": {"fn": ((27, 47), (26, 62), (24, 76)), "ff": ((32, 48), (32, 62), (30, 75)),
+             "hn": ((52, 46), (57, 60), (53, 76)), "hf": ((48, 47), (51, 61), (47, 75))},
+    "attack": {"fn": ((22, 49), (13, 55), (5, 58)), "ff": ((27, 50), (19, 58), (11, 63)),
+               "hn": ((52, 48), (58, 60), (62, 75)), "hf": ((48, 49), (53, 61), (56, 75))},
+    "cast": {"fn": ((27, 47), (25, 62), (23, 76)), "ff": ((32, 48), (31, 62), (29, 75)),
+             "hn": ((52, 46), (57, 60), (53, 76)), "hf": ((48, 47), (51, 61), (47, 75))},
+}
+_KITSUNE_FOXFIRE = rows_of(5, ".fF..", "fWWf.", "fWWFf", ".fff.")
+
+
+def _kitsune(pose):
+    cv = canvas(80, 80)
+    low = 5 if pose == "attack" else 0            # the pounce drops the body
+    spread = {"idle": (-34, 4, 36), "attack": (-8, 26, 54), "cast": (-48, -12, 22)}[pose]
+    for tail, ang in zip(_KITSUNE_TAILS, spread):
+        pin_rotated(cv, tail, base_of(tail), (56, 42 + low), ang)
+    legs = _KITSUNE_LEGS[pose]
+    for key in ("ff", "hf"):
+        (x0, y0), (x1, y1), (x2, y2) = legs[key]
+        tube(cv, [(x0, y0 + low // 2, 3.2), (x1, y1, 2.0), (x2, y2, 1.8)], "b")
+        tube(cv, [(x1, y1 + 3, 1.9), (x2, y2, 1.8)], "k")
+    # body: deep chest, tucked belly, long and low
+    tube(cv, [(28, 42 + low, 7.0), (38, 43 + low, 6.2), (48, 42 + low, 5.6),
+              (55, 41 + low, 5.4)], "a")
+    tube(cv, [(28, 47 + low, 4.0), (36, 49 + low, 2.5)], "m")     # white chest
+    for key in ("fn", "hn"):
+        (x0, y0), (x1, y1), (x2, y2) = legs[key]
+        tube(cv, [(x0, y0 + low // 2, 3.6), (x1, y1, 2.2), (x2, y2, 2.0)], "a")
+        tube(cv, [(x1, y1 + 3, 2.1), (x2, y2, 2.0)], "k")         # black socks
+    # the head: high and alert, thrust low to pounce, thrown back to howl
+    hx, hy = {"idle": (4, 16), "attack": (-2, 27), "cast": (8, 8)}[pose]
+    tube(cv, [(30, 40 + low, 6.4), (hx + 16, hy + 12, 5.8)], "a")
+    head = _KITSUNE_JAW_OPEN if pose == "attack" else _KITSUNE_HEAD
+    if pose == "cast":
+        head, _ = rotate(head, -24)
+    stamp(cv, hx, hy, head)
+    stamp(cv, 29, 36 + low, _KITSUNE_ROPE)
+    if pose == "cast":
+        for x, y in ((0, 34), (14, 56), (64, 4), (72, 26)):
+            stamp(cv, x, y, _KITSUNE_FOXFIRE)
+    return finish(cv)
+
+
+KITSUNE_MAT = {
+    "a": M((222, 96, 44), "fur"), "b": M((176, 70, 40), "fur"),
+    "m": M((250, 244, 232), "fur", over="a"),
+    "i": M((252, 222, 210), "fur"), "k": M((44, 30, 34), "fur"),
+    "n": M((26, 18, 22), "gem", flat=True),
+    "q": M((90, 20, 34), "gem", flat=True), "T": M((255, 250, 240), "gem", flat=True),
+    "y": M((255, 206, 70), "gem", flat=True),
+    "r": M((150, 20, 40), "cloth", over="a"),
+    "t": M((240, 170, 110), "fur"), "u": M((255, 220, 170), "fur"),
+    "s": M((226, 130, 70), "fur"), "v": M((250, 190, 130), "fur"),
+    "f": M((255, 150, 60), "gem", emissive=0.85), "F": M((250, 90, 50), "gem", emissive=0.7),
+    "W": M((255, 246, 210), "gem", emissive=1.0),
+    "c": M((214, 180, 120), "cloth"), "C": M((170, 130, 80), "cloth", over="c"),
+    "p": M((250, 250, 244), "cloth", outline=False),
+}
+
+# --------------------------------------------------------------------------
+# KAPPA (80) - a river warrior in a wide, planted stance, shell worn like a
+# war-carapace and a trident held across its body. The dish on its crown has
+# frozen over; spill it and a kappa loses its strength, so it fights without
+# ever bowing its head.
+# --------------------------------------------------------------------------
+_KAPPA_SHELL = spans(None, ellipse(24, 32), "s")
+_KAPPA_SHELL = inset(_KAPPA_SHELL, "s", "S", 3)
+for _y in range(2, 30, 4):              # a serrated rim, like a snapper's
+    _KAPPA_SHELL[_y] = _KAPPA_SHELL[_y].rstrip(".") + "R"
+    _KAPPA_SHELL[_y] = _KAPPA_SHELL[_y].ljust(25, ".")
+_KAPPA_SHELL = [r.ljust(25, ".") for r in _KAPPA_SHELL]
+_KAPPA_HEAD = rows_of(18,
+    "...ddddddddddd....",
+    ".ddwwWWwwwfwwwdd..",
+    "..ddddddddddddd...",
+    "..hhhhhhhhhhhhhhh.",
+    ".hhhhhhhhhhhhhhhhh",
+    ".hbhhbaahbhhhhhhhh",
+    "hbaaaaaaaaahhhhhhh",
+    "aaaaaaaaaaaahhhhhh",
+    "akkkkaaaaaaaabhhhh",
+    "aek+kaaaaaaaaabhhh",
+    "aakkaaaaaaaaaaabhh",
+    "yyyyaaaaaaaaaaab.h",
+    "Yyyyyyaaaaaaaab..h",
+    "qqyyyyyyaaaaab...h",
+    ".qqqqqyyaaaab....h",
+    "..qyyyyyaab.......",
+    "....yyy...........",
+)
+_KAPPA_TORSO = spans(None, [(6, 16), (3, 19), (2, 20), (2, 20), (3, 19), (3, 18),
+                            (4, 17), (5, 16), (5, 15), (6, 15), (6, 14), (6, 14),
+                            (6, 14), (6, 14), (6, 14)], "a")
+_KAPPA_PLASTRON = spans(None, [None, None, (5, 14), (5, 15), (6, 14), (6, 13),
+                               (7, 13), (7, 13), (7, 12), (8, 12), (8, 12), (8, 12)], "p")
+_KAPPA_PLASTRON[5] = _KAPPA_PLASTRON[5].replace("p", "P")
+_KAPPA_PLASTRON[8] = _KAPPA_PLASTRON[8].replace("p", "P")
+_KAPPA_LOIN = rows_of(14,
+    "oooooooooooooo",
+    "occcccccccccco",
+    ".cccccccCccc..",
+    ".ccccccCCcc...",
+    "..cccccCcc....",
+    "..cccc.Ccc....",
+    "...cc...c.....",
+)
+_KAPPA_TRIDENT = rows_of(9,
+    "X...X...X",
+    "x..xXx..x",
+    "xX.xXx.Xx",
+    ".xXxxxXx.",
+    "..xxXxx..",
+    "...xxx...",
+    "....x....",
+) + ["....o...."] * 34 + ["...xxx...", "....x...."]
+_KAPPA_ICE = rows_of(5, "..i..", ".iIi.", "iIIIi", ".iIi.", "..i..")
+
+
+def _kappa(pose):
+    cv = canvas(80, 80)
+    ox = -4 if pose == "attack" else 0
+    stamp(cv, 40 + ox, 20, _KAPPA_SHELL)
+    # a wide, planted stance: far leg back, near leg forward and bent
+    tube(cv, [(44 + ox, 52, 4.2), (52 + ox, 62, 3.4), (50 + ox, 72, 2.6), (52 + ox, 76, 2.4)], "b")
+    stamp(cv, 49 + ox, 75, rows_of(8, "bb.bb.bb", "bbbbbbbb"))
+    stamp(cv, 26 + ox, 24, _KAPPA_TORSO)
+    stamp(cv, 26 + ox, 24, _KAPPA_PLASTRON, onto=True)
+    tube(cv, [(36 + ox, 52, 4.4), (27 + ox, 60, 3.6), (25 + ox, 70, 2.8), (22 + ox, 76, 2.5)], "a")
+    stamp(cv, 16 + ox, 75, rows_of(9, "aa.aa.aa.", "aaaaaaaaa"))
+    stamp(cv, 29 + ox, 45, _KAPPA_LOIN)
+    # the trident: across the body in guard, levelled to thrust, raised to call
+    if pose == "attack":
+        spear, _ = rotate(_KAPPA_TRIDENT, -84)
+        stamp(cv, -2, 26, spear)
+        arm_far = [(30, 27, 3.4), (22, 32, 2.6), (14, 34, 2.4)]
+        arm_near = [(42, 28, 3.8), (34, 36, 2.8), (24, 36, 2.6)]
+    elif pose == "cast":
+        stamp(cv, 12, -2, _KAPPA_TRIDENT)
+        arm_far = [(30, 26, 3.4), (22, 20, 2.6), (17, 12, 2.4)]
+        arm_near = [(42, 27, 3.8), (30, 22, 2.8), (18, 17, 2.6)]
+        for x, y in ((2, 6), (28, 0), (4, 30), (30, 16)):
+            stamp(cv, x, y, _KAPPA_ICE)
+    else:
+        spear, _ = rotate(_KAPPA_TRIDENT, -22)
+        stamp(cv, 8, 2, spear)
+        arm_far = [(30, 27, 3.4), (24, 34, 2.6), (20, 31, 2.4)]
+        arm_near = [(42, 28, 3.8), (38, 38, 2.8), (30, 44, 2.6)]
+    tube(cv, arm_far, "b")
+    tube(cv, arm_far[1:], "r")          # bandaged forearms
+    stamp(cv, 20 + ox, 6, _KAPPA_HEAD)
+    tube(cv, arm_near, "a")
+    tube(cv, arm_near[1:], "r")
+    return finish(cv)
+
+
+KAPPA_MAT = {
+    "a": M((88, 160, 116), "scale"), "b": M((64, 126, 96), "scale"),
+    "h": M((24, 58, 66), "fur"),
+    "s": M((62, 70, 44), "scale"), "S": M((104, 112, 60), "scale"),
+    "R": M((200, 200, 150), "stone"),
+    "p": M((226, 210, 146), "scale", over="a"), "P": M((180, 160, 100), "scale", over="a"),
+    # a snapper's beak, bone and olive, not a duck's
+    "y": M((168, 158, 110), "stone"), "Y": M((214, 206, 160), "stone", over="y"),
+    "q": M((60, 40, 26), "gem", flat=True),
+    "k": M((16, 22, 24), "gem", flat=True), "+": GLINT,
+    "e": M((110, 220, 240), "gem", flat=True),
+    "d": M((214, 222, 226), "stone"),
+    "w": M((150, 214, 246), "gem", emissive=0.3), "W": M((226, 248, 255), "gem", emissive=0.6),
+    "f": M((255, 255, 255), "gem", emissive=0.7),
+    "x": M((170, 190, 210), "metal"), "X": M((236, 244, 255), "metal"),
+    "o": M((96, 70, 50), "matte"),
+    "c": M((50, 80, 140), "cloth"), "C": M((34, 56, 110), "cloth", over="c"),
+    "r": M((220, 212, 190), "cloth"),
+    "i": M((190, 236, 255), "gem", flat=True, outline=False),
+    "I": M((255, 255, 255), "gem", flat=True, outline=False),
+}
+
+# --------------------------------------------------------------------------
+# THUNDERBIRD (80) - a storm raptor, wings like thunderheads, the bolt in its
+# feathers glowing when it is angry, which is usually. The crest is not a
+# feather.
+# --------------------------------------------------------------------------
+_TBIRD_NEAR = wing([30, 34, 33, 30, 26, 22, 18], [("b", "n"), ("d", "N")], gap=3, edge="e")
+_TBIRD_FAR = [r.replace("b", "B").replace("d", "D").replace("n", "m").replace("N", "M")
+              for r in wing([24, 28, 27, 24, 20, 16], [("b", "n"), ("d", "N")], gap=3, edge="e")]
+
+
+def _bolted(rows, y):
+    """Paint a lightning mark along one feather row of a wing."""
+    rows = [list(r) for r in rows]
+    x = 4
+    zig = 0
+    while x < len(rows[0]) - 6 and 0 <= y < len(rows):
+        if rows[y][x] in "bdBD":
+            rows[y][x] = "z"
+        x += 1
+        zig += 1
+        if zig % 5 == 0:
+            y += -1 if (zig // 5) % 2 else 1
+    return ["".join(r) for r in rows]
+
+
+_TBIRD_NEAR = _bolted(_TBIRD_NEAR, 5)
+_TBIRD_NEAR = _bolted(_TBIRD_NEAR, 11)
+# an eagle's head in profile: flat skull, a brow that overhangs the eye, and
+# a beak that hooks down over its own lower half
+_TBIRD_HEAD = rows_of(22,
+    "..............zz.z....",
+    "...........zzzzzzz.zz.",
+    ".........zzbbbbbbzzzzz",
+    "......bbbbbbbbbbbbbzz.",
+    "....BBBBBBbbbbbbbbbbb.",
+    "...BBBBBBBBbbbbbbbbbb.",
+    "..yyBkggkBbbbbbbbbbbb.",
+    ".yyyybkkbbbbbbbbbbbbb.",
+    "yyyyyybbbbbbbbbbbbbb..",
+    "yYYyyyybbbbbbbbbbbbb..",
+    "yyyyyyyycbbbbbbbbbb...",
+    "qyy.qyyyccbbbbbbbb....",
+    ".q...qqyccccbbbbb.....",
+    "......qqccccccbb......",
+    ".........cccccc.......",
+)
+_TBIRD_TAIL = rows_of(16,
+    "..bbbbbbbbbbbb..",
+    ".bdbdbdbdbdbdbb.",
+    ".bdbdbdbdbdbdbd.",
+    "bbdbbdbbdbbdbbdb",
+    "bd.bd.bd.bd.bd.b",
+    "b..b..b..b..b..b",
+)
+_TBIRD_ARC = rows_of(7, "z......", ".z..z..", "..zz.z.", "...z..z", "..z....")
+
+
+def _thunderbird(pose):
+    cv = canvas(80, 80)
+    dive = pose == "attack"
+    # wings: half-spread in flight, swept back in the dive, raised to call
+    near_a, far_a = {"idle": (-38, -64), "attack": (-8, -26), "cast": (-70, -96)}[pose]
+    # the far wing rises behind the near one: a layered V, clear of the head
+    pin_rotated(cv, _TBIRD_FAR, (0, 8), (40, 26), far_a)
+    body_tilt = 18 if dive else 0
+    tail, _ = rotate(_TBIRD_TAIL, 20 + body_tilt)
+    stamp(cv, 40, 48 - body_tilt // 3, tail)
+    # talons: tucked in flight, thrown forward in the dive
+    if dive:
+        for x in (26, 32):
+            tube(cv, [(x + 8, 50, 2.2), (x, 58, 1.8), (x - 6, 62, 1.6)], "l")
+            stamp(cv, x - 10, 61, rows_of(6, "t.t.t.", ".ttt.."))
+    else:
+        for x in (36, 42):
+            tube(cv, [(x, 50, 2.2), (x, 60, 1.8), (x - 1, 66, 1.6)], "l")
+            stamp(cv, x - 4, 65, rows_of(6, "t.t.t.", "tttt.."))
+    # body: a deep chest tapering to the tail
+    tube(cv, [(34, 30 + body_tilt // 2, 9.0), (38, 40, 8.5), (42, 48, 6.0)], "b")
+    # the breast is feathered, not a bib: rows of pale chevrons
+    for y in range(26, 50, 3):
+        for x in range(24, 44):
+            if cv[y][x] == "b" and (x + 2 * y) % 5 == 0:
+                cv[y][x] = "C"
+    hx, hy = {"idle": (12, 10), "attack": (10, 22), "cast": (14, 6)}[pose]
+    tube(cv, [(33, 30 + body_tilt // 2, 7.0), (hx + 14, hy + 9, 5.5)], "b")
+    stamp(cv, hx, hy, _TBIRD_HEAD)
+    pin_rotated(cv, _TBIRD_NEAR, (0, 8), (44, 30), near_a)
+    if pose == "cast":
+        for x, y in ((2, 2), (60, 0), (4, 40), (66, 50)):
+            stamp(cv, x, y, _TBIRD_ARC)
+    return finish(cv)
+
+
+THUNDERBIRD_MAT = {
+    "b": M((40, 52, 110), "fur"), "d": M((58, 76, 146), "fur"),
+    "B": M((30, 38, 84), "fur"), "D": M((44, 56, 110), "fur"),
+    "n": M((230, 230, 250), "fur"), "N": M((200, 210, 240), "fur"),
+    "m": M((170, 176, 210), "fur"), "M": M((150, 156, 196), "fur"),
+    "e": M((20, 24, 50), "fur"),
+    "c": M((236, 226, 196), "fur"), "C": M((150, 164, 214), "fur", over="b"),
+    "z": M((255, 236, 110), "gem", emissive=0.8),
+    "y": M((250, 196, 70), "scale"), "Y": M((255, 236, 160), "scale", over="y"),
+    "q": M((110, 70, 30), "gem", flat=True),
+    "k": M((16, 16, 30), "gem", flat=True),
+    "l": M((236, 190, 70), "scale"), "t": M((30, 26, 30), "stone"),
+}
+THUNDERBIRD_MAT["g"] = M((255, 230, 90), "gem", flat=True)
+
+# --------------------------------------------------------------------------
+# MANDRAKE (80) - pulled from the ground at last, and not grateful. A slender
+# thing of pale root with a mane of leaf blades, fingers like twigs, and a
+# mouth that opens much wider than a mouth should.
+# --------------------------------------------------------------------------
+def _mandrake_blade(length, width, fill, rib):
+    sp = plume(length, 1, 3, 2, width, w_base=2, peak=0.35)
+    rows = spans(None, sp, fill)
+    return vein(rows, (2, length - 1), (3, 1), rib)
+
+
+_MANDRAKE_BLADES = [_mandrake_blade(18, 5, "g", "v"), _mandrake_blade(24, 6, "G", "V"),
+                    _mandrake_blade(28, 6, "g", "v"), _mandrake_blade(26, 6, "G", "V"),
+                    _mandrake_blade(22, 5, "g", "v"), _mandrake_blade(16, 4, "G", "V")]
+# a long face, hollow at the eyes; something glows at the bottom of them
+_MANDRAKE_HEAD = rows_of(13,
+    "....bbbbb....",
+    "..baaaaaaab..",
+    ".baaaaaaaaab.",
+    "baaaaaaaaaaab",
+    "akkkaaaakkkkb",
+    "akekaaaakkekb",
+    "aakkaaaaakkab",
+    "aaaaacaaaaab.",
+    ".aaaacaaaaab.",
+    ".aaaaaaaaab..",
+    "..aqqqqqab...",
+    "...aaaaab....",
+    "....abbb.....",
+    ".....bb......",
+)
+_MANDRAKE_SCREAM = rows_of(13,
+    "....bbbbb....",
+    "..baaaaaaab..",
+    ".baaaaaaaaab.",
+    "baaaaaaaaaaab",
+    "akkkaaaakkkkb",
+    "akekaaaakkekb",
+    "aakkaaaaakkab",
+    "aaaqqqqqaaab.",
+    ".aqqQQQqqaab.",
+    ".aqQQQQQqab..",
+    "..qqQQQqqb...",
+    "...qqQqqb....",
+    "....qqqb.....",
+    ".....bb......",
+)
+_MANDRAKE_SPRIG = rows_of(6, "..gG..", ".gGGg.", "gGgg..", ".b....")
+_MANDRAKE_TORSO = spans(None, [(3, 8), (1, 11), (0, 12), (1, 11), (2, 10), (2, 10),
+                               (3, 9), (3, 9), (3, 9), (2, 10), (2, 10), (1, 11),
+                               (1, 11), (2, 10)], "a")
+_MANDRAKE_RING = rows_of(9, "..sssss..", ".s.....s.", "s.......s")
+
+
+def _mandrake(pose):
+    cv = canvas(80, 80)
+    hx, hy = {"idle": (29, 9), "attack": (22, 14), "cast": (30, 7)}[pose]
+    # the mane: leaf blades swept back off the crown, flared to scream
+    fan = {"idle": (-10, 20, 44, 66, 88, 110), "attack": (20, 42, 62, 82, 100, 118),
+           "cast": (-40, -14, 12, 38, 64, 90)}[pose]
+    for blade, ang in zip(_MANDRAKE_BLADES, fan):
+        pin_rotated(cv, blade, base_of(blade), (hx + 8, hy + 3), ang)
+    # roots for legs: they split at the hip and grip the ground
+    for (x1, y1), (x2, y2), r in (((30, 58), (22, 76), 2.6), ((36, 60), (34, 76), 2.8),
+                                  ((42, 58), (48, 76), 2.6), ((46, 56), (58, 74), 2.0),
+                                  ((26, 56), (14, 72), 2.0)):
+        tube(cv, [(37, 46, 4.0), (x1, y1, r), (x2, y2, r * 0.45)], "b")
+    tube(cv, [(36, 46, 4.2), (34, 60, 2.8), (33, 76, 1.6)], "a")
+    stamp(cv, 30, 24 if pose != "attack" else 27, _MANDRAKE_TORSO)
+    # arms like branches; the fingers are twigs
+    arms = {"idle": ([(32, 27, 2.4), (26, 38, 2.0), (24, 50, 1.6)],
+                     [(42, 27, 2.6), (47, 38, 2.2), (48, 50, 1.8)]),
+            "attack": ([(32, 30, 2.4), (20, 30, 2.0), (8, 26, 1.6)],
+                       [(42, 30, 2.6), (32, 36, 2.2), (16, 36, 1.8)]),
+            "cast": ([(32, 26, 2.4), (22, 20, 2.0), (16, 10, 1.6)],
+                     [(42, 26, 2.6), (52, 20, 2.2), (58, 10, 1.8)])}[pose]
+    for arm, mat in zip(arms, ("b", "a")):
+        tube(cv, arm, mat)
+        (xa, ya, _), (xb, yb, _) = arm[-2], arm[-1]
+        dx, dy = xb - xa, yb - ya
+        for spread in (-0.5, 0.0, 0.5):              # three twig fingers
+            fx = xb + int(dx * 0.4 - dy * spread * 0.5)
+            fy = yb + int(dy * 0.4 + dx * spread * 0.5)
+            tube(cv, [(xb, yb, 1.0), (fx, fy, 0.5)], mat)
+    stamp(cv, hx, hy, _MANDRAKE_SCREAM if pose == "cast" else _MANDRAKE_HEAD)
+    ty = 24 if pose != "attack" else 27
+    stamp(cv, 27, ty - 3, _MANDRAKE_SPRIG)
+    stamp(cv, 41, ty - 4, mirror(_MANDRAKE_SPRIG))
+    # cracks in the bark
+    for a, b in (((33, 28), (35, 34)), ((38, 31), (36, 37)), ((34, 44), (36, 50))):
+        for y, row in enumerate(vein(finish(cv), a, b, "c")):
+            cv[y][:] = row
+    if pose == "cast":
+        for i, (x, y) in enumerate(((16, 16), (10, 12), (4, 8))):
+            stamp(cv, x - 2 * i, y, _MANDRAKE_RING)
+    return finish(cv)
+
+
+MANDRAKE_MAT = {
+    "a": M((222, 208, 172), "plant"), "b": M((166, 146, 108), "plant"),
+    "c": M((120, 100, 70), "plant", over="a"),
+    "g": M((60, 140, 70), "plant"), "G": M((100, 176, 80), "plant"),
+    "v": M((140, 200, 110), "plant", over="g"), "V": M((170, 220, 130), "plant", over="G"),
+    "k": M((30, 26, 20), "gem", flat=True),
+    "e": M((210, 255, 90), "gem", flat=True),
+    "q": M((40, 20, 20), "gem", flat=True), "Q": M((90, 30, 40), "gem", flat=True),
+    "s": M((230, 255, 200), "gem", flat=True, outline=False),
+}
+
+# --------------------------------------------------------------------------
+# WISP (80) - a grave-light that learned to wear a face: a hood and robe of
+# cold violet fire, a noh mask where its head should be, and a paper lantern
+# it carries for the dead who have lost their way. It is not helping.
+# --------------------------------------------------------------------------
+def _layers(rows, *steps):
+    for frm, to, by in steps:
+        rows = inset(rows, frm, to, by)
+    return rows
+
+
+def _wisp_robe():
+    # an inverted flame: narrow at the shoulders, flaring into tongues
+    out = []
+    for y in range(44):
+        t = y / 43.0
+        half = 5 + 13 * t ** 0.8
+        cx = 38 + 3 * t
+        out.append((int(cx - half), int(cx + half)))
+    rows = spans(64, out, "f")
+    rows = [list(r) for r in rows]
+    for y in range(28, 44):                 # tattered hem: tongues of flame
+        for x in range(64):
+            if rows[y][x] != "." and ((x // 3) % 2 == 0) and y > 28 + (x * 7) % 13:
+                rows[y][x] = "."
+    rows = ["".join(r) for r in rows]
+    # dark inside, cold fire at the rim: a wraith, not a campfire
+    return _layers(rows, ("f", "o", 2), ("o", "d", 2))
+
+
+_WISP_ROBE = _wisp_robe()
+# a pointed cowl, the tip licking up like the flame it is
+_WISP_HOOD = _layers(spans(None, plume(26, 11, 13, -1, 22, w_base=18, w_tip=1, peak=0.35), "f"),
+                     ("f", "o", 2), ("o", "d", 2))
+_WISP_MASK = rows_of(12,
+    "...wwwwww...",
+    "..wwwwwwww..",
+    ".wwrwwwwrww.",
+    ".wwwwwwwwww.",
+    "wwkkkwwkkkww",
+    "wwkkwwwwkkww",
+    "wwwwwwwwwwww",
+    "wwwwwwwwwwww",
+    ".wwwwwwwwww.",
+    ".wwwrrrrwww.",
+    "..wwwwwwww..",
+    "...wwwwww...",
+    "....wwww....",
+)
+_WISP_LANTERN = rows_of(9,
+    "...nnn...",
+    ".nnnnnnn.",
+    "lLLLlLLLl",
+    "lLYYYYYLl",
+    "nnnnnnnnn",
+    "lLYYWYYLl",
+    "lLYYYYYLl",
+    "nnnnnnnnn",
+    "lLLLlLLLl",
+    ".nnnnnnn.",
+    "...nnn...",
+    "....n....",
+)
+_WISP_EMBER = rows_of(3, ".s.", "sSs", ".s.")
+
+
+def _wisp(pose):
+    cv = canvas(80, 80)
+    ox = -6 if pose == "attack" else 0
+    stamp(cv, 8 + ox, 22, _WISP_ROBE)
+    # arms: sleeves of flame ending in pale, long-fingered hands
+    arms = {"idle": ([(32, 28, 3.5), (24, 36, 2.8), (20, 42, 2.0)],
+                     [(46, 28, 3.5), (54, 34, 2.8), (58, 30, 2.0)]),
+            "attack": ([(30, 26, 3.5), (18, 26, 2.8), (6, 24, 2.0)],
+                       [(44, 28, 3.5), (50, 36, 2.8), (52, 42, 2.0)]),
+            "cast": ([(32, 26, 3.5), (26, 16, 2.8), (24, 6, 2.0)],
+                     [(46, 26, 3.5), (54, 32, 2.8), (58, 36, 2.0)])}[pose]
+    for arm in arms:
+        tube(cv, arm, "o")
+        x, y, _ = arm[-1]
+        tube(cv, [(x, y, 1.6), (x + (arm[-1][0] - arm[-2][0]) // 2,
+                               y + (arm[-1][1] - arm[-2][1]) // 2, 0.8)], "h")
+    stamp(cv, 27 + ox, 0, _WISP_HOOD)
+    stamp(cv, 32 + ox, 13, _WISP_MASK)
+    # the lantern hangs from one hand, raised high to cast
+    lx, ly = {"idle": (15, 42), "attack": (47, 42), "cast": (19, -4)}[pose]
+    stamp(cv, lx, ly, _WISP_LANTERN)
+    if pose == "attack":
+        # the swipe leaves claw marks of flame in the air
+        for dy in (-4, 0, 4):
+            tube(cv, [(10, 26 + dy, 1.2), (2, 30 + dy, 0.8)], "S")
+    for x, y in ((6, 20), (64, 14), (70, 44), (4, 70), (60, 72)):
+        stamp(cv, x, y, _WISP_EMBER)
+    return finish(cv)
+
+
+WISP_MAT = {
+    "d": M((34, 20, 60), "cloth"),
+    "o": M((80, 50, 170), "flame", emissive=0.4),
+    "f": M((130, 170, 255), "flame", emissive=0.8),
+    "h": M((220, 226, 250), "cel"),
+    "w": M((240, 234, 220), "cel"), "k": M((20, 16, 30), "gem", flat=True),
+    "r": M((200, 40, 60), "gem", flat=True),
+    "l": M((200, 50, 50), "cloth", emissive=0.3), "L": M((250, 110, 80), "cloth", emissive=0.5),
+    "Y": M((255, 220, 140), "gem", emissive=0.9), "W": M((255, 255, 230), "gem", emissive=1.0),
+    "n": M((30, 24, 30), "matte"),
+    "s": M((190, 200, 255), "gem", flat=True, outline=False),
+    "S": M((230, 236, 255), "gem", flat=True, outline=False),
+}
+
+# --------------------------------------------------------------------------
+# ANUBIS (112) - the boss, drawn at his own size rather than doubled: the
+# jackal god in gold and lapis, the sun ringed behind him, sceptre planted in
+# one hand and the scales of judgement held out in the other. When he lifts
+# them overhead, every heart in the room is about to be weighed.
+# --------------------------------------------------------------------------
+_ANUBIS_HALO = inset(spans(None, ellipse(62, 62), "h"), "h", ".", 3)
+# a jackal's ears: tall, narrow, upright - short ones make him a cat
+_ANUBIS_EAR = spans(None, [(4, 4), (4, 4), (3, 5), (3, 5), (3, 5), (3, 6), (2, 6),
+                           (2, 6), (2, 7), (2, 7), (1, 7), (1, 7), (1, 8), (1, 8),
+                           (0, 8), (0, 8), (0, 8), (0, 9), (0, 9), (0, 9), (0, 9)], "a")
+_ANUBIS_EAR = inset(_ANUBIS_EAR, "a", "i", 2)
+# the skull runs in one long flat line down into the snout
+_ANUBIS_HEAD = rows_of(30,
+    "...............aaaaaaaa.......",
+    "............aaaaaaaaaaaaaa....",
+    "..........aaaaaaaaaaaaaaaaa...",
+    "........aaggggggaaaaaaaaaaaa..",
+    "......aaaakkeekkaaaaaaaaaaaa..",
+    "....aaaaaakeEekaaaaaaaaaaaaa..",
+    "..aaaaaaaaakkkaaaaaaaaaaaaa...",
+    "AAAAaaaaaaaaaaaaaaaaaaaaaaa...",
+    "nAAAAAAAaaaaaaaaaaaaaaaaaa....",
+    "nnAAAAAAAAAaaaaaaaaaaaaaa.....",
+    ".qqqqqAAAAAAAaaaaaaaaaaa......",
+    "...qqqqqqAAAAAAaaaaaaaa.......",
+    "......AAAAAAAAAAaaaaaa........",
+    ".........AAAAAAAaaaa..........",
+)
+_ANUBIS_LAPPET = rows_of(5, *[("ggggg" if (y // 2) % 2 == 0 else "lllll") for y in range(24)])
+_ANUBIS_COLLAR = [r.replace("g", "gttlggttlg."[min(y, 10)]) for y, r in
+                  enumerate(spans(38, ellipse(38, 24)[12:], "g"))]
+_ANUBIS_TORSO = spans(None, [(4, 36), (2, 38), (1, 39), (1, 39), (2, 38), (3, 37),
+                             (4, 36), (5, 35), (6, 34), (7, 33), (8, 32), (9, 31),
+                             (9, 31), (10, 30), (10, 30), (10, 30), (10, 30), (10, 30),
+                             (11, 29), (11, 29), (11, 29), (11, 29), (11, 29), (11, 29)], "a")
+_ANUBIS_ABS = rows_of(40,
+    "........................................",
+    "........................................",
+    "........................................",
+    "..........bbbbbbbbb...bbbbbbbbb.........",
+    "............bbbbb.......bbbbb...........",
+    "........................................",
+    "........................................",
+    "..................b.b...................",
+    "..................b.b...................",
+    "........................................",
+    "..................b.b...................",
+    "..................b.b...................",
+    "........................................",
+    "..................b.b...................",
+)
+_ANUBIS_PAULDRON = spans(None, ellipse(14, 10), "g")
+_ANUBIS_PAULDRON = inset(_ANUBIS_PAULDRON, "g", "G", 2)
+_ANUBIS_KILT = spans(34, [(3, 30), (3, 30), (2, 31), (2, 31), (1, 32), (1, 32),
+                          (1, 32), (0, 33), (0, 33), (0, 33), (0, 33), (1, 32),
+                          (2, 31), (4, 29)], "w")
+_ANUBIS_KILT[0] = _ANUBIS_KILT[1] = "..." + "g" * 28 + "..."
+_ANUBIS_KILT = [r[:14] + r[14:21].replace("w", "gllgllg"[i % 7] if False else "W") + r[21:]
+                if 2 <= i else r for i, r in enumerate(_ANUBIS_KILT)]
+for _i in range(2, 14):                       # the apron: gold and lapis bands
+    _ANUBIS_KILT[_i] = (_ANUBIS_KILT[_i][:14] + ("gg" if _i % 3 else "ll") + "lllgg"[:3]
+                        + ("gg" if _i % 3 else "ll") + _ANUBIS_KILT[_i][21:])
+_ANUBIS_CAPE = spans(None, [(0, 10), (0, 12), (0, 14), (0, 15), (0, 16), (0, 17),
+                            (0, 18), (0, 19), (0, 20), (0, 21), (0, 22), (0, 22),
+                            (0, 23), (0, 23), (0, 24), (0, 24), (0, 25), (0, 25),
+                            (0, 26), (0, 26), (0, 27), (0, 27), (0, 28), (0, 28),
+                            (0, 29), (0, 29), (0, 30), (0, 30), (0, 30), (0, 30),
+                            (0, 31), (0, 31), (0, 31), (0, 31), (0, 32), (0, 32),
+                            (0, 32), (0, 32), (0, 33), (0, 33), (0, 33), (0, 33),
+                            (1, 32), (2, 30), (4, 28), (6, 25), (9, 21)], "c")
+_ANUBIS_CAPE = inset(_ANUBIS_CAPE, "c", "C", 3)
+_ANUBIS_STAFF = rows_of(10,
+    "gggggg....",
+    "gGGggggg..",
+    "....gggg..",
+    ".....ggg..",
+    "......gg..",
+) + ["......gg.."] * 88 + ["....gggg..", "....g..g..", "....g..g.."]
+_ANUBIS_SCALES = rows_of(34,
+    "................g.................",
+    "................G.................",
+    "................g.................",
+    ".gggggggggggggggGggggggggggggggg..",
+    "..s.......................s.......",
+    "..s.......................s.......",
+    "..s......................s.s......",
+    "..s.....................s...s.....",
+    "..s....................s.....s....",
+    ".s.s..................s..ff...s...",
+    ".s.s.................ggggfFfgggg..",
+    "s...s.................ggggggggg...",
+    "s...s.............................",
+    "s...s.............................",
+    ".rrr..............................",
+    "rrRrr.............................",
+    "grrrgg............................",
+    "gggggg............................",
+    ".gggg.............................",
+)
+
+
+def _anubis(pose):
+    cv = canvas(112, 112)
+    lean = -4 if pose == "attack" else 0
+    ox = lean
+    stamp(cv, 36 + ox, 0, _ANUBIS_HALO)
+    stamp(cv, 60 + ox, 44, _ANUBIS_CAPE)
+    # legs: a wide stance, gold at the shin
+    # legs: a wide stride under a short kilt, gold at the shin
+    tube(cv, [(62 + ox, 80, 5.4), (70 + ox, 94, 4.4), (74 + ox, 109, 3.4)], "b")
+    tube(cv, [(71 + ox, 98, 4.0), (74 + ox, 108, 3.6)], "g")
+    tube(cv, [(52 + ox, 80, 5.6), (44 + ox, 94, 4.6), (40 + ox, 109, 3.6)], "a")
+    tube(cv, [(43 + ox, 98, 4.2), (40 + ox, 108, 3.8)], "g")
+    stamp(cv, 36 + ox, 46, _ANUBIS_TORSO)
+    stamp(cv, 36 + ox, 46, _ANUBIS_ABS, onto=True)
+    stamp(cv, 40 + ox, 70, _ANUBIS_KILT)
+    # the sceptre: planted, swept in an arc, or held aside while he weighs
+    if pose == "attack":
+        staff, _ = rotate(_ANUBIS_STAFF, -58)
+        stamp(cv, -8, 20, staff)
+        near = [(76, 50, 5.5), (70, 62, 4.2), (58, 64, 3.8)]
+    else:
+        stamp(cv, 82 + ox, 4, _ANUBIS_STAFF)
+        near = [(76, 50, 5.5), (84, 62, 4.2), (88, 70, 3.8)]
+    # the scales: held out, or lifted high overhead to weigh
+    if pose == "cast":
+        stamp(cv, 20 + ox, 0, _ANUBIS_SCALES)
+        far = [(44, 50, 5.2), (40, 34, 4.0), (37, 18, 3.6)]
+    elif pose == "attack":
+        far = [(44, 50, 5.2), (34, 60, 4.0), (30, 70, 3.6)]
+    else:
+        stamp(cv, 0 + ox, 58, _ANUBIS_SCALES)
+        far = [(44, 50, 5.2), (32, 58, 4.0), (22, 58, 3.6)]
+    tube(cv, [(x + ox, y, r) for x, y, r in far], "b")
+    tube(cv, [(x + ox, y, r) for x, y, r in far[1:2]], "g")      # arm band
+    stamp(cv, 34 + ox, 42, _ANUBIS_PAULDRON)
+    tube(cv, [(60 + ox, 26, 6.0), (60 + ox, 44, 6.5)], "b")      # the neck
+    stamp(cv, 49 + ox, 30, _ANUBIS_LAPPET)
+    stamp(cv, 71 + ox, 30, _ANUBIS_LAPPET)
+    stamp(cv, 41 + ox, 42, _ANUBIS_COLLAR)
+    stamp(cv, 62 + ox, 0, _ANUBIS_EAR)
+    stamp(cv, 54 + ox, 2, mirror(_ANUBIS_EAR))
+    stamp(cv, 38 + ox, 16, _ANUBIS_HEAD)
+    tube(cv, [(x + (ox if pose != "attack" else 0), y, r) for x, y, r in near], "a")
+    tube(cv, [(x + (ox if pose != "attack" else 0), y, r) for x, y, r in near[1:2]], "g")
+    stamp(cv, 70 + ox, 42, _ANUBIS_PAULDRON)
+    return finish(cv)
+
+
+ANUBIS_MAT = {
+    "a": M((42, 38, 54), "fur"), "A": M((70, 62, 84), "fur"), "b": M((32, 28, 42), "fur"),
+    "n": M((14, 12, 18), "gem", flat=True), "q": M((120, 40, 50), "gem", flat=True),
+    "k": M((12, 10, 16), "gem", flat=True),
+    "e": M((255, 210, 90), "gem", flat=True), "E": M((255, 255, 220), "gem", flat=True),
+    "g": M((232, 186, 76), "metal", outline=(80, 50, 24)),
+    "G": M((255, 236, 160), "metal", outline=(80, 50, 24)),
+    "i": M((200, 150, 60), "metal"),
+    "l": M((40, 70, 170), "cloth", outline=(16, 22, 60)),
+    "t": M((70, 186, 178), "gem", outline=(16, 50, 56)),
+    "w": M((238, 232, 214), "cloth"), "W": M((210, 202, 184), "cloth", over="w"),
+    "c": M((110, 30, 44), "cloth"), "C": M((150, 44, 60), "cloth", over="c"),
+    "h": M((255, 222, 140), "gem", flat=True, outline=False),
+    "s": M((200, 160, 70), "metal", outline=False),
+    "r": M((210, 50, 60), "skin"), "R": M((250, 120, 120), "skin", over="r"),
+    "f": M((250, 250, 244), "cloth"), "F": M((210, 220, 236), "cloth"),
+}
+
 # ---------------------------------------------------------------------------
 ART = {
-    "pixie": (PIXIE64, PIXIE64_MAT),
-    "kitsune": (KITSUNE64, KITSUNE64_MAT),
-    "kappa": (KAPPA64, KAPPA64_MAT),
-    "thunderbird": (THUNDERBIRD64, THUNDERBIRD64_MAT),
+    "pixie": Creature(_pixie, PIXIE_MAT),
+    "kitsune": Creature(_kitsune, KITSUNE_MAT),
+    "kappa": Creature(_kappa, KAPPA_MAT),
+    "thunderbird": Creature(_thunderbird, THUNDERBIRD_MAT),
     "golem": (GOLEM64, GOLEM64_MAT),
-    "wisp": (WISP64, WISP64_MAT),
+    "wisp": Creature(_wisp, WISP_MAT),
     "naga": (NAGA64, NAGA64_MAT),
     "tengu": (TENGU64, TENGU64_MAT),
-    "mandrake": (MANDRAKE64, MANDRAKE64_MAT),
+    "mandrake": Creature(_mandrake, MANDRAKE_MAT),
     "cerberus": (CERBERUS64, CERBERUS64_MAT),
     "baku": (BAKU64, BAKU64_MAT),
-    "anubis": (ANUBIS64, ANUBIS64_MAT),
+    "anubis": Creature(_anubis, ANUBIS_MAT),
     "minotaur": (MINOTAUR64, MINOTAUR64_MAT),
     "medusa": (MEDUSA64, MEDUSA64_MAT),
     "harpy": (HARPY64, HARPY64_MAT),
@@ -2736,23 +2903,36 @@ ART = {
 _cache = {}
 _icons = {}
 
+def _entry(key):
+    e = ART[key]
+    if isinstance(e, Creature):
+        return e
+    rows, mats = e                      # a single drawing: every pose is it
+    return Creature(lambda pose, rows=rows: rows, mats, poses=("idle",))
+
+
+def poses(key):
+    return _entry(key).poses
+
 
 # Sprites authored at this width or more are already at their display size,
 # so they skip the EPX upscale and are lit at their own resolution.
 NATIVE_WIDTH = 48
 
 
-def sprite(key):
-    """The lit battle sprite. Art authored at 32x32 is doubled to 64x64;
-    art authored at 64x64 is lit as it stands."""
-    if key not in _cache:
-        rows, mats = ART[key]
+def sprite(key, pose="idle"):
+    """The lit battle sprite for one pose."""
+    entry = _entry(key)
+    pose = pose if pose in entry.poses else "idle"
+    k = (key, pose)
+    if k not in _cache:
+        rows = entry.rows(pose)
         native = max(len(r) for r in rows) >= NATIVE_WIDTH
         # Native art has its detail drawn in; the procedural texture is only
         # for keeping upscaled 32x32 forms from looking like poured plastic.
-        _cache[key] = shading.render(rows, mats, upscale=not native,
-                                     detail=not native)
-    return _cache[key]
+        _cache[k] = shading.render(rows, entry.mats, upscale=not native,
+                                   detail=not native)
+    return _cache[k]
 
 
 def icon(key, size=32):
@@ -2765,6 +2945,7 @@ def icon(key, size=32):
 
 
 def prebuild():
-    """Light every sprite up front so no battle stutters on first sight."""
+    """Light every sprite and pose up front so no battle stutters."""
     for key in ART:
-        sprite(key)
+        for pose in poses(key):
+            sprite(key, pose)

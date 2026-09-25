@@ -18,12 +18,13 @@ from ..data.elements import (NAMES as EL_NAMES, COLORS as EL_COLORS,
                              HEAL, SUPPORT)
 from .engine import Action, PLAYER, ENEMY
 from . import effects
+from .perform import Performance, kind_for
 
 # The fight is staged on the full-resolution canvas; the UI keeps its own
 # 240x160 space, so every world coordinate here is exactly twice a UI one.
 C_ENEMY_FEET = 92           # where an enemy's feet meet the ground
 C_ALLY_FEET = 188
-C_SPRITE = 64               # a standard monster sprite
+C_SPRITE = 80               # a standard monster sprite
 SPRITE = 32                 # UI-space sprite box
 
 # Slim party plates, so the stage keeps most of the screen
@@ -61,6 +62,8 @@ class BattleScene(Scene):
         self.flash = {}
         self.fainting = {}
         self.effect = None
+        self.effect_delay = 0.0     # the effect waits for the moment of impact
+        self.perfs = {}             # id(monster) -> Performance
         self.screen_flash = None
         self.sigil = None
         self.actor_mark = None
@@ -104,6 +107,11 @@ class BattleScene(Scene):
         elif key == "ruins":
             props = [tiles["column"], tiles["tree"], tiles["rubble"]]
         arena.add_backdrop(self.floor, props)
+        # the haze goes into the stage; the frame pass is told to skip it
+        from ..render import postfx
+        g = postfx.get(self.grade)
+        if g.fog:
+            arena.haze(self.floor, g.fog, g.fog_strength)
 
     # -- geometry ----------------------------------------------------------
     def stage_pos(self, mon):
@@ -117,9 +125,9 @@ class BattleScene(Scene):
         i = self.b.party.index(mon) if mon in self.b.party else 0
         return slots[i] if i < len(slots) else slots[-1]
 
-    def sprite_of(self, mon):
+    def sprite_of(self, mon, pose="idle"):
         return self.game.assets["mon_scaled"](
-            mon.art, getattr(mon.species, "scale", 1))
+            mon.art, getattr(mon.species, "scale", 1), pose)
 
     def crect_of(self, mon):
         """Canvas-space sprite box, sized by the art. Anything taller than a
@@ -128,7 +136,7 @@ class BattleScene(Scene):
         spr = self.sprite_of(mon)
         w, hgt = spr.get_size()
         if mon in self.b.foes and hgt > C_SPRITE:
-            feet += min(44, (hgt - C_SPRITE) * 3 // 4)
+            feet += min(44, (hgt - C_SPRITE) // 2)
         return pygame.Rect(cx - w // 2, feet - hgt, w, hgt)
 
     def rect_of(self, mon):
@@ -151,7 +159,13 @@ class BattleScene(Scene):
                 del self.flash[k]
         for k in list(self.fainting):
             self.fainting[k] = min(1.0, self.fainting[k] + dt * 2.2)
-        if self.effect:
+        for k in list(self.perfs):
+            self.perfs[k].update(dt)
+            if self.perfs[k].done:
+                del self.perfs[k]
+        if self.effect and self.effect_delay > 0:
+            self.effect_delay -= dt
+        elif self.effect:
             self.effect.update(dt)
             if self.effect.flash:
                 colour, alpha = self.effect.flash
@@ -218,6 +232,17 @@ class BattleScene(Scene):
             kind = "heal" if skill.kind in (SK.RECOVER, SK.REVIVE) else "attack"
             self.effect = effects.Effect(skill.element, rects, kind,
                                          self.b.rng)
+            # the actor performs first; the effect lands on its impact frame
+            actor = e.get("actor")
+            self.effect_delay = 0.0
+            if actor is not None and not actor.down:
+                a = self.crect_of(actor)
+                aim = rects[0].center if rects else (a.centerx, a.centery)
+                if actor in targets and len(targets) == 1:
+                    aim = (a.centerx, a.centery - 20)
+                perf = Performance(kind_for(skill), a.center, aim)
+                self.perfs[id(actor)] = perf
+                self.effect_delay = perf.impact
             if skill.element == PHYS:
                 sfx.play("hit")
             elif skill.kind in (SK.RECOVER, SK.REVIVE, SK.CURE):
@@ -225,7 +250,7 @@ class BattleScene(Scene):
             else:
                 sfx.play("magic")
             # hand over to the damage event while the strike is still landing
-            return self.effect.life * 0.62
+            return self.effect_delay + self.effect.life * 0.62
         if t == "dmg":
             tgt = e["target"]
             aff = e.get("affinity", NEUTRAL)
@@ -599,7 +624,7 @@ class BattleScene(Scene):
         for mon in self.b.party[:3]:
             self.draw_monster(canvas, mon, enemy=False)
         fx = self.game.fx
-        if self.effect:
+        if self.effect and self.effect_delay <= 0:
             self.effect.draw(canvas)
             col = EL_COLORS.get(self.effect.element, P.WHITE)
             glow = 0.5 * math.sin(min(1.0, self.effect.k) * math.pi)
@@ -620,9 +645,11 @@ class BattleScene(Scene):
                             special_flags=pygame.BLEND_RGB_ADD)
         if self.b.boss:
             for mon in self.b.foes:
+                # a glow behind the head, not a wash over the body: laid over
+                # the whole sprite, additive light turned black fur lavender
                 c = self.crect_of(mon)
-                fx.add_light(c.centerx, c.centery - 6, 86, (196, 150, 255),
-                             0.30 + 0.06 * math.sin(self.game.time * 2.0))
+                fx.add_light(c.centerx, c.y + c.h // 5, 64, (196, 150, 255),
+                             0.20 + 0.05 * math.sin(self.game.time * 2.0))
         for mon in self.b.foes:
             if mon.charged and not mon.down:
                 # a wound-up blow glows gold and throbs: the warning has to
@@ -632,15 +659,28 @@ class BattleScene(Scene):
                 fx.add_light(c.centerx, c.y + c.h // 3, 120, (255, 214, 120),
                              0.45 + 0.35 * beat)
 
+    def pose_of(self, mon):
+        perf = self.perfs.get(id(mon))
+        if perf:
+            return perf.pose
+        if mon.charged:
+            return "cast"          # a wound-up blow is held in the cast pose
+        return "idle"
+
     def draw_monster(self, canvas, mon, enemy):
         rect = self.crect_of(mon)
-        spr = self.sprite_of(mon)
+        spr = self.sprite_of(mon, self.pose_of(mon))
         if not enemy:
             spr = pygame.transform.flip(spr, True, False)
         fade = self.fainting.get(id(mon))
         if mon.down and fade is None:
             return
         dx, dy = 0, 0
+        perf = self.perfs.get(id(mon))
+        if perf:
+            pdx, pdy = perf.offset()
+            dx += pdx
+            dy += pdy
         sh = self.shakes.get(id(mon))
         if sh:
             sdx, sdy = sh.offset()
@@ -668,7 +708,18 @@ class BattleScene(Scene):
             shadow.set_alpha(alpha)
         canvas.blit(shadow, (rect.x + 5 + dx,
                              feet - shadow.get_height() + 4))
+        if perf and perf.trail:
+            # afterimages on the dash: fading copies, cooled toward blue
+            ghost = img.copy()
+            ghost.fill((0, 30, 90, 0), special_flags=pygame.BLEND_RGB_ADD)
+            for i, (gx, gy) in enumerate(perf.trail[:-1]):
+                ghost.set_alpha(40 + 30 * i)
+                canvas.blit(ghost, (rect.x + gx, rect.y + gy + int(bob)))
         canvas.blit(img, (rect.x + dx, rect.y + dy + int(bob)))
+        if perf and perf.glow() > 0.05:
+            c = EL_COLORS.get(getattr(self.effect, "element", None), P.WHITE)
+            self.game.fx.add_light(rect.centerx + dx, rect.centery + dy, 70, c,
+                                   0.55 * perf.glow())
 
     def draw(self, ui):
         """The interface layer, authored at 240x160 and never blurred."""

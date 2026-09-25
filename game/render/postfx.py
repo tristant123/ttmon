@@ -27,8 +27,9 @@ class Grade:
     def __init__(self, name, tint=(255, 255, 255), lift=(0, 0, 0),
                  bloom=0.85, threshold=118, dof=0.75, focus=0.58,
                  vignette=0.5, fog=None, fog_strength=0.0, sat=1.0,
-                 dither=1.0, quantize=True):
+                 dither=1.0, quantize=True, frame_fog=True):
         self.name = name
+        self.frame_fog = frame_fog       # False: the scene bakes its own haze
         self.tint = tint                 # multiplied over the frame
         self.lift = lift                 # added to the frame (a soft fill light)
         self.bloom = bloom               # 0..1.5 strength
@@ -56,12 +57,16 @@ PROFILES = {
     "shrine": Grade("shrine", tint=(218, 228, 255), lift=(4, 10, 26),
                     bloom=0.36, threshold=146, dof=0.0,
                     vignette=0.38, fog=(120, 138, 190), fog_strength=0.44),
+    # Battle grades carry a fog colour for the stage to bake in (see
+    # arena.haze), and apply none over the frame: it greyed the monsters.
     "battle": Grade("battle", tint=(250, 246, 240), lift=(8, 6, 4),
                     bloom=0.30, threshold=150, dof=0.0,
-                    vignette=0.32, fog=(186, 196, 216), fog_strength=0.34),
+                    vignette=0.32, fog=(186, 196, 216), fog_strength=0.34,
+                    frame_fog=False),
     "boss": Grade("boss", tint=(230, 220, 250), lift=(16, 6, 22),
                   bloom=0.38, threshold=144, dof=0.0,
-                  vignette=0.44, fog=(122, 104, 168), fog_strength=0.40),
+                  vignette=0.44, fog=(122, 104, 168), fog_strength=0.40,
+                  frame_fog=False),
     "flat": Grade("flat", bloom=0.0, dof=0.0, vignette=0.0, fog=None,
                   dither=0.0, quantize=False),
 }
@@ -198,7 +203,7 @@ class PostFX:
 
     def _fog(self, frame, grade):
         """Distance haze: the further up the screen, the more it washes out."""
-        if not grade.fog or grade.fog_strength <= 0.01:
+        if not grade.fog or grade.fog_strength <= 0.01 or not grade.frame_fog:
             return
         band = 10
         top = int(self.h * 0.55)

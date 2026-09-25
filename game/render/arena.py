@@ -103,6 +103,23 @@ def add_backdrop(floor, props, horizon=HORIZON, rng_seed=5):
     return floor
 
 
+def haze(floor, colour, strength, top_frac=0.55):
+    """Bake distance haze into the stage itself. The frame-wide fog pass
+    also washed out the monsters standing in the back row - tall sprites
+    reach well up into it - so in battle the haze belongs to the scenery."""
+    h = floor.get_height()
+    top = int(h * top_frac)
+    band = pygame.Surface((floor.get_width(), 2)).convert()
+    band.fill(colour)
+    for y in range(0, top, 2):
+        k = 1.0 - y / float(max(1, top))
+        a = int(190 * strength * (k ** 1.4))
+        if a > 3:
+            band.set_alpha(a)
+            floor.blit(band, (0, y))
+    return floor
+
+
 def ground_shadow(w, h):
     s = pygame.Surface((w, h), pygame.SRCALPHA)
     for i in range(5):

@@ -126,6 +126,10 @@ class Material:
         "gem":    (1.45, 1.22, 0.80,   0.66,  0.30, 1.20),
         "flame":  (1.30, 1.14, 0.90,   0.80,  0.10, 0.70),
         "matte":  (1.15, 1.07, 0.78,   0.62,  0.00, 1.00),
+        # Anime skin: nearly flat, lit in two tones. The volume is carried by
+        # shadows painted in by hand - under the fringe, down the far side of
+        # the jaw - not by a bevel, which turns a face into a ball.
+        "cel":    (1.05, 1.02, 0.93,   0.88,  0.00, 0.55),
     }
 
     def __init__(self, color, kind="matte", flat=False, emissive=0.0,
