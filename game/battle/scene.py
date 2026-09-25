@@ -136,7 +136,7 @@ class BattleScene(Scene):
         spr = self.sprite_of(mon)
         w, hgt = spr.get_size()
         if mon in self.b.foes and hgt > C_SPRITE:
-            feet += min(44, (hgt - C_SPRITE) // 2)
+            feet += min(44, hgt - C_SPRITE - 2)
         return pygame.Rect(cx - w // 2, feet - hgt, w, hgt)
 
     def rect_of(self, mon):
@@ -750,7 +750,7 @@ class BattleScene(Scene):
         # forward into the party's row, so its gauge goes over its head.
         y = r.bottom + 1
         if r.h > C_SPRITE // 2:
-            y = max(2, r.y + 2)
+            y = max(2, r.y - 2)
         x = r.centerx - 13
         uimod.gauge(ui, x, y, 26, 3, ratio, uimod.hp_color(ratio))
         self.draw_ailment_dot(ui, mon, x - 2, y + 4)

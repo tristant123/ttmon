@@ -326,1677 +326,6 @@ ANUBIS64_MAT = {
 }
 
 # --------------------------------------------------------------------------
-# GOLEM (64) - a temple guardian of stacked riverstone, knuckles down like
-# a gorilla, head sunk between its shoulders. Moss has had a long time to
-# settle on it, and something has taken root on top.
-# --------------------------------------------------------------------------
-def _stone(w, h, fill):
-    return spans(w, ellipse(w, h), fill)
-
-
-_GOLEM_TORSO = _stone(34, 30, "a")
-_GOLEM_RUNE = rows_of(10,
-    "....rr....",
-    "...rRRr...",
-    "..rr..rr..",
-    ".rr.rr.rr.",
-    "rr.rRRr.rr",
-    ".rr.rr.rr.",
-    "..rr..rr..",
-    "...rRRr...",
-    "....rr....",
-)
-_GOLEM_HEAD = spans(16, [(3, 12), (1, 14), (0, 15), (0, 15), (0, 15), (0, 15),
-                         (0, 15), (0, 15), (0, 15), (1, 14), (2, 13), (4, 11)], "h")
-_GOLEM_HEAD[4] = "hheeeeehheeeeehh"
-_GOLEM_HEAD[5] = "hhhEeeehheeeEhhh"
-_GOLEM_HEAD = rows_of(16, *_GOLEM_HEAD)
-_GOLEM_SHOULDER = _stone(15, 13, "b")
-_GOLEM_MOSS = rows_of(15,
-    "....mmmmmm.....",
-    "..mmMmmmmMmm...",
-    ".mmmmmMmmmmmm..",
-    "mm.mm..mmm.mmm.",
-    "m...m...m...m..",
-)
-_GOLEM_UPPER = _stone(10, 14, "d")
-_GOLEM_FORE = _stone(11, 11, "b")
-_GOLEM_FIST = _stone(17, 13, "a")
-_GOLEM_KNUCKLES = rows_of(17,
-    ".................",
-    ".................",
-    "...c...c...c.....",
-    "...c...c...c.....",
-    "....c...c...c....",
-)
-_GOLEM_LEG = spans(12, [(2, 9), (1, 10), (0, 11), (0, 11), (0, 11), (0, 11),
-                        (0, 11), (0, 11), (0, 11), (0, 11), (0, 11)], "d")
-_GOLEM_SPROUT = rows_of(9,
-    ".gg...gg.",
-    "gGGg.gGGg",
-    ".gGgggGg.",
-    "...gng...",
-    "....n....",
-    "....n....",
-)
-
-
-def _golem():
-    cv = canvas(64, 64)
-    stamp(cv, 19, 47, _GOLEM_LEG)
-    stamp(cv, 33, 47, _GOLEM_LEG)
-    stamp(cv, 15, 17, _GOLEM_TORSO)
-    stamp(cv, 26, 27, _GOLEM_RUNE, onto=True)
-    # cracks in the stone; vein() only marks pixels that are already body
-    for a, b in (((18, 24), (23, 30)), ((23, 30), (21, 36)),
-                 ((44, 34), (40, 40)), ((40, 40), (42, 44))):
-        for y, row in enumerate(vein(finish(cv), a, b, "c")):
-            cv[y][:] = row
-    stamp(cv, 5, 24, _GOLEM_UPPER)
-    stamp(cv, 49, 24, _GOLEM_UPPER)
-    stamp(cv, 3, 34, _GOLEM_FORE)
-    stamp(cv, 50, 34, _GOLEM_FORE)
-    stamp(cv, 0, 43, _GOLEM_FIST)
-    stamp(cv, 47, 43, mirror(_GOLEM_FIST))
-    stamp(cv, 0, 43, _GOLEM_KNUCKLES, onto=True)
-    stamp(cv, 47, 43, mirror(_GOLEM_KNUCKLES), onto=True)
-    stamp(cv, 6, 15, _GOLEM_SHOULDER)
-    stamp(cv, 43, 15, _GOLEM_SHOULDER)
-    stamp(cv, 6, 14, _GOLEM_MOSS)
-    stamp(cv, 43, 14, mirror(_GOLEM_MOSS))
-    stamp(cv, 24, 11, _GOLEM_HEAD)
-    stamp(cv, 27, 5, _GOLEM_SPROUT)
-    return finish(cv)
-
-
-GOLEM64 = _golem()
-GOLEM64_MAT = {
-    # riverstones are never one grey: each piece a slightly different rock
-    "a": M((126, 138, 154), "stone"), "b": M((158, 150, 138), "stone"),
-    "d": M((108, 114, 128), "stone"), "h": M((146, 154, 150), "stone"),
-    "c": M((80, 86, 100), "stone", over="a"),
-    "r": M((110, 230, 220), "gem", emissive=0.7, over="a"),
-    "R": M((220, 255, 250), "gem", emissive=0.9, over="a"),
-    "e": M((120, 240, 230), "gem", flat=True), "E": M((240, 255, 255), "gem", flat=True),
-    "m": M((96, 150, 72), "plant"), "M": M((150, 196, 96), "plant"),
-    "g": M((100, 180, 80), "plant"), "G": M((170, 220, 120), "plant"),
-    "n": M((110, 130, 60), "plant"),
-}
-
-# --------------------------------------------------------------------------
-# NAGA (64) - serpent priestess of the cold springs, risen out of her own
-# coils with a cobra's hood spread behind her. She keeps the spring's
-# frost in a bead of ice between her hands.
-# --------------------------------------------------------------------------
-# The hood flares wider than the hair, or it vanishes behind it.
-def _hood():
-    """An ellipse whose lower half narrows to the neck: a spade, not a disc."""
-    out = []
-    for y, sp in enumerate(ellipse(40, 32)):
-        if sp and y > 12:
-            t = (y - 12) / 19.0
-            a, b = sp
-            pull = int(round((b - a - 12) * 0.5 * t * t))
-            sp = (a + pull, b - pull)
-        out.append(sp)
-    return spans(40, out, "o")
-
-
-_NAGA_HOOD = _hood()
-_NAGA_HOOD = inset(_NAGA_HOOD, "o", "O", 2)
-# the spectacle marking, where it shows either side of the hair
-_NAGA_MARK = [h + "." * 28 + h[::-1] for h in
-              ("...qq.", "..qQQq", "..qQQq", "...qq.")]
-_NAGA_HAIR = spans(26, ellipse(26, 24), "h")
-_NAGA_HAIR = [r[:5] + r[5:12].replace("h", "H") + r[12:] if 3 <= y <= 8 else r
-              for y, r in enumerate(_NAGA_HAIR)]
-# long locks falling over the shoulders, in front of the hood
-_NAGA_LOCK = spans(None, [(1, 4), (1, 4), (0, 4), (0, 4), (0, 4), (0, 4), (0, 4),
-                          (0, 4), (0, 4), (0, 4), (1, 4), (1, 4), (1, 4), (1, 3),
-                          (1, 3), (2, 3), (2, 3), (2, 2)], "h")
-_NAGA_FACE = sym(
-    "....aaaa",
-    "...aaaaa",
-    "..aaaaaa",
-    "..aaaaaa",
-    "..kkkkaa",
-    ".k++iika",
-    ".k++iika",
-    ".kiiiika",
-    ".kiIIika",
-    "..kkkkaa",
-    "..ppaaaa",
-    "..aaaamm",
-    "...aaaaa",
-    "....aaaa",
-    "......aa",
-)
-for _y in (5, 6):
-    _NAGA_FACE[_y] = _NAGA_FACE[_y][:9] + "k++iik" + _NAGA_FACE[_y][15:]
-_NAGA_FACE = rows_of(16, *_NAGA_FACE)
-_NAGA_FRINGE = rows_of(18,
-    "..hhhhhhhhhhhhhh..",
-    ".hhhhhhhhhhhhhhhh.",
-    "hhhhhhhhhhhhhhhhhh",
-    "hhh.hhhhh.hhhh.hhh",
-    "hh...hhh...hh...hh",
-    "h.....h..........h",
-)
-_NAGA_TIARA = rows_of(12,
-    "....jjjj....",
-    "ggggjJJjgggg",
-    ".....jj.....",
-)
-_NAGA_TORSO = spans(16, [(4, 11), (3, 12), (2, 13), (1, 14), (1, 14), (1, 14),
-                         (2, 13), (2, 13), (3, 12), (3, 12), (3, 12), (3, 12)], "a")
-_NAGA_WRAP = spans(16, [None, None, None, (1, 14), (1, 14), (2, 13), (2, 13),
-                        None, None, None, (3, 12), (3, 12)], "w")
-_NAGA_ARM = rows_of(10,
-    "aaa.......", "aaaa......", ".aaaa.....", "..aaaa....", "...aaaaa..",
-    "....aaaaaa", ".....aaaaa",
-)
-_NAGA_ORB = rows_of(8,
-    "..cccc..",
-    ".cCCccc.",
-    "cCCccccc",
-    "cCcccccc",
-    "cccccccc",
-    ".cccccc.",
-    "..cccc..",
-)
-_NAGA_SPARK = rows_of(3, ".s.", "sSs", ".s.")
-
-
-def _naga():
-    cv = canvas(64, 64)
-    stamp(cv, 12, 2, _NAGA_HOOD)
-    stamp(cv, 12, 13, _NAGA_MARK, onto=True)
-    stamp(cv, 19, 7, _NAGA_HAIR)
-    # the tail: down from the waist, round the front, tip curling back up
-    tube(cv, [(31, 40, 6), (35, 46, 7), (43, 51, 6.5), (42, 56, 6),
-              (30, 57, 5.5), (18, 54, 5), (12, 48, 4), (14, 42, 3),
-              (19, 39, 2), (21, 41, 1)], "b", belly="v")
-    scales(cv, "b", "B", 6)
-    stamp(cv, 24, 29, _NAGA_TORSO)
-    stamp(cv, 24, 29, _NAGA_WRAP, onto=True)
-    stamp(cv, 17, 30, _NAGA_ARM)
-    stamp(cv, 37, 30, mirror(_NAGA_ARM))
-    stamp(cv, 28, 34, _NAGA_ORB)
-    stamp(cv, 23, 13, _NAGA_FACE)
-    stamp(cv, 22, 10, _NAGA_FRINGE)
-    stamp(cv, 18, 21, _NAGA_LOCK)
-    stamp(cv, 41, 21, mirror(_NAGA_LOCK))
-    stamp(cv, 26, 10, _NAGA_TIARA)
-    for x, y in ((8, 20), (52, 14), (54, 36), (5, 34)):
-        stamp(cv, x, y, _NAGA_SPARK)
-    return finish(cv)
-
-
-NAGA64 = _naga()
-NAGA64_MAT = {
-    "a": M((210, 222, 242), "skin"), "p": M((200, 176, 226), "skin", over="a"),
-    "m": M((150, 110, 160), "skin", flat=True),
-    "h": M((58, 66, 136), "fur"), "H": M((100, 120, 196), "fur", over="h"),
-    "o": M((40, 104, 112), "scale"), "O": M((70, 150, 146), "scale"),
-    "q": M((22, 46, 56), "scale", over="O"), "Q": M((196, 236, 226), "scale", over="O"),
-    "b": M((64, 146, 152), "scale"), "B": M((44, 110, 126), "scale", over="b"),
-    "v": M((220, 234, 206), "scale", over="b"),
-    "w": M((70, 110, 190), "cloth"),
-    "g": M((232, 190, 90), "metal", outline=(84, 54, 26)),
-    "j": M((80, 200, 240), "gem", outline=(20, 50, 80)), "J": M((220, 250, 255), "gem"),
-    "c": M((170, 230, 250), "gem", emissive=0.5), "C": M((250, 255, 255), "gem", emissive=0.8),
-    "k": M((30, 36, 60), "gem", flat=True),
-    "i": M((70, 170, 230), "gem", flat=True), "I": M((170, 230, 250), "gem", flat=True),
-    "+": GLINT,
-    "s": M((200, 240, 255), "gem", flat=True, outline=False),
-    "S": M((255, 255, 255), "gem", flat=True, outline=False),
-}
-
-# --------------------------------------------------------------------------
-# TENGU (64) - a mountain goblin in a yamabushi's robes, turned three-
-# quarters so the nose can point at you while it explains why you are
-# wrong. The feather fan is for emphasis. Also for hurricanes.
-# --------------------------------------------------------------------------
-_TENGU_WING = wing([16, 19, 18, 15, 12], [("b", "e"), ("d", "e")], edge="e")
-_TENGU_HEAD = rows_of(24,
-    "......wwwwwwwwww........",
-    "....wwwwwwwwwwwwww......",
-    "...wwwwwwwwwwwwwwww.....",
-    "..wwwwwaaaaaaaaaaaww....",
-    ".wwwwaaaaaaaaaaaaaaaw...",
-    ".wwwaaaaaaaaaaaaaaaaa...",
-    "wwwaaaaWWWWaaaaaWWWWa...",
-    "wwwaaaWWWWWaaaaWWWWWaa..",
-    "wwwaaaaakkkaaaaakkkaaa..",
-    "wwaaaaakk+kaaaakk+kaaa..",
-    "wwaaaaaakkkaaaaakkkaaa..",
-    "wwaaaaaaaaaaaaaaaaaaaaa.",
-    "wwaaappaaaaaaaaaaaappaa.",
-    "wwaaaaaaaaaaaaaaaaaaaa..",
-    "wwwaaaaawwwwwwwwwwaaaa..",
-    ".wwwaaawwwwwwwwwwwwaaa..",
-    ".wwwwwwwwwwwwwwwwwwwa...",
-    "..wwwwwwwwwwwwwwwwwww...",
-    "...wwwwwwwwwwwwwwwww....",
-    "....wwwwwwwwwwwwwww.....",
-    ".....wwwwwwwwwwwwww.....",
-    "......wwwwwwwwwww.......",
-    "........wwwwwww.........",
-)
-# the nose: long, red, and pointed straight at whoever is listening
-_TENGU_NOSE = spans(None, [(0, 4), (0, 9), (0, 14), (0, 17), (0, 16), (0, 12),
-                           (0, 6)], "n")
-_TENGU_NOSE[1] = _TENGU_NOSE[1][:2] + _TENGU_NOSE[1][2:8].replace("n", "m") + _TENGU_NOSE[1][8:]
-_TENGU_NOSE[2] = _TENGU_NOSE[2][:3] + _TENGU_NOSE[2][3:12].replace("n", "m") + _TENGU_NOSE[2][12:]
-_TENGU_TOKIN = rows_of(10,
-    "...tttt...",
-    "..tTTttt..",
-    ".tttttttt.",
-    "tttttttttt",
-    ".c......c.",
-    "..c....c..",
-)
-_TENGU_ROBE = spans(26, [(8, 17), (6, 19), (5, 20), (4, 21), (4, 21), (3, 22),
-                         (3, 22), (3, 22), (3, 22), (3, 22), (2, 23), (2, 23),
-                         (2, 23), (2, 23)], "r")
-# the kesa: a sash across the chest, strung with the fuzzy bonten
-_TENGU_KESA = rows_of(26,
-    "........qq....qq..........",
-    ".......qq......qq.........",
-    "......qq..oo....qq........",
-    ".....qq..oOOo....qq.......",
-    "....qq...oooo.....qq......",
-    "...qq.....oo.......qq.....",
-    "..qq.......qq......qq.....",
-    "..q.......oOOo.....qq.....",
-    "..........oooo............",
-    "...........oo.............",
-    "..qqqqqqqqqqqqqqqqqqqqqq..",
-    "..qqqqqqqqqqqqqqqqqqqqqq..",
-)
-_TENGU_LEGS = rows_of(26,
-    "..hhhhhhhhhhhhhhhhhhhhhhh.",
-    "..hhhhhhhhhhhhhhhhhhhhhhh.",
-    "..hhhhhhhhhhhhhhhhhhhhhhh.",
-    "..hhhhhhhhhhh.hhhhhhhhhhh.",
-    "..hhhhhhhhhh...hhhhhhhhhh.",
-    "..hhhhhhhhhh...hhhhhhhhhh.",
-    "..hhhhhhhhhh...hhhhhhhhhh.",
-    "...hhhhhhhh.....hhhhhhhh..",
-    "....llllll.......llllll...",
-    "..gggggggggg...gggggggggg.",
-    ".....gg.............gg....",
-    ".....gg.............gg....",
-)
-_TENGU_ARM_FAN = spans(None, [(8, 12), (7, 12), (6, 11), (5, 10), (4, 9),
-                              (3, 8), (2, 7), (1, 6), (0, 5)], "R")
-_TENGU_FAN = rows_of(13,
-    "....FFFFF....",
-    "..FFvFFFvFF..",
-    ".FFFvFFFvFFF.",
-    "FFFFFvFvFFFFF",
-    "FFFFFvFvFFFFF",
-    ".FFFFFvFFFFF.",
-    "..FFFFvFFFF..",
-    "....FFvFF....",
-    "......y......",
-    "......y......",
-    "......y......",
-)
-_TENGU_ARM_HIP = rows_of(6,
-    "RRRR..", "RRRRR.", ".RRRRR", "..RRRR", "..aaa.", ".aaa..",
-)
-
-
-def _tengu():
-    cv = canvas(64, 64)
-    dy = 6
-    stamp(cv, 38, 12 + dy, _TENGU_WING)
-    left = mirror(_TENGU_WING)
-    stamp(cv, 26 - len(left[0]), 14 + dy, left)
-    stamp(cv, 19, 44 + dy, _TENGU_LEGS)
-    stamp(cv, 19, 30 + dy, _TENGU_ROBE)
-    stamp(cv, 19, 30 + dy, _TENGU_KESA, onto=True)
-    stamp(cv, 41, 32 + dy, _TENGU_ARM_HIP)
-    stamp(cv, 12, 24 + dy, _TENGU_ARM_FAN)
-    stamp(cv, 5, 6 + dy, _TENGU_FAN)
-    stamp(cv, 18, 7 + dy, _TENGU_HEAD)
-    stamp(cv, 39, 19 + dy, _TENGU_NOSE)
-    stamp(cv, 26, 5 + dy, _TENGU_TOKIN)
-    return finish(cv)
-
-
-TENGU64 = _tengu()
-TENGU64_MAT = {
-    "a": M((222, 72, 60), "skin"), "p": M((250, 120, 110), "skin", over="a"),
-    "n": M((226, 76, 62), "skin"),
-    "w": M((244, 242, 236), "fur"), "W": M((250, 250, 248), "fur"),
-    "k": M((40, 26, 26), "gem", flat=True), "+": GLINT,
-    "t": M((40, 40, 52), "cloth"), "T": M((90, 90, 110), "cloth", over="t"),
-    "c": M((240, 220, 150), "cloth", outline=False),
-    # the robe is kept off white so the beard reads against it
-    "r": M((196, 208, 226), "cloth"), "R": M((184, 198, 218), "cloth"),
-    "q": M((240, 170, 60), "cloth"),
-    "o": M((250, 150, 60), "fur"), "O": M((255, 200, 120), "fur", over="o"),
-    "h": M((110, 110, 134), "cloth"),
-    "g": M((150, 110, 70), "matte"),
-    "b": M((40, 40, 56), "fur"), "d": M((62, 60, 82), "fur"),
-    "e": M((24, 24, 36), "fur"), "m": M((252, 140, 120), "skin", over="n"),
-    "l": M((244, 242, 236), "cloth"), "v": M((90, 120, 60), "plant", over="F"),
-    "F": M((120, 150, 80), "plant"), "y": M((150, 110, 70), "matte"),
-}
-
-# --------------------------------------------------------------------------
-# CERBERUS (64) - three heads, one very small dog brain, shared badly: the
-# middle one is delighted to see you, the left one would like to set you
-# on fire, and the right one is asleep.
-# --------------------------------------------------------------------------
-def _pup(w, h, face, ears, fur="a"):
-    """A head: skull, ears behind it, face on top. Each head has its own fur
-    material so the three separate instead of fusing into one lump."""
-    head = canvas(w + 8, h + 12)
-    skull = spans(w, ellipse(w, h), fur)
-    for part, x, y in ears:
-        stamp(head, x, y, [r.replace("a", fur) for r in part])
-    stamp(head, 4, 8, skull)
-    stamp(head, 4, 8, face)
-    return finish(head)
-
-
-_CERB_EAR_UP = spans(None, [(4, 4), (3, 5), (3, 5), (2, 6), (2, 6), (1, 7),
-                            (1, 7), (0, 7), (0, 7)], "a")
-_CERB_EAR_UP = inset(_CERB_EAR_UP, "a", "i", 1)
-_CERB_EAR_FLOP = spans(None, [(0, 4), (0, 5), (0, 5), (0, 5), (0, 5), (1, 5),
-                              (1, 5), (1, 4), (2, 4), (2, 3)], "e")
-
-_CERB_FACE_HAPPY = sym(
-    ".............",
-    ".............",
-    ".............",
-    ".............",
-    ".............",
-    ".............",
-    "....kkkk.....",
-    "...k++ook....",
-    "...k++ook....",
-    "...kooook....",
-    "....kkkk.....",
-    "..........mmm",
-    "..pp....mmmnn",
-    ".......mmmmnn",
-    "......mmmmmmm",
-    "......mmmmmqq",
-    "......mmmmqqq",
-    ".......mmmqtt",
-    "........mmqtt",
-    "...........tt",
-    "...........tt",
-    "............t",
-)
-for _y in (7, 8):
-    _CERB_FACE_HAPPY[_y] = _CERB_FACE_HAPPY[_y][:17] + "k++ook" + _CERB_FACE_HAPPY[_y][23:]
-
-_CERB_FACE_FIERCE = sym(
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..kk......",
-    "...kkk....",
-    "..kkkkk...",
-    "..kyyyk...",
-    "..kyYyk...",
-    "...kkk....",
-    ".......mmm",
-    "......mmnn",
-    ".....mmmnn",
-    ".....mmmmm",
-    ".....mqqqq",
-    ".....mqTqT",
-    "......mmmm",
-)
-
-_CERB_FACE_SLEEPY = sym(
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..k....k..",
-    "...kkkk...",
-    "..........",
-    ".......mmm",
-    "......mmnn",
-    ".....mmmnn",
-    ".....mmmmm",
-    "......mmmm",
-    ".......mmq",
-    "........mm",
-)
-
-_CERB_HEAD_MID = _pup(26, 22, _CERB_FACE_HAPPY,
-                      [(_CERB_EAR_UP, 3, 0), (mirror(_CERB_EAR_UP), 23, 0)])
-_CERB_HEAD_L = _pup(20, 17, _CERB_FACE_FIERCE,
-                    [(_CERB_EAR_UP, 2, 1), (mirror(_CERB_EAR_UP), 18, 1)], "b")
-_CERB_HEAD_R = _pup(20, 17, _CERB_FACE_SLEEPY,
-                    [(_CERB_EAR_FLOP, 1, 10), (mirror(_CERB_EAR_FLOP), 22, 10)], "d")
-
-_CERB_BREATH = rows_of(12,
-    ".......ff...",
-    "....fffFFf..",
-    "..ffFFWWFff.",
-    "fFFWWWWWWFf.",
-    ".fFFWWWWFFf.",
-    "..ffFFWFff..",
-    "....fff.....",
-)
-_CERB_ZZ = rows_of(6, "..zzzz", "....z.", "...z..", "..zzzz", "zzz...", ".z....", "zzz...")
-
-_CERB_BODY = spans(34, ellipse(34, 28), "a")
-_CERB_CHEST = spans(34, [None] * 3 + [(12, 21), (11, 22), (11, 22), (12, 21),
-                                       (12, 21), (13, 20), (14, 19), (15, 18)], "c")
-_CERB_COLLAR = rows_of(34,
-    "....s.....s.....s.....s.....s.....",
-    "...sSs...sSs...sSs...sSs...sSs....",
-    "..llllllllllllllllllllllllllllll..",
-    ".llllllllllllllllllllllllllllllll.",
-    "..llllllllllllllllllllllllllllll..",
-)
-_CERB_LEG = rows_of(7,
-    ".ggggg.", "ggggggg", "ggggggg", "ggggggg", "ggggggg", "ggggggg", "ggggggg",
-    "ggggggg", "ggggggg", "ggggggg", "ggggggg", "PPPPPPP", "PPPPPPP", "P.P.P.P",
-)
-_CERB_TAIL = spans(None, plume(17, 2, 9, 2, 7, w_base=4), "g")
-_CERB_TAIL = recolour(_CERB_TAIL, (0, 7), "g", "f")
-_CERB_TAIL = recolour(_CERB_TAIL, (0, 3), "f", "W")
-
-
-def _cerberus():
-    cv = canvas(64, 64)
-    stamp(cv, 47, 37, _CERB_TAIL)
-    stamp(cv, 15, 30, _CERB_BODY)
-    stamp(cv, 15, 30, _CERB_CHEST, onto=True)
-    stamp(cv, 20, 46, _CERB_LEG)
-    stamp(cv, 37, 46, mirror(_CERB_LEG))
-    stamp(cv, -3, 12, _CERB_HEAD_L)
-    stamp(cv, 39, 12, _CERB_HEAD_R)
-    stamp(cv, 15, 30, _CERB_COLLAR)
-    stamp(cv, 15, 2, _CERB_HEAD_MID)
-    stamp(cv, 0, 26, mirror(_CERB_BREATH))
-    stamp(cv, 57, 5, _CERB_ZZ)
-    return finish(cv)
-
-
-CERBERUS64 = _cerberus()
-CERBERUS64_MAT = {
-    "a": M((112, 66, 66), "fur"), "b": M((94, 56, 60), "fur"),
-    "d": M((124, 78, 74), "fur"), "e": M((100, 60, 62), "fur"),
-    "i": M((200, 110, 110), "skin"),
-    "m": M((214, 170, 150), "fur"), "c": M((240, 130, 70), "fur", over="a"),
-    "p": M((230, 120, 120), "skin", over="a"),
-    "n": M((30, 22, 28), "gem", flat=True), "q": M((80, 26, 36), "skin", flat=True),
-    "t": M((240, 110, 130), "skin"), "T": M((250, 246, 236), "gem", flat=True),
-    "k": M((26, 18, 24), "gem", flat=True), "+": GLINT,
-    "o": M((120, 60, 40), "gem", flat=True),
-    "y": M((255, 170, 60), "gem", flat=True), "Y": M((255, 240, 180), "gem", flat=True),
-    "l": M((200, 40, 50), "matte"),
-    "g": M((126, 80, 78), "fur"), "P": M((240, 130, 70), "fur"),
-    "s": M((200, 206, 220), "metal"), "S": M((250, 252, 255), "metal"),
-    "f": M((255, 140, 50), "gem", emissive=0.8), "F": M((255, 90, 40), "gem", emissive=0.7),
-    "W": M((255, 244, 200), "gem", emissive=1.0),
-    "z": M((220, 226, 255), "gem", flat=True, outline=False),
-}
-
-# --------------------------------------------------------------------------
-# BAKU (64) - the dream-eater, shaped like a tapir. Where a real tapir has
-# a pale saddle, this one has a strip of night sky. It is drinking a dream
-# through its trunk and does not much care whose it was.
-# --------------------------------------------------------------------------
-_BAKU_BODY = spans(40, ellipse(40, 26), "a")
-_BAKU_SADDLE = spans(40, [(13, 27)] * 26, "n")
-_BAKU_HEAD = spans(22, ellipse(22, 20), "h")
-_BAKU_FACE = rows_of(22,
-    "......................",
-    "......................",
-    "......................",
-    "......................",
-    "......................",
-    "......................",
-    "......................",
-    "........kkkkk.........",
-    ".......k.kkkkk........",
-    "........yyyyy.........",
-    ".........yyy..........",
-    "......................",
-    "....pp................",
-    "...ppp................",
-)
-_BAKU_EAR = rows_of(6, ".hhhh.", "hhiihh", "hiiiih", "hiiiih", ".hhhh.")
-_BAKU_LEG = rows_of(6,
-    "llllll", "llllll", "llllll", "llllll", "llllll", "llllll", "llllll",
-    "oooooo", "o.oo.o",
-)
-_BAKU_LEG_FAR = [r.replace("l", "L") for r in _BAKU_LEG]
-_BAKU_TAIL = rows_of(5, "..aa.", ".aa..", "aa...", "ttt..", "tt...")
-_BAKU_DREAM = rows_of(18,
-    ".....dddd.........",
-    "...ddddddd..ddd...",
-    "..dddDDddddddddd..",
-    ".ddDDDDddddddmmdd.",
-    "dddDDddddddddmmddd",
-    "ddddddddddddmmdddd",
-    ".dddddddddmmmddd..",
-    "..dddd.ddddddd....",
-    "......dd..........",
-    ".....dd...........",
-)
-_BAKU_SPARK = rows_of(3, ".s.", "sSs", ".s.")
-
-
-def _baku():
-    cv = canvas(64, 64)
-    stamp(cv, 49, 28, _BAKU_TAIL)
-    stamp(cv, 23, 42, _BAKU_LEG_FAR)
-    stamp(cv, 48, 42, _BAKU_LEG_FAR)
-    stamp(cv, 16, 22, _BAKU_BODY)
-    stamp(cv, 16, 22, _BAKU_SADDLE, onto=True)
-    for x, y in ((31, 27), (37, 31), (34, 36), (40, 26), (30, 41), (39, 43),
-                 (33, 32), (41, 37)):
-        if cv[y][x] == "n":
-            cv[y][x] = "s"
-    for x, y in ((35, 29), (37, 38)):
-        stamp(cv, x - 1, y - 1, rows_of(3, ".s.", "sSs", ".s."), onto=True)
-    stamp(cv, 17, 44, _BAKU_LEG)
-    stamp(cv, 41, 44, _BAKU_LEG)
-    stamp(cv, 17, 13, _BAKU_EAR)
-    stamp(cv, 5, 17, _BAKU_HEAD)
-    stamp(cv, 5, 17, _BAKU_FACE, onto=True)
-    # the trunk curls down, then up to the dream it is drinking
-    stamp(cv, 0, 4, _BAKU_DREAM)
-    tube(cv, [(9, 30, 3.5), (5, 32, 3), (2, 28, 2.5), (2, 22, 2),
-              (4, 17, 1.6), (6, 14, 1.4)], "r")
-    for x, y in ((3, 30), (2, 26), (3, 21)):
-        cv[y][x] = "R"
-    for x, y in ((22, 4), (30, 10), (56, 18)):
-        stamp(cv, x, y, _BAKU_SPARK)
-    return finish(cv)
-
-
-BAKU64 = _baku()
-BAKU64_MAT = {
-    "a": M((70, 60, 110), "fur"), "h": M((82, 70, 124), "fur"),
-    "r": M((104, 88, 148), "fur"), "R": M((74, 62, 112), "fur", over="r"),
-    "n": M((30, 34, 76), "fur", over="a"),
-    "i": M((210, 150, 190), "skin"),
-    "l": M((78, 66, 118), "fur"), "L": M((58, 50, 92), "fur"),
-    "o": M((200, 190, 220), "stone"),
-    "t": M((240, 220, 255), "fur"),
-    "k": M((24, 20, 40), "gem", flat=True),
-    "y": M((250, 220, 130), "gem", flat=True),
-    "p": M((220, 140, 190), "skin", over="h"),
-    "d": M((250, 190, 226), "cloth", emissive=0.4),
-    "D": M((255, 236, 248), "cloth", emissive=0.6),
-    "m": M((255, 246, 180), "gem", emissive=0.7),
-    "s": M((230, 230, 255), "gem", flat=True, outline=False),
-    "S": M((255, 255, 255), "gem", flat=True, outline=False),
-}
-
-# --------------------------------------------------------------------------
-# MINOTAUR (64) - furious, cornered, and not sure why. Snorting, brows
-# down, a labrys too big for it braced in one fist. The nose ring is gold;
-# someone once thought it could be led.
-# --------------------------------------------------------------------------
-_MINO_HEAD = spans(24, ellipse(24, 20), "a")
-_MINO_MUZZLE = spans(18, ellipse(18, 10), "m")
-_MINO_FACE = rows_of(24,
-    "........................",
-    "........................",
-    "........................",
-    "........................",
-    "..kkkk............kkkk..",
-    "....kkkk........kkkk....",
-    "....kkrrk......krrkk....",
-    ".....kErk......krEk.....",
-    "......kk........kk......",
-)
-_MINO_SNOUT = rows_of(18,
-    "..................",
-    "..................",
-    "....nnn....nnn....",
-    "....nnn....nnn....",
-    "..................",
-    "......gggggg......",
-    ".....g......g.....",
-    ".....g......g.....",
-    "......gggggg......",
-)
-_MINO_EAR = rows_of(7, "..eeee.", "eeeiiie", ".eeeeee", "...ee..")
-_MINO_TUFT = rows_of(10, "..d..d.d..", ".ddddddddd", "dddddddddd", ".dddddddd.")
-_MINO_STEAM = rows_of(7, "..vv...", ".vVVv..", "vVVVvv.", ".vvvVv.", "...vv..")
-_MINO_TORSO = spans(30, [(6, 23), (3, 26), (1, 28), (0, 29), (0, 29), (0, 29),
-                         (0, 29), (1, 28), (2, 27), (3, 26), (4, 25), (5, 24),
-                         (6, 23), (7, 22), (7, 22), (8, 21)], "a")
-_MINO_CHEST = rows_of(30,
-    "..............................",
-    "..............................",
-    "..............................",
-    ".......qqqqqq....qqqqqq.......",
-    "......q......qqqq......q......",
-    "..............qq..............",
-    "..............................",
-    "..........qq......qq..........",
-    "..........qq......qq..........",
-    "..........qq......qq..........",
-    "..........qq......qq..........",
-)
-_MINO_ARM = rows_of(8,
-    ".bbbbb..", "bbbbbbb.", "bbbbbbbb", "bbbbbbbb", "bbbbbbbb", ".bbbbbbb",
-    ".bbbbbbb", "..GGGGGG", "..GGGGGG", "..bbbbbb", "..bbbbbb", "..bbbbbb",
-    "..bbbbbb", "..bbbbb.",
-)
-_MINO_LOIN = spans(22, [(0, 21), (0, 21), (1, 20), (1, 20), (2, 19), (2, 19),
-                        (3, 18), (5, 16), (7, 14)], "c")
-_MINO_LOIN[0] = _MINO_LOIN[1] = "G" * 22
-_MINO_LEG = rows_of(7,
-    "aaaaaaa", "aaaaaaa", "aaaaaaa", ".aaaaaa", ".aaaaa.", ".aaaaa.",
-    ".aaaaa.", ".ddddd.", "hhhhhhh", "hhh.hhh",
-)
-_MINO_AXE = rows_of(16,
-    ".....x....x.....",
-    "..xxxx....xxxx..",
-    ".xXXxx....xxXXx.",
-    "xXXxxxyyyyxxxXXx",
-    "xXxxxxyyyyxxxxXx",
-    "xXxxxxyyyyxxxxXx",
-    "xXXxxxyyyyxxxXXx",
-    ".xXXxx.yy.xxXXx.",
-    "..xxxx.yy.xxxx..",
-    ".....x.yy.x.....",
-) + [".......yy......."] * 34
-
-
-def _minotaur():
-    cv = canvas(64, 64)
-    # horns sweep out, then up and in at the tips
-    tube(cv, [(22, 14, 3), (15, 12, 2.6), (10, 7, 2.1), (10, 2, 1.5), (12, 0, 1)], "w")
-    tube(cv, [(41, 14, 3), (48, 12, 2.6), (53, 7, 2.1), (53, 2, 1.5), (51, 0, 1)], "w")
-    for x, y in ((10, 2), (11, 1), (53, 2), (52, 1), (10, 3), (53, 3)):
-        cv[y][x] = "W"
-    stamp(cv, 49, 45, _MINO_LEG)
-    stamp(cv, 16, 30, _MINO_TORSO)
-    stamp(cv, 16, 30, _MINO_CHEST, onto=True)
-    stamp(cv, 21, 45, _MINO_LEG)
-    stamp(cv, 35, 45, _MINO_LEG)
-    stamp(cv, 20, 44, _MINO_LOIN)
-    stamp(cv, 9, 32, mirror(_MINO_ARM))
-    stamp(cv, 48, 16, _MINO_AXE)
-    stamp(cv, 47, 32, _MINO_ARM)
-    stamp(cv, 13, 17, _MINO_EAR)
-    stamp(cv, 44, 17, mirror(_MINO_EAR))
-    stamp(cv, 20, 11, _MINO_HEAD)
-    stamp(cv, 20, 11, _MINO_FACE, onto=True)
-    stamp(cv, 23, 21, _MINO_MUZZLE)
-    stamp(cv, 23, 21, _MINO_SNOUT)
-    stamp(cv, 27, 9, _MINO_TUFT)
-    stamp(cv, 20, 28, mirror(_MINO_STEAM))
-    stamp(cv, 38, 28, _MINO_STEAM)
-    return finish(cv)
-
-
-MINOTAUR64 = _minotaur()
-MINOTAUR64_MAT = {
-    "a": M((150, 92, 60), "fur"), "b": M((140, 86, 56), "fur"),
-    "d": M((70, 44, 36), "fur"), "e": M((136, 82, 54), "fur"),
-    "i": M((210, 140, 120), "skin"),
-    "m": M((222, 180, 150), "fur"), "n": M((60, 30, 30), "gem", flat=True),
-    "c": M((180, 50, 44), "cloth"), "q": M((110, 64, 44), "fur", over="a"),
-    "g": M((240, 196, 80), "metal", outline=(84, 54, 26)),
-    "G": M((220, 176, 70), "metal", outline=(84, 54, 26)),
-    "w": M((236, 226, 196), "stone"), "W": M((140, 120, 100), "stone"),
-    "k": M((40, 20, 20), "gem", flat=True),
-    "y": M((130, 90, 56), "matte"),
-    "r": M((255, 90, 60), "gem", flat=True), "E": M((255, 220, 180), "gem", flat=True),
-    "h": M((60, 50, 50), "stone"),
-    "x": M((170, 176, 190), "metal"), "X": M((236, 240, 250), "metal"),
-    "v": M((236, 240, 248), "cloth", outline=False),
-    "V": M((255, 255, 255), "cloth", outline=False),
-}
-
-# --------------------------------------------------------------------------
-# MEDUSA (64) - her hair is friendlier than she is. Seven small snakes, all
-# delighted to meet you; one gorgon underneath them, arms folded, who would
-# rather you had not come.
-# --------------------------------------------------------------------------
-_MEDUSA_HEAD = spans(20, ellipse(20, 18), "a")
-_MEDUSA_FACE = sym(
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..kk......",
-    "...kkk....",
-    "..kyyk....",
-    "..kyrk....",
-    "...kk.....",
-    "..........",
-    "..pp......",
-    "..........",
-    "........mm",
-    ".......m..",
-)
-# (the frown is drawn as a downturned line, the corners lower than the middle)
-_MEDUSA_CHITON = spans(26, [(6, 19), (5, 20), (4, 21), (4, 21), (4, 21), (4, 21),
-                            (4, 21), (5, 20), (5, 20), (5, 20), (4, 21), (4, 21),
-                            (3, 22), (3, 22), (2, 23), (2, 23), (1, 24), (1, 24),
-                            (0, 25), (0, 25)], "c")
-_MEDUSA_CHITON[8] = _MEDUSA_CHITON[9] = "....." + "o" * 16 + "....."
-_MEDUSA_FOLDS = rows_of(26,
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    "..........................",
-    ".......C.....C....C.......",
-    ".......C.....C....C.......",
-    "......C......C.....C......",
-    "......C......C.....C......",
-    ".....C.......C......C.....",
-    ".....C.......C......C.....",
-    "....C........C.......C....",
-    "....C........C.......C....",
-    "...C.........C........C...",
-    "...C.........C........C...",
-)
-# arms folded across the chest
-_MEDUSA_ARMS = rows_of(24,
-    "bb....................bb",
-    "bbb..................bbb",
-    "bbbb................bbbb",
-    ".bbbbbbbbbbbbbbbbbbbbbb.",
-    "..bbbbbbbbbbbbbbbbbbbb..",
-    "..OOObbbbbbbbbbbbbbOOO..",
-    "...bbbbbbbbbbbbbbbbbb...",
-)
-_MEDUSA_LEG = rows_of(4, "aaaa", "aaaa", "aaaa", "aaaa", "oooo", "aaaa", "oooo", "ssss")
-
-
-_MEDUSA_SNAKE_HEAD = rows_of(9,
-    "..hhhhh..",
-    ".hhhhhhh.",
-    "hhhWkhhhh",
-    "hhhkkhhhh",
-    "uuuuuhhh.",
-    ".uuuuuh..",
-)
-_MEDUSA_TONGUE = rows_of(4, "tt..", "..tt", "tt..")
-
-
-def _snake(cv, path, body, face_right):
-    """A snake: a scaled tube with a pale belly, and a proper head - wider
-    than its neck, with an eye and a tongue - so it reads as an animal and
-    not as a strand of weed."""
-    tube(cv, path, body, belly="u")
-    x, y, _ = path[-1]
-    x, y = int(round(x)), int(round(y))
-    head = [r.replace("h", body) for r in _MEDUSA_SNAKE_HEAD]
-    if not face_right:
-        head = mirror(head)
-    stamp(cv, x - 4, y - 3, head)
-    tongue = _MEDUSA_TONGUE if face_right else mirror(_MEDUSA_TONGUE)
-    stamp(cv, x + 5 if face_right else x - 8, y, tongue)
-
-
-def _medusa():
-    cv = canvas(64, 64)
-    # seven snakes rooted along the scalp, curling up and out
-    snakes = [
-        ([(27, 17, 3.0), (18, 16, 2.7), (12, 19, 2.4), (8, 17, 2.2)], "g", False),
-        ([(28, 15, 3.0), (22, 9, 2.7), (15, 8, 2.4), (11, 6, 2.2)], "G", False),
-        ([(32, 14, 3.0), (31, 7, 2.6), (27, 4, 2.3)], "g", False),
-        ([(35, 15, 3.0), (41, 9, 2.7), (48, 8, 2.4), (52, 6, 2.2)], "G", True),
-        ([(36, 17, 3.0), (45, 16, 2.7), (51, 19, 2.4), (55, 17, 2.2)], "g", True),
-    ]
-    for path, body, right in snakes:
-        _snake(cv, path, body, right)
-    stamp(cv, 26, 50, _MEDUSA_LEG)
-    stamp(cv, 34, 50, _MEDUSA_LEG)
-    stamp(cv, 19, 31, _MEDUSA_CHITON)
-    stamp(cv, 19, 31, _MEDUSA_FOLDS, onto=True)
-    stamp(cv, 20, 32, _MEDUSA_ARMS)
-    stamp(cv, 22, 14, _MEDUSA_HEAD)
-    stamp(cv, 22, 14, _MEDUSA_FACE, onto=True)
-    return finish(cv)
-
-
-MEDUSA64 = _medusa()
-MEDUSA64_MAT = {
-    # grey-lilac skin, so the emerald snakes stand clear of her
-    "a": M((214, 206, 226), "skin"), "b": M((204, 196, 218), "skin"),
-    "p": M((220, 170, 170), "skin", over="a"),
-    "m": M((110, 70, 90), "skin", flat=True),
-    "g": M((52, 150, 104), "scale"), "G": M((80, 176, 96), "scale"),
-    "u": M((236, 226, 150), "scale", over="g"),
-    "W": M((255, 255, 255), "gem", flat=True),
-    "t": M((230, 60, 80), "skin", flat=True),
-    "c": M((110, 70, 160), "cloth"), "C": M((84, 50, 130), "cloth", over="c"),
-    "o": M((236, 190, 80), "metal", outline=(84, 54, 26)),
-    "O": M((236, 190, 80), "metal", outline=(84, 54, 26)),
-    "s": M((150, 110, 70), "matte"),
-    "k": M((24, 20, 30), "gem", flat=True),
-    "y": M((230, 240, 90), "gem", flat=True), "r": M((30, 30, 20), "gem", flat=True),
-}
-
-# --------------------------------------------------------------------------
-# HARPY (64) - shrieks first, considers later. Wings where her arms should
-# be, talons where her feet should be, and her mouth already open.
-# --------------------------------------------------------------------------
-_HARPY_WING = wing([22, 25, 24, 21, 18, 14], [("b", "d"), ("B", "d")], gap=3, edge="e")
-_HARPY_HAIR = spans(24, ellipse(24, 22), "h")
-_HARPY_CREST = rows_of(24,
-    "......h....h....h.......",
-    ".....hh...hh...hh.......",
-    "....hhh..hhh..hhh..h....",
-    "...hhhh.hhhh.hhhh.hh....",
-)
-_HARPY_FACE = sym(
-    "............",
-    "............",
-    "............",
-    "............",
-    "............",
-    ".....aaaaaaa",
-    "....aaaaaaaa",
-    "...aaaaaaaaa",
-    "...kkaaaaaaa",
-    "...akkkaaaaa",
-    "...kyyykaaaa",
-    "...kyykaaaaa",
-    "....kkaaaaaa",
-    "...ppaaaaqqq",
-    "....aaaaqqqq",
-    "....aaaaqqrr",
-    ".....aaaaqqq",
-    "......aaaaaa",
-    "........aaaa",
-)
-_HARPY_BODY = spans(16, [(4, 11), (3, 12), (2, 13), (2, 13), (2, 13), (2, 13),
-                         (3, 12), (3, 12), (4, 11), (4, 11), (5, 10)], "c")
-_HARPY_TAIL = rows_of(18,
-    "......bbbbbb......",
-    "....bbBBbbBBbb....",
-    "..bbBBbbBBbbBBbb..",
-    ".bBBbb.bBBb.bbBBb.",
-    "bBBb...bBBb...bBBb",
-    "bBb....bBBb....bBb",
-    "bb.....bBBb.....bb",
-    "........bb........",
-)
-_HARPY_LEG = rows_of(8,
-    "..bbbb..", "..bbbb..", "...ll...", "...ll...", "...ll...", "...ll...",
-    "..llll..", ".l.ll.l.", "t..ll..t", "t..tt..t",
-)
-
-
-def _harpy():
-    cv = canvas(64, 64)
-    stamp(cv, 23, 42, _HARPY_TAIL)
-    stamp(cv, 37, 12, _HARPY_WING)
-    left = mirror(_HARPY_WING)
-    stamp(cv, 27 - len(left[0]), 12, left)
-    stamp(cv, 22, 50, _HARPY_LEG)
-    stamp(cv, 34, 50, _HARPY_LEG)
-    stamp(cv, 24, 32, _HARPY_BODY)
-    stamp(cv, 20, 9, _HARPY_HAIR)
-    stamp(cv, 20, 6, _HARPY_CREST)
-    stamp(cv, 20, 11, _HARPY_FACE)
-    # shout lines above the head: the wings leave no room beside the mouth
-    for a, b in (((20, 1), (23, 5)), ((31, 0), (31, 4)), ((43, 1), (40, 5))):
-        (x0, y0), (x1, y1) = a, b
-        for i in range(5):
-            x = round(x0 + (x1 - x0) * i / 4.0)
-            y = round(y0 + (y1 - y0) * i / 4.0)
-            cv[y][x] = "v"
-    return finish(cv)
-
-
-HARPY64 = _harpy()
-HARPY64_MAT = {
-    "a": M((246, 214, 190), "skin"), "p": M((246, 150, 140), "skin", over="a"),
-    "h": M((150, 84, 50), "fur"),
-    "b": M((168, 98, 56), "fur"), "B": M((210, 146, 84), "fur"),
-    "d": M((90, 50, 36), "fur"), "e": M((70, 40, 30), "fur"),
-    "c": M((244, 226, 190), "fur"),
-    "l": M((236, 186, 70), "scale"), "t": M((50, 40, 40), "gem", flat=True),
-    "k": M((40, 24, 20), "gem", flat=True),
-    "y": M((250, 200, 60), "gem", flat=True),
-    "q": M((110, 30, 40), "gem", flat=True), "r": M((230, 100, 110), "skin", flat=True),
-    "v": M((255, 250, 230), "gem", flat=True, outline=False),
-}
-
-# --------------------------------------------------------------------------
-# CYCLOPS (64) - one eye, and a blind side to match: the eye is always
-# looking the other way. A shepherd's fleece over one shoulder and a club
-# that was, until recently, a tree.
-# --------------------------------------------------------------------------
-_CYC_HEAD = spans(26, ellipse(26, 22), "a")
-_CYC_HAIR = rows_of(26,
-    ".......hhhhhhhhhhhh.......",
-    ".....hhhhhhhhhhhhhhhh.....",
-    "...hhhhhhhhhhhhhhhhhhhh...",
-    "..hhhhhhhhhhhhhhhhhhhhhh..",
-    ".hhhhhhh.hhhhhhhh.hhhhhhh.",
-    ".hhhh.h...hh..hh...h.hhhh.",
-    "hhhh...............h..hhhh",
-    "hhh....................hhh",
-    "hh......................hh",
-    "h........................h",
-)
-_CYC_EYE = rows_of(12,
-    "...kkkkkk...",
-    ".kkkkkkkkkk.",
-    "kkwwwwwwwwkk",
-    "kwwwwwwwiiik",
-    "kwwwwwwiIiik",
-    "kwwwwwwi+iik",
-    "kwwwwwwiiiik",
-    ".kwwwwwwiiw.",
-    "..kkwwwwkk..",
-    "....kkkk....",
-)
-_CYC_MOUTH = rows_of(14,
-    "q............q",
-    ".qqqqqqqqqqqq.",
-    "..qqqTqqqqqq..",
-    "...qqqqqqqq...",
-)
-_CYC_EAR = rows_of(4, ".aa.", "aaaa", "aapa", "aaaa", ".aa.")
-_CYC_BODY = spans(32, ellipse(32, 26), "a")
-_CYC_FLEECE = spans(32, [(18, 31), (16, 31), (14, 31), (12, 30), (10, 29),
-                         (9, 28), (8, 27), (7, 26), (6, 25), (6, 24), (5, 22),
-                         (5, 20), (5, 18), (6, 16), (7, 14)], "f")
-_CYC_LEG = rows_of(9,
-    "aaaaaaaaa", "aaaaaaaaa", "aaaaaaaaa", ".aaaaaaa.", ".aaaaaaa.",
-    ".sssssss.", "sssssssss", "sssssssss",
-)
-
-
-def _cyclops():
-    cv = canvas(64, 64)
-    # the club over one shoulder, knots and all
-    tube(cv, [(48, 52, 2.5), (51, 36, 3.2), (55, 18, 4.5), (57, 7, 5.5)], "y")
-    for x, y in ((52, 30), (55, 16), (50, 42), (57, 8), (54, 23)):
-        cv[y][x] = "Y"
-    stamp(cv, 19, 53, _CYC_LEG)
-    stamp(cv, 36, 53, _CYC_LEG)
-    stamp(cv, 16, 30, _CYC_BODY)
-    stamp(cv, 16, 30, _CYC_FLEECE, onto=True)
-    for x, y in ((34, 32), (38, 35), (42, 33), (31, 38), (36, 40), (27, 42), (40, 38),
-                 (45, 36), (33, 44), (24, 45)):
-        if cv[y][x] == "f":
-            cv[y][x] = "F"
-    # arms as limbs, shoulder to fist; the right one has the club
-    tube(cv, [(20, 35, 4.5), (13, 42, 4), (12, 48, 4.2)], "b")
-    tube(cv, [(44, 35, 4.5), (50, 40, 4), (50, 45, 4.2)], "b")
-    stamp(cv, 16, 16, _CYC_EAR)
-    stamp(cv, 44, 16, _CYC_EAR)
-    stamp(cv, 19, 9, _CYC_HEAD)
-    stamp(cv, 19, 9, _CYC_HAIR, onto=True)
-    stamp(cv, 26, 13, _CYC_EYE)
-    stamp(cv, 25, 11, rows_of(14, "..kkkkkkkkkk..", ".kkkkkkkkkkkk."))
-    stamp(cv, 25, 25, _CYC_MOUTH)
-    # a stub of a horn, pushing up through the hair
-    stamp(cv, 30, 5, rows_of(4, ".ww.", ".ww.", "wwww", "wwww"))
-    return finish(cv)
-
-
-CYCLOPS64 = _cyclops()
-CYCLOPS64_MAT = {
-    "a": M((226, 170, 130), "skin"), "b": M((214, 160, 122), "skin"),
-    "p": M((196, 130, 110), "skin"),
-    "h": M((90, 60, 44), "fur"),
-    "k": M((50, 30, 30), "gem", flat=True), "w": M((250, 248, 240), "gem", flat=True),
-    "i": M((70, 140, 200), "gem", flat=True), "I": M((150, 200, 240), "gem", flat=True),
-    "+": GLINT,
-    "q": M((110, 40, 40), "gem", flat=True), "T": M((250, 246, 230), "gem", flat=True),
-    "f": M((240, 232, 210), "fur"), "F": M((210, 200, 176), "fur", over="f"),
-    "s": M((130, 90, 60), "matte"),
-    "y": M((140, 96, 60), "plant"), "Y": M((100, 66, 42), "plant", over="y"),
-}
-
-# --------------------------------------------------------------------------
-# PEGASUS (64) - insufferably graceful. A foal in profile, one hoof raised
-# mid-prance, nose in the air and eyes closed, as if you were not worth
-# opening them for.
-# --------------------------------------------------------------------------
-_PEG_WING_NEAR = turn(wing([20, 23, 22, 19, 16, 12], [("w", "c"), ("W", "c")], edge="e"))
-_PEG_WING_FAR = [r.replace("w", "f").replace("W", "F").replace("c", "C").replace("e", "E")
-                 for r in _PEG_WING_NEAR]
-_PEG_HEAD = spans(17, ellipse(17, 14), "a")
-_PEG_MUZZLE = spans(12, ellipse(12, 10), "u")
-_PEG_EYE = rows_of(6, "k....k", ".kkkk.", "k.k...")
-_PEG_LEG = rows_of(3, "aaa", "aaa", "aaa", "aaa", "aaa", "aaa", "aaa", "aaa",
-                   "aaa", "aaa", "hhh", "hhh")
-_PEG_SPARK = rows_of(3, ".s.", "sSs", ".s.")
-
-
-def _pegasus():
-    cv = canvas(64, 64)
-    stamp(cv, 35, 0, _PEG_WING_FAR)
-    # far legs first, a shade darker
-    stamp(cv, 23, 42, [r.replace("a", "b") for r in _PEG_LEG])
-    stamp(cv, 44, 42, [r.replace("a", "b") for r in _PEG_LEG])
-    # the tail streams back and down
-    tube(cv, [(48, 32, 3), (55, 34, 3.5), (59, 41, 3.2), (58, 49, 2.5), (61, 54, 1.5)], "m")
-    tube(cv, [(49, 33, 1.5), (55, 37, 2), (57, 44, 1.6)], "M")
-    stamp(cv, 18, 28, spans(32, ellipse(32, 18), "a"))
-    stamp(cv, 29, 43, _PEG_LEG)
-    stamp(cv, 49, 43, _PEG_LEG)
-    # the near foreleg, raised and folded at the knee
-    tube(cv, [(22, 40, 2.2), (17, 44, 2), (18, 49, 1.8)], "l")
-    stamp(cv, 16, 49, rows_of(4, "hhhh", "hhhh"))
-    # neck up to a head held too high
-    tube(cv, [(25, 34, 6), (21, 27, 5.5), (18, 22, 5)], "a")
-    stamp(cv, 8, 10, _PEG_HEAD)
-    stamp(cv, 1, 9, _PEG_MUZZLE)
-    for x, y in ((3, 12), (4, 13)):
-        cv[y][x] = "n"
-    cv[16][5] = "n"; cv[16][6] = "n"
-    stamp(cv, 11, 14, _PEG_EYE)
-    stamp(cv, 18, 5, rows_of(4, "..a.", ".aa.", "aaa.", "aaaa", "aaaa"))
-    # the mane falls from the crown down the back of the neck
-    tube(cv, [(19, 9, 3), (23, 14, 3.5), (26, 20, 3.5), (28, 27, 3), (29, 32, 2)], "m")
-    tube(cv, [(20, 10, 1.4), (24, 16, 1.8), (27, 25, 1.4)], "M")
-    stamp(cv, 27, 5, _PEG_WING_NEAR)
-    for x, y in ((6, 24), (60, 4), (4, 40)):
-        stamp(cv, x, y, _PEG_SPARK)
-    return finish(cv)
-
-
-PEGASUS64 = _pegasus()
-PEGASUS64_MAT = {
-    "a": M((248, 246, 252), "fur"), "b": M((214, 212, 230), "fur"),
-    "h": M((200, 170, 110), "metal", outline=(84, 60, 30)),
-    "n": M((180, 160, 180), "skin", flat=True),
-    "k": M((70, 60, 100), "gem", flat=True),
-    "m": M((150, 180, 250), "fur"), "M": M((220, 180, 250), "fur"),
-    "u": M((250, 240, 246), "fur"), "l": M((238, 236, 248), "fur"),
-    # the wings are tinted, and blue at the tips, or they vanish into the body
-    "w": M((222, 226, 252), "fur"), "W": M((204, 212, 248), "fur"),
-    "c": M((150, 170, 240), "fur"), "e": M((120, 130, 200), "fur"),
-    "f": M((196, 200, 236), "fur"), "F": M((182, 188, 228), "fur"),
-    "C": M((130, 146, 214), "fur"), "E": M((104, 112, 180), "fur"),
-    "s": M((230, 240, 255), "gem", flat=True, outline=False),
-    "S": M((255, 255, 255), "gem", flat=True, outline=False),
-}
-
-# --------------------------------------------------------------------------
-# CHIMERA (64) - three animals, one very bad mood. The lion is furious, the
-# goat on its back is bored of the lion being furious, and the snake it has
-# for a tail is taking it out on you.
-# --------------------------------------------------------------------------
-def _chimera_mane():
-    """A ragged ring of flame-coloured mane, darker at the rim."""
-    rows = inset(spans(30, ellipse(30, 28), "r"), "r", "R", 4)
-    rows = [list(r) for r in rows]
-    # notch the rim so it reads as tufts, not a disc
-    for y, x in ((0, 13), (0, 16), (2, 6), (2, 23), (6, 1), (6, 28), (13, 0),
-                 (13, 29), (20, 1), (20, 28), (25, 5), (25, 24), (1, 9), (1, 20),
-                 (4, 3), (4, 26), (9, 0), (9, 29), (17, 0), (17, 29)):
-        rows[y][x] = "."
-    return ["".join(r) for r in rows]
-
-
-_CHIM_MANE = _chimera_mane()
-_CHIM_FACE = spans(18, ellipse(18, 16), "a")
-_CHIM_FEATURES = sym(
-    ".........",
-    ".........",
-    ".........",
-    ".kk......",
-    "..kkk....",
-    ".kkyyk...",
-    ".kyyYk...",
-    "..kkk....",
-    ".........",
-    "......mmm",
-    ".....mmmn",
-    "..pp.mmmm",
-    "....mqqqq",
-    "....mqTqq",
-    ".....mmmm",
-)
-_CHIM_EAR = rows_of(6, ".rrrr.", "rraarr", "raaaar", ".rrrr.")
-_CHIM_GOAT = spans(11, ellipse(11, 13), "g")
-_CHIM_GOAT_FACE = rows_of(11,
-    "...........",
-    "...........",
-    "...........",
-    "...........",
-    ".kkk...kkk.",
-    ".koo...ook.",
-    "...........",
-    "...........",
-    "....nnn....",
-    ".....n.....",
-    "...........",
-    "...........",
-    ".....bb....",
-)
-_CHIM_SNAKE_HEAD = rows_of(9,
-    "..sssss..",
-    ".sssssss.",
-    "sssWkssss",
-    "sssskssss",
-    ".uuuusss.",
-    "..uuus...",
-)
-_CHIM_LEG = rows_of(6, "llllll", "llllll", "llllll", "llllll", "llllll",
-                    "llllll", "PPPPPP", "P.PP.P")
-_CHIM_BREATH = rows_of(10,
-    "......ff..",
-    "...fffFFf.",
-    ".ffFFWWFf.",
-    "fFFWWWWFf.",
-    ".ffFFWFf..",
-    "...ffff...",
-)
-
-
-def _chimera():
-    cv = canvas(64, 64)
-    stamp(cv, 27, 44, [r.replace("l", "L") for r in _CHIM_LEG])
-    stamp(cv, 46, 44, [r.replace("l", "L") for r in _CHIM_LEG])
-    # the snake tail, rising from the rump
-    tube(cv, [(50, 40, 3), (57, 38, 2.8), (60, 30, 2.4), (57, 22, 2.2), (55, 17, 2.2)],
-         "s", belly="u")
-    stamp(cv, 50, 12, mirror(_CHIM_SNAKE_HEAD))
-    cv[15][48] = cv[15][47] = "t"
-    cv[14][46] = cv[16][46] = "t"
-    # the goat, rising from the back on its own neck
-    tube(cv, [(40, 36, 4), (42, 28, 3.5), (43, 22, 3.2)], "g")
-    tube(cv, [(40, 13, 2), (37, 10, 1.8), (36, 6, 1.4), (38, 3, 1)], "h")
-    tube(cv, [(46, 13, 2), (49, 10, 1.8), (50, 6, 1.4), (48, 3, 1)], "h")
-    stamp(cv, 38, 12, _CHIM_GOAT)
-    stamp(cv, 38, 12, _CHIM_GOAT_FACE, onto=True)
-    stamp(cv, 22, 31, spans(32, ellipse(32, 19), "a"))
-    stamp(cv, 23, 45, _CHIM_LEG)
-    stamp(cv, 42, 45, _CHIM_LEG)
-    stamp(cv, 4, 12, _CHIM_MANE)
-    stamp(cv, 5, 12, _CHIM_EAR)
-    stamp(cv, 25, 12, _CHIM_EAR)
-    stamp(cv, 10, 19, _CHIM_FACE)
-    stamp(cv, 10, 19, _CHIM_FEATURES, onto=True)
-    stamp(cv, 0, 37, mirror(_CHIM_BREATH))
-    return finish(cv)
-
-
-CHIMERA64 = _chimera()
-CHIMERA64_MAT = {
-    "a": M((232, 176, 100), "fur"), "l": M((222, 164, 92), "fur"),
-    "L": M((190, 136, 76), "fur"), "P": M((170, 112, 70), "fur"),
-    "r": M((200, 70, 44), "fur"), "R": M((244, 124, 56), "fur", over="r"),
-    "m": M((250, 226, 190), "fur", over="a"),
-    "p": M((240, 140, 110), "skin", over="a"),
-    "n": M((70, 40, 40), "gem", flat=True),
-    "q": M((110, 36, 40), "gem", flat=True), "T": M((255, 252, 240), "gem", flat=True),
-    "k": M((50, 30, 26), "gem", flat=True),
-    "y": M((255, 200, 60), "gem", flat=True), "Y": M((255, 244, 180), "gem", flat=True),
-    "g": M((214, 208, 200), "fur"), "h": M((120, 100, 90), "stone"),
-    "o": M((220, 180, 70), "gem", flat=True), "b": M((170, 150, 140), "fur"),
-    "s": M((90, 150, 80), "scale"), "u": M((230, 220, 150), "scale", over="s"),
-    "W": M((255, 255, 255), "gem", flat=True), "t": M((230, 60, 80), "skin", flat=True),
-    "f": M((255, 140, 50), "gem", emissive=0.8), "F": M((255, 90, 40), "gem", emissive=0.7),
-}
-
-# --------------------------------------------------------------------------
-# SATYR (64) - plays the pipes. Will not stop playing the pipes. Eyes shut,
-# one hoof up, lost in a tune it has been playing for six hundred years.
-# --------------------------------------------------------------------------
-_SATYR_HEAD = spans(20, ellipse(20, 18), "a")
-_SATYR_CURLS = rows_of(23,
-    "......cc..cc..cc.......",
-    "....ccCCccCCccCCcc.....",
-    "...cCCccCCccCCccCCc....",
-    "..ccccccccccccccccccc..",
-    ".cccCcccccCccccCccccc..",
-    ".ccccc.c..c...c..ccccc.",
-    "ccccc.............cccc.",
-    "cccc...............ccc.",
-    "ccc.................cc.",
-    "cc...................c.",
-)
-_SATYR_FACE = sym(
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..k...k...",
-    "...kkk....",
-    "..........",
-    "..qq......",
-)
-_SATYR_EAR = rows_of(5, "a....", "aa...", "aaa..", "aaaa.", ".aaa.")
-_SATYR_PIPES = rows_of(13,
-    "ppppppppppppp",
-    "PPPPPPPPPPPPP",
-    "p.p.p.p.p.p.p",
-    "p.p.p.p.p.p..",
-    "p.p.p.p.p....",
-    "p.p.p.p......",
-    "p.p.p........",
-    "p.p..........",
-    "p............",
-)
-_SATYR_TORSO = spans(16, [(4, 11), (3, 12), (2, 13), (2, 13), (2, 13), (2, 13),
-                          (3, 12), (3, 12), (3, 12), (3, 12), (3, 12), (4, 11),
-                          (4, 11)], "a")
-_SATYR_SASH = rows_of(16,
-    "..........gg....",
-    ".........gGg....",
-    "........ggg.....",
-    ".......gGg......",
-    "......ggg.......",
-    ".....gGg........",
-    "....ggg.........",
-    "...gGg..........",
-)
-_SATYR_NOTE = rows_of(4, "...n", "..nn", "..n.", "..n.", "nnn.", "nnn.")
-
-
-def _satyr():
-    cv = canvas(64, 64)
-    # goat legs: thigh forward, hock back, the right one kicked up
-    tube(cv, [(28, 44, 4.5), (25, 51, 3.5), (28, 56, 2.5), (27, 60, 2)], "f")
-    tube(cv, [(36, 44, 4.5), (43, 47, 3.5), (44, 53, 2.5), (47, 55, 2)], "f")
-    stamp(cv, 24, 59, rows_of(6, "hhhhhh", "hh.hhh"))
-    stamp(cv, 46, 54, rows_of(4, "hhh.", "hhhh", "hhhh"))
-    stamp(cv, 22, 38, spans(20, ellipse(20, 11), "F"))
-    stamp(cv, 24, 26, _SATYR_TORSO)
-    stamp(cv, 24, 26, _SATYR_SASH, onto=True)
-    # both arms up to the pipes
-    tube(cv, [(26, 28, 2.2), (21, 26, 2), (23, 21, 1.8)], "b")
-    tube(cv, [(38, 28, 2.2), (43, 26, 2), (40, 21, 1.8)], "b")
-    stamp(cv, 17, 14, _SATYR_EAR)
-    stamp(cv, 42, 14, mirror(_SATYR_EAR))
-    stamp(cv, 22, 7, _SATYR_HEAD)
-    stamp(cv, 20, 5, _SATYR_CURLS)
-    stamp(cv, 22, 7, _SATYR_FACE, onto=True)
-    tube(cv, [(24, 6, 2), (20, 4, 1.6), (19, 1, 1.2)], "w")
-    tube(cv, [(39, 6, 2), (43, 4, 1.6), (44, 1, 1.2)], "w")
-    stamp(cv, 26, 20, _SATYR_PIPES)
-    for x, y in ((6, 10), (54, 12), (3, 30), (56, 30), (50, 2)):
-        stamp(cv, x, y, _SATYR_NOTE)
-    return finish(cv)
-
-
-SATYR64 = _satyr()
-SATYR64_MAT = {
-    "a": M((244, 206, 170), "skin"), "b": M((236, 198, 162), "skin"),
-    "p": M((236, 190, 90), "plant", outline=(90, 60, 30)),
-    "P": M((150, 110, 60), "plant", outline=(90, 60, 30)),
-    "c": M((140, 70, 44), "fur"), "C": M((190, 110, 64), "fur", over="c"),
-    "k": M((70, 40, 30), "gem", flat=True),
-    "w": M((236, 226, 200), "stone"),
-    "f": M((150, 100, 64), "fur"), "F": M((130, 86, 56), "fur"),
-    "h": M((60, 44, 40), "stone"),
-    "g": M((90, 160, 70), "plant"), "G": M((150, 206, 100), "plant", over="g"),
-    "n": M((255, 246, 200), "gem", flat=True, outline=False),
-}
-SATYR64_MAT["q"] = M((246, 150, 140), "skin", over="a")
-
-# --------------------------------------------------------------------------
-# NEMEAN LION (64) - its hide has never once been cut. Seated and serene,
-# coat shining like beaten gold, the heads of the arrows that tried lying
-# snapped at its paws.
-# --------------------------------------------------------------------------
-def _nemean_mane():
-    """A heavy mane, darker at the rim, notched into tufts."""
-    rows = inset(spans(40, ellipse(40, 36), "r"), "r", "R", 5)
-    rows = [list(r) for r in rows]
-    for y, x in ((0, 16), (0, 23), (1, 10), (1, 29), (3, 5), (3, 34), (6, 2),
-                 (6, 37), (10, 0), (10, 39), (15, 0), (15, 39), (21, 0),
-                 (21, 39), (26, 1), (26, 38), (30, 4), (30, 35), (33, 9),
-                 (33, 30), (35, 15), (35, 24)):
-        rows[y][x] = "."
-    return ["".join(r) for r in rows]
-
-
-_NEM_MANE = _nemean_mane()
-_NEM_FACE = spans(24, ellipse(24, 22), "a")
-_NEM_FEATURES = sym(
-    "............",
-    "............",
-    "............",
-    "............",
-    "............",
-    "............",
-    "....kkkk....",
-    "...kyyyyk...",
-    "....kYyk....",
-    "............",
-    "..........mm",
-    ".........mnn",
-    "........mmnn",
-    ".......mmmmm",
-    ".......mmmmq",
-    "........mmqm",
-    ".........mmm",
-)
-_NEM_EAR = rows_of(7, "..rrr..", ".rrrrr.", "rraaarr", "raaaaar", ".rrrrr.")
-_NEM_BODY = spans(30, ellipse(30, 28), "a")
-_NEM_CHEST = spans(30, [None] * 2 + [(10, 19), (9, 20), (9, 20), (9, 20), (10, 19),
-                                      (10, 19), (11, 18), (12, 17), (13, 16)], "m")
-_NEM_LEG = rows_of(9,
-    ".lllllll.", "lllllllll", "lllllllll", "lllllllll", "lllllllll", "lllllllll",
-    "lllllllll", "lllllllll", "lllllllll", "lllllllll", "lllllllll", "PPPPPPPPP",
-    "PPPPPPPPP", "P.PP.PP.P",
-)
-_NEM_ARROW_L = rows_of(14,
-    "..............",
-    "ss............",
-    "sss...........",
-    "sswwwwwww.....",
-    "sss...........",
-    "ss............",
-)
-_NEM_ARROW_R = rows_of(12,
-    "..........ww",
-    "........www.",
-    "......www...",
-    "....ww......",
-    "..ss........",
-    ".sss........",
-    "sss.........",
-)
-
-
-def _nemean():
-    cv = canvas(64, 64)
-    tube(cv, [(44, 52, 2.5), (53, 50, 2.3), (57, 43, 2), (55, 37, 2)], "l")
-    stamp(cv, 51, 32, spans(8, ellipse(8, 7), "r"))
-    stamp(cv, 17, 31, _NEM_BODY)
-    stamp(cv, 17, 31, _NEM_CHEST, onto=True)
-    stamp(cv, 12, 2, _NEM_MANE)
-    stamp(cv, 16, 4, _NEM_EAR)
-    stamp(cv, 41, 4, _NEM_EAR)
-    stamp(cv, 20, 9, _NEM_FACE)
-    stamp(cv, 20, 9, _NEM_FEATURES, onto=True)
-    stamp(cv, 20, 46, _NEM_LEG)
-    stamp(cv, 35, 46, _NEM_LEG)
-    stamp(cv, 2, 55, _NEM_ARROW_L)
-    stamp(cv, 50, 53, _NEM_ARROW_R)
-    return finish(cv)
-
-
-NEMEAN64 = _nemean()
-NEMEAN64_MAT = {
-    # the hide is lit as metal: it has never been cut because it is not fur
-    "a": M((236, 190, 84), "metal", outline=(96, 60, 24)),
-    "l": M((226, 178, 76), "metal", outline=(96, 60, 24)),
-    "P": M((200, 150, 66), "metal", outline=(96, 60, 24)),
-    "m": M((252, 236, 190), "metal", over="a"),
-    "r": M((150, 84, 40), "fur"), "R": M((190, 116, 54), "fur", over="r"),
-    "n": M((80, 44, 36), "gem", flat=True), "q": M((120, 60, 40), "gem", flat=True),
-    "k": M((70, 40, 24), "gem", flat=True),
-    "y": M((120, 190, 110), "gem", flat=True), "Y": M((210, 250, 200), "gem", flat=True),
-    "s": M((170, 176, 190), "metal"), "w": M((150, 110, 70), "matte"),
-}
-
-# --------------------------------------------------------------------------
-# SIREN (64) - the song is the dangerous part. She sits on a floe with her
-# tail over the edge, eyes shut, mid-verse; the notes that come off her go
-# cold as they leave.
-# --------------------------------------------------------------------------
-_SIREN_HEAD = spans(20, ellipse(20, 18), "a")
-_SIREN_FACE = sym(
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..........",
-    "..kkk.....",
-    ".k...k....",
-    "..........",
-    "..pp......",
-    ".........q",
-    "........qq",
-    ".........q",
-)
-_SIREN_FRINGE = rows_of(22,
-    "....hhhhhhhhhhhhhh....",
-    "..hhhhhhhhhhhhhhhhhh..",
-    ".hhhhHHhhhhhhhhhhhhhh.",
-    "hhhHHHHhhhhhhhhhhhhhhh",
-    "hhhHHhhhhhhhhhhhhhhhhh",
-    "hhhhhhhh.hhhhhhhhhhhhh",
-    "hhhhhh.....h.....hhhhh",
-    "hhhh...............hhh",
-    "hhh.................hh",
-    "hh...................h",
-)
-_SIREN_TORSO = spans(16, [(4, 11), (3, 12), (2, 13), (2, 13), (2, 13), (2, 13),
-                          (3, 12), (3, 12), (3, 12), (4, 11), (4, 11), (4, 11)], "a")
-_SIREN_SHELL = [r.ljust(16, ".") for r in (
-    "",
-    "",
-    "",
-    "...cCc..cCc",
-    "..cCcCccCcCc",
-    "..ccccc.cccc",
-)]
-_SIREN_FIN = rows_of(12,
-    "ff........ff",
-    "fFf......fFf",
-    ".fFff..ffFf.",
-    ".ffFFffFFff.",
-    "..ffFFFFff..",
-    "...ffFFff...",
-    "....ffff....",
-)
-_SIREN_ROCK = spans(44, ellipse(44, 16), "i")
-_SIREN_ROCK = inset(_SIREN_ROCK, "i", "I", 3)
-_SIREN_NOTE = rows_of(4, "...n", "..nn", "..n.", "..n.", "nnn.", "nnn.")
-_SIREN_NOTE2 = rows_of(6, ".nnnnn", ".n...n", ".n...n", "nn..nn", "nn..nn")
-
-
-def _siren():
-    cv = canvas(64, 64)
-    # hair streams back and down behind her
-    tube(cv, [(24, 14, 6), (18, 24, 6), (15, 34, 5), (12, 43, 4), (14, 50, 2.5)], "h")
-    tube(cv, [(22, 18, 2), (17, 28, 2.4), (14, 40, 1.8)], "H")
-    stamp(cv, 10, 48, _SIREN_ROCK)
-    # the tail curls over the rock's lip, fin trailing in the water
-    tube(cv, [(32, 40, 6), (34, 47, 6), (42, 51, 5), (50, 50, 3.5), (55, 45, 2)], "b")
-    scales(cv, "b", "B", 4)
-    stamp(cv, 50, 36, _SIREN_FIN)
-    stamp(cv, 24, 28, _SIREN_TORSO)
-    stamp(cv, 24, 28, _SIREN_SHELL, onto=True)
-    # one hand to her chest; the other braced on the rock
-    tube(cv, [(37, 30, 2.2), (39, 35, 2), (34, 34, 1.8)], "a")
-    tube(cv, [(26, 30, 2.2), (21, 38, 2), (19, 46, 1.8), (18, 50, 1.8)], "a")
-    stamp(cv, 22, 11, _SIREN_HEAD)
-    stamp(cv, 22, 11, _SIREN_FACE, onto=True)
-    stamp(cv, 21, 7, _SIREN_FRINGE)
-    stamp(cv, 22, 7, rows_of(6, ".sss..", "sSSsss", ".ssss."))
-    for x, y, note in ((46, 12, _SIREN_NOTE), (54, 22, _SIREN_NOTE2),
-                       (50, 2, _SIREN_NOTE2), (58, 8, _SIREN_NOTE)):
-        stamp(cv, x, y, note)
-    return finish(cv)
-
-
-SIREN64 = _siren()
-SIREN64_MAT = {
-    "a": M((248, 218, 206), "skin"), "p": M((246, 160, 170), "skin", over="a"),
-    "q": M((140, 70, 100), "gem", flat=True), "k": M((60, 40, 80), "gem", flat=True),
-    "h": M((74, 186, 196), "fur"), "H": M((150, 226, 226), "fur", over="h"),
-    "b": M((96, 150, 214), "scale"), "B": M((70, 116, 190), "scale", over="b"),
-    "f": M((140, 200, 240), "gem"), "F": M((210, 240, 255), "gem"),
-    "c": M((246, 170, 190), "stone"), "C": M((255, 220, 230), "stone", over="c"),
-    "i": M((196, 222, 240), "stone"), "I": M((226, 242, 255), "stone"),
-    "s": M((246, 220, 230), "stone"), "S": M((255, 250, 250), "stone"),
-    "n": M((200, 230, 255), "gem", flat=True, outline=False),
-}
-
-# --------------------------------------------------------------------------
-# TALOS (64) - bronze, tireless, and slightly leaking. The one vein of ichor
-# that keeps him going runs from his neck to a nail in his ankle, and the
-# nail was never quite tight.
-# --------------------------------------------------------------------------
-_TALOS_HELM = spans(20, ellipse(20, 20), "a")
-_TALOS_VISOR = rows_of(20,
-    "....................",
-    "....................",
-    "....................",
-    "....................",
-    "....................",
-    "....................",
-    "....................",
-    "...kkkkkkkkkkkkkk...",
-    "...keeekkkkkeeek....",
-    "...kkkkkkkkkkkkkk...",
-    ".......kkkkkk.......",
-    "........kkkk........",
-    "........kkkk........",
-    "........kkkk........",
-    "........kkkk........",
-    ".........kk.........",
-)
-_TALOS_CUIRASS = spans(28, [(8, 19), (4, 23), (2, 25), (1, 26), (1, 26), (1, 26),
-                            (1, 26), (2, 25), (2, 25), (3, 24), (3, 24), (4, 23),
-                            (4, 23), (5, 22), (5, 22), (5, 22), (5, 22), (6, 21),
-                            (6, 21)], "a")
-_TALOS_MUSCLE = rows_of(28,
-    "............................",
-    "............................",
-    "............................",
-    "......qqqqqq....qqqqqq......",
-    ".....q..v...qqqq...v..q.....",
-    "............................",
-    "............................",
-    "..........qq....qq..........",
-    "..........qq....qq..........",
-    "............................",
-    "..........qq....qq..........",
-    "..........qq....qq..........",
-    "............................",
-    "..........qq....qq..........",
-)
-_TALOS_SHIELD = spans(22, ellipse(22, 22), "b")
-_TALOS_SHIELD = inset(_TALOS_SHIELD, "b", "c", 2)
-_TALOS_BOLT = rows_of(10,
-    "......eeee",
-    ".....eeee.",
-    "....eeee..",
-    "...eeEeeee",
-    "......eee.",
-    ".....eee..",
-    "....eee...",
-    "...ee.....",
-    "..e.......",
-)
-_TALOS_SKIRT = rows_of(22,
-    "pp.pp.pp.pp.pp.pp.pp.p",
-    "pp.pp.pp.pp.pp.pp.pp.p",
-    "pp.pp.pp.pp.pp.pp.pp.p",
-    "pp.pp.pp.pp.pp.pp.pp.p",
-    "PP.PP.PP.PP.PP.PP.PP.P",
-)
-_TALOS_LEG = rows_of(7,
-    "aaaaaaa", "aaaaaaa", "aaaaaaa", ".aaaaa.", ".ggggg.", ".ggggg.", ".ggggg.",
-    ".ggggg.", ".ggggg.", ".ggggg.", ".aaaaa.", "aaaaaaa", "aaaaaaa",
-)
-_TALOS_SPARK = rows_of(5, "..s..", ".sSs.", "sSSSs", ".sSs.", "..s..")
-
-
-def _talos():
-    cv = canvas(64, 64)
-    # spear, upright in the right hand
-    for y in range(8, 63):
-        cv[y][52] = cv[y][53] = "w"
-    stamp(cv, 50, 0, rows_of(6, "..xx..", ".xXXx.", ".xXXx.", "xXXXxx",
-                             "xxxxxx", "..xx..", "..xx..", "..xx.."))
-    # the horsehair crest, front to back over the helmet
-    tube(cv, [(24, 6, 1.8), (27, 2, 2.2), (32, 0.5, 2.4), (37, 2, 2.2), (40, 6, 1.8)], "r")
-    stamp(cv, 22, 46, _TALOS_LEG)
-    stamp(cv, 35, 46, _TALOS_LEG)
-    stamp(cv, 18, 22, _TALOS_CUIRASS)
-    stamp(cv, 18, 22, _TALOS_MUSCLE, onto=True)
-    stamp(cv, 21, 40, _TALOS_SKIRT)
-    # arms: one up to the spear, one braced behind the shield
-    tube(cv, [(44, 26, 3.5), (50, 32, 3.2), (52, 38, 3)], "a")
-    tube(cv, [(20, 26, 3.5), (14, 32, 3.2), (12, 36, 3)], "a")
-    stamp(cv, 49, 36, rows_of(6, "aaaaaa", "aaaaaa", "aaaaaa"))
-    stamp(cv, 0, 26, _TALOS_SHIELD)
-    stamp(cv, 6, 32, _TALOS_BOLT)
-    stamp(cv, 22, 6, _TALOS_HELM)
-    stamp(cv, 22, 6, _TALOS_VISOR, onto=True)
-    # the ichor vein, and the nail in the ankle where it leaks
-    for x, y in ((32, 26), (32, 27), (31, 28), (31, 29), (31, 30), (32, 31),
-                 (32, 32), (32, 33), (33, 34), (33, 35), (33, 36), (34, 37),
-                 (34, 38), (35, 39), (37, 46), (37, 47), (38, 48), (38, 49),
-                 (38, 50), (38, 51), (38, 52), (38, 53), (38, 54)):
-        if cv[y][x] != ".":
-            cv[y][x] = "i"
-    # what says "statue" rather than "sunburn": verdigris in the hollows,
-    # rivets along the plates, a seam at every joint
-    for cx, cy, r in ((6, 40, 3.5), (15, 29, 2.5), (40, 20, 2.5), (25, 21, 2),
-                      (24, 56, 2.5), (40, 50, 2), (47, 30, 2), (21, 37, 2)):
-        for y in range(int(cy - r), int(cy + r) + 1):
-            for x in range(int(cx - r), int(cx + r) + 1):
-                if (x - cx) ** 2 + (y - cy) ** 2 <= r * r and cv[y][x] in "abcg":
-                    cv[y][x] = "z" if (x + y) % 3 else "Z"
-    for x, y in ((21, 25), (24, 24), (39, 24), (42, 25), (19, 29), (44, 29),
-                 (23, 49), (28, 49), (36, 49), (41, 49), (2, 37), (11, 28), (19, 37)):
-        if cv[y][x] != ".":
-            cv[y][x] = "v"
-    for x, y in ((47, 30), (48, 31), (49, 32), (16, 30), (15, 31), (14, 32),
-                 (22, 52), (23, 52), (24, 52), (25, 52), (26, 52), (27, 52), (28, 52),
-                 (35, 52), (36, 52), (37, 52), (39, 52), (40, 52), (41, 52)):
-        if cv[y][x] in "abgzZ":
-            cv[y][x] = "q"
-    stamp(cv, 37, 55, rows_of(3, "nnn", "nNn", "nnn"))
-    stamp(cv, 41, 57, rows_of(2, "i.", "ii", "ii", ".i"))
-    for x, y in ((56, 14), (4, 12), (58, 44)):
-        stamp(cv, x, y, _TALOS_SPARK)
-    return finish(cv)
-
-
-TALOS64 = _talos()
-TALOS64_MAT = {
-    "a": M((210, 136, 70), "metal", outline=(80, 40, 20)),
-    "b": M((196, 124, 64), "metal", outline=(80, 40, 20)),
-    "c": M((222, 160, 90), "metal", outline=(80, 40, 20)),
-    "g": M((230, 170, 90), "metal", outline=(80, 40, 20)),
-    "q": M((130, 72, 40), "metal", over="a"), "v": M((255, 226, 170), "metal", over="a"),
-    "z": M((96, 170, 140), "stone", over="a"), "Z": M((130, 196, 160), "stone", over="a"),
-    "k": M((40, 24, 20), "gem", flat=True),
-    "e": M((140, 240, 255), "gem", emissive=0.9), "E": M((255, 255, 255), "gem", emissive=1.0),
-    "r": M((200, 50, 50), "fur"),
-    "p": M((120, 70, 44), "matte"), "P": M((230, 170, 90), "metal"),
-    "w": M((130, 90, 60), "matte"),
-    "x": M((200, 206, 220), "metal"), "X": M((250, 252, 255), "metal"),
-    "i": M((255, 214, 90), "gem", emissive=0.9),
-    "n": M((110, 110, 120), "metal"), "N": M((200, 200, 210), "metal"),
-    "s": M((180, 240, 255), "gem", flat=True, outline=False),
-    "S": M((255, 255, 255), "gem", flat=True, outline=False),
-}
-
-# --------------------------------------------------------------------------
 # PIXIE (80) - a hedge-sprite grown into something with an edge: slight,
 # sharp-eyed, twin tails of leaf-green hair and dragonfly wings, a little wind
 # held in one palm like a knife she has not decided to use.
@@ -2874,30 +1203,1627 @@ ANUBIS_MAT = {
     "f": M((250, 250, 244), "cloth"), "F": M((210, 220, 236), "cloth"),
 }
 
+# --------------------------------------------------------------------------
+# TENGU (80) - a karasu tengu: crow-headed, crow-winged, in the white robes
+# and pom-pom sash of a mountain ascetic, and a better swordsman than any
+# man who has climbed up to find out.
+# --------------------------------------------------------------------------
+_TENGU_WING_N = wing([19, 22, 22, 20, 17, 14], [("b", "e"), ("d", "e")], gap=3, edge="e")
+_TENGU_WING_F = [r.replace("b", "B").replace("d", "D").replace("e", "E")
+                 for r in wing([17, 20, 20, 18, 15], [("b", "e"), ("d", "e")], gap=3, edge="e")]
+# a crow's head: the beak long and pale enough to read against black feathers
+_TENGU_HEAD = rows_of(20,
+    ".........TTTT.......",
+    "........TTttTT......",
+    ".......ccTTTTcc.....",
+    "........bbbbbbb.....",
+    "......bbbbbbbbbbb...",
+    ".....bbbbbbbbbbbbb..",
+    "....bbkkkbbbbbbbbbb.",
+    "....bbkvvkbbbbbbbbb.",
+    "yyyyybbkkbbbbbbbbbb.",
+    "YYYYyyybbbbbbbbbbb..",
+    ".yyyyyyyybbbbbbbbb..",
+    "..qqqyyyyybbbbbbb...",
+    "......qqqyybbbbb....",
+    "........bbbbbb......",
+    "........nnnnnn......",
+)
+_TENGU_ROBE = spans(None, [(5, 12), (3, 15), (2, 16), (1, 17), (1, 17), (1, 17),
+                           (2, 16), (2, 16), (2, 16), (3, 15), (3, 15), (3, 15),
+                           (3, 15)], "r")
+_TENGU_SASH = rows_of(18,
+    "..................",
+    "..............o...",
+    ".............oO...",
+    "...........oo.....",
+    ".........oo.......",
+    "....O..oo.........",
+    "...OOoo...O.......",
+    "..oo.....OO.......",
+    "..........O.......",
+)
+_TENGU_HAKAMA = spans(20, [(2, 16), (1, 17), (1, 18), (0, 18), (0, 19), (0, 19),
+                           (0, 8), (0, 8), (0, 8), (0, 8), (11, 19), (11, 19)], "h")
+_TENGU_BLADE = rows_of(3, "..z", ".zz", ".zz", "..w", "..w") + ["..x"] * 26 + ["..X", "..X", ".X."]
+_TENGU_FAN = rows_of(11,
+    "....fff....",
+    "..ffFfFff..",
+    ".fFfFfFfFf.",
+    "fFfFfFfFfFf",
+    "fFfFfFfFfFf",
+    ".fFfFfFfFf.",
+    "..ffFfFff..",
+    "....f.f....",
+    ".....w.....",
+    ".....w.....",
+)
+_TENGU_GUST = rows_of(9, "..s....s.", ".s..ss...", "s..s....s", ".ss...ss.")
+
+
+def _tengu(pose):
+    cv = canvas(80, 80)
+    ox = -5 if pose == "attack" else 0
+    spread = {"idle": (-40, -70), "attack": (-12, -30), "cast": (-58, -92)}[pose]
+    pin_rotated(cv, _TENGU_WING_F, (0, 7), (44 + ox, 32), spread[1])
+    # legs in wide hakama, geta beneath
+    stamp(cv, 28 + ox, 46, _TENGU_HAKAMA)
+    for x in (30, 43):
+        stamp(cv, x + ox, 58, rows_of(5, ".hhh.", ".hhh.", ".aaa.", ".aaa.",
+                                      "ggggg", ".g.g.", ".g.g."))
+    stamp(cv, 29 + ox, 30, _TENGU_ROBE)
+    stamp(cv, 29 + ox, 30, _TENGU_SASH, onto=True)
+    # the blade: held low and ready, swept through a cut, or put up for the fan
+    if pose == "attack":
+        blade, piv = rotate(_TENGU_BLADE, -118, (2, 30))
+        stamp(cv, 22 - piv[0], 32 - piv[1], blade)
+        near = [(44, 33, 2.6), (34, 34, 2.2), (24, 32, 2.0)]
+    elif pose == "cast":
+        stamp(cv, 12, 2, _TENGU_FAN)
+        stamp(cv, 0, 20, _TENGU_GUST)
+        stamp(cv, 2, 32, _TENGU_GUST)
+        near = [(44, 33, 2.6), (46, 42, 2.2), (44, 48, 2.0)]
+    else:
+        blade, piv = rotate(_TENGU_BLADE, -160, (2, 30))
+        stamp(cv, 24 - piv[0], 46 - piv[1], blade)
+        near = [(44, 33, 2.6), (36, 42, 2.2), (26, 46, 2.0)]
+    far = {"idle": [(32, 33, 2.4), (26, 40, 2.0), (24, 46, 1.8)],
+           "attack": [(32, 33, 2.4), (26, 32, 2.0), (22, 32, 1.8)],
+           "cast": [(32, 33, 2.4), (24, 24, 2.0), (18, 14, 1.8)]}[pose]
+    tube(cv, [(x + ox, y, r) for x, y, r in far], "R")
+    stamp(cv, 26 + ox, 10, _TENGU_HEAD)
+    pin_rotated(cv, _TENGU_WING_N, (0, 7), (47 + ox, 34), spread[0])
+    tube(cv, [(x + ox, y, r) for x, y, r in near], "r")
+    return finish(cv)
+
+
+TENGU_MAT = {
+    # black feathers show their structure by a blue sheen along each edge
+    "b": M((30, 30, 44), "fur"), "d": M((44, 44, 64), "fur"), "e": M((100, 110, 156), "fur"),
+    "B": M((24, 24, 36), "fur"), "D": M((36, 36, 52), "fur"), "E": M((72, 80, 120), "fur"),
+    "y": M((120, 116, 124), "stone"), "Y": M((200, 198, 206), "stone", over="y"),
+    "n": M((240, 240, 246), "cloth"),
+    "q": M((20, 18, 22), "gem", flat=True),
+    "k": M((14, 12, 18), "gem", flat=True), "r": M((226, 228, 236), "cloth"),
+    "R": M((206, 210, 222), "cloth"),
+    "T": M((30, 30, 40), "cloth"), "t": M((90, 90, 110), "cloth", over="T"),
+    "c": M((240, 220, 150), "cloth", outline=False),
+    "o": M((240, 150, 50), "cloth"), "O": M((255, 200, 110), "fur"),
+    "h": M((44, 52, 96), "cloth"), "a": M((230, 222, 210), "cloth"),
+    "g": M((130, 96, 64), "matte"),
+    "x": M((200, 210, 226), "metal"), "X": M((70, 50, 60), "matte"),
+    "z": M((250, 252, 255), "metal"), "w": M((230, 190, 90), "metal"),
+    "s": M((220, 236, 255), "gem", flat=True, outline=False),
+}
+TENGU_MAT["v"] = M((230, 40, 50), "gem", flat=True)
+TENGU_MAT["f"] = M((70, 60, 70), "plant")
+TENGU_MAT["F"] = M((150, 130, 140), "plant")
+
+# --------------------------------------------------------------------------
+# NAGA (80) - serpent priestess of the cold springs: a cobra's hood spread
+# behind a calm, unkind face, gold at the brow and wrists, and a staff that
+# keeps the spring's frost in a bead of ice. Below the waist she is all coil.
+# --------------------------------------------------------------------------
+_NAGA_HEAD = rows_of(19,
+    "........gGg........",
+    "......ggjJjgg......",
+    ".....hhggggghh.....",
+    "...hhhhhhhhhhhhh...",
+    "..hhhhHHHHhhhhhhh..",
+    ".hhhhHHHhhhhhhhhhh.",
+    ".hhhhhhhhhhhhhhhhhh",
+    "hhjhhhhjhhhhjhhhhhh",
+    "hjbbhhjbbhhbjhhhhhh",
+    "hhbaajaaaabbhhhhhhh",
+    "hhakkkaakkkkkhhhhhh",
+    "hha+ikaai+iiekhhhhh",
+    "hhaiIkaaiIIieahhhhh",
+    "hhaakaaaakkkaahhhhh",
+    "hhaaanaaaaaaaabhhhh",
+    "hh.aaaaaaaaaabbhhhh",
+    "hh.aammaaaaaabhhhhh",
+    "hh..aaaaaaaabbhhhhh",
+    "hh...aaaaaabbhhhhhh",
+    "hhh...aaaabbhhhhhhh",
+    "hhh....abb..hhhhhh.",
+    "hhh.....bb..hhhhh..",
+    ".hh.....bb...hhhh..",
+)
+
+
+def _hood():
+    out = []
+    for y, sp in enumerate(ellipse(40, 34)):
+        if sp and y > 12:
+            t = (y - 12) / 21.0
+            a, b = sp
+            pull = int(round((b - a - 12) * 0.5 * t * t))
+            sp = (a + pull, b - pull)
+        out.append(sp)
+    rows = inset(spans(40, out, "o"), "o", "O", 2)
+    mark = [hh + "." * 28 + hh[::-1] for hh in ("...qq.", "..qQQq", "..qQQq", "...qq.")]
+    for i, m in enumerate(mark):
+        rows[12 + i] = "".join(c if m[x] == "." or c == "." else m[x]
+                               for x, c in enumerate(rows[12 + i]))
+    return rows
+
+
+_NAGA_HOOD = _hood()
+_NAGA_TORSO = spans(None, [(5, 8), (5, 8), (2, 11), (1, 12), (1, 12), (1, 12),
+                           (2, 11), (2, 11), (3, 10), (3, 10), (3, 10), (3, 10),
+                           (2, 11)], "a")
+_NAGA_WRAP = spans(14, [None, None, None, (1, 12), (1, 12), (2, 11), None, None,
+                        None, None, (3, 10), (3, 10), (2, 11)], "w")
+_NAGA_WRAP[3] = "." + "g" * 12 + "."
+_NAGA_WRAP[10] = "..." + "g" * 7 + "...."
+_NAGA_STAFF = rows_of(9,
+    "..ccccc..",
+    ".cCCcccc.",
+    "cCCcccccc",
+    "cCccccccc",
+    "ccccccccc",
+    ".ccccccc.",
+    "..ggggg..",
+    "...gGg...",
+    "....g....",
+) + ["....x...."] * 50
+_NAGA_SPARK = rows_of(5, "..z..", ".zZz.", "zZZZz", ".zZz.", "..z..")
+
+
+def _naga(pose):
+    cv = canvas(80, 80)
+    ox = -4 if pose == "attack" else 0
+    flare = pose == "cast"
+    hood = _NAGA_HOOD if not flare else [r for r in _NAGA_HOOD]
+    stamp(cv, 20 + ox, -2 if flare else 0, hood)
+    # the coil: down from the waist, round the front, tip curling back
+    tube(cv, [(37 + ox, 44, 6.0), (40, 52, 7.0), (50, 58, 6.8), (54, 66, 6.2),
+              (44, 72, 5.8), (30, 72, 5.2), (18, 68, 4.4), (12, 60, 3.4),
+              (14, 52, 2.4), (19, 48, 1.4)], "s", belly="v")
+    scales(cv, "s", "S", 5)
+    # far arm, then torso, then near arm and staff
+    staff_at = {"idle": (48, 10), "attack": (4, 20), "cast": (46, -6)}[pose]
+    if pose == "attack":
+        st, _ = rotate(_NAGA_STAFF, -76)
+        stamp(cv, 2, 12, st)
+        near = [(44, 30, 2.3), (34, 32, 2.0), (22, 30, 1.8)]
+        far = [(33, 30, 2.1), (26, 34, 1.8), (20, 32, 1.6)]
+    else:
+        stamp(cv, staff_at[0], staff_at[1], _NAGA_STAFF)
+        near = [(44, 30, 2.3), (50, 36, 2.0), (52, 28 if flare else 34, 1.8)]
+        far = [(33, 30, 2.1), (28, 38, 1.8), (26, 44, 1.6)]
+    tube(cv, [(x + ox, y, r) for x, y, r in far], "b")
+    stamp(cv, 32 + ox, 25, _NAGA_TORSO)
+    stamp(cv, 32 + ox, 25, _NAGA_WRAP, onto=True)
+    stamp(cv, 29 + ox, 3, _NAGA_HEAD)
+    tube(cv, [(x + ox, y, r) for x, y, r in near], "a")
+    for arm in (near, far):                       # gold at the wrists
+        x, y, r = arm[1]
+        tube(cv, [(x + ox, y, r)], "g")
+    if flare:
+        for x, y in ((50, 0), (70, 12), (40, 4)):
+            stamp(cv, x, y, _NAGA_SPARK)
+    return finish(cv)
+
+
+NAGA_MAT = {
+    "a": M((236, 218, 226), "cel"), "b": M((206, 186, 204), "cel"),
+    "h": M((52, 60, 130), "fur"), "H": M((110, 130, 210), "fur", over="h"),
+    "j": M((30, 34, 80), "fur"),
+    "k": M((20, 16, 36), "gem", flat=True), "e": M((250, 250, 255), "gem", flat=True),
+    "i": M((70, 180, 220), "gem", flat=True), "I": M((170, 236, 250), "gem", flat=True),
+    "+": GLINT, "n": M((200, 170, 186), "cel", flat=True), "m": M((170, 90, 120), "cel", flat=True),
+    "g": M((232, 190, 80), "metal", outline=(80, 54, 26)),
+    "G": M((255, 240, 170), "metal", outline=(80, 54, 26)),
+    "J": M((90, 210, 250), "gem"),
+    "o": M((36, 96, 104), "scale"), "O": M((66, 140, 140), "scale"),
+    "q": M((20, 40, 50), "scale", over="O"), "Q": M((200, 236, 226), "scale", over="O"),
+    "s": M((56, 134, 144), "scale"), "S": M((40, 100, 120), "scale", over="s"),
+    "v": M((220, 232, 204), "scale", over="s"),
+    "w": M((60, 90, 170), "cloth"),
+    "c": M((170, 230, 250), "gem", emissive=0.5), "C": M((250, 255, 255), "gem", emissive=0.8),
+    "x": M((110, 84, 60), "matte"),
+    "s2": None,
+}
+del NAGA_MAT["s2"]
+NAGA_MAT["z"] = M((200, 240, 255), "gem", flat=True, outline=False)
+NAGA_MAT["Z"] = M((255, 255, 255), "gem", flat=True, outline=False)
+
+# --------------------------------------------------------------------------
+# GOLEM (80) - a temple guardian cut from riverstone and fitted like armour:
+# a helm with one burning slit for a face, fists the size of shrine bells,
+# and old runes in the seams that still remember what it was told to guard.
+# --------------------------------------------------------------------------
+_GOLEM_TORSO = spans(None, [(4, 30), (1, 33), (0, 34), (0, 34), (1, 33), (2, 32),
+                            (3, 31), (4, 30), (5, 29), (6, 28), (7, 27), (7, 27),
+                            (8, 26), (8, 26), (8, 26), (8, 26), (9, 25), (9, 25),
+                            (10, 24), (10, 24)], "a")
+_GOLEM_PLATES = rows_of(35,
+    "...................................",
+    "...................................",
+    "......ccccccccc.....ccccccccc......",
+    ".......c.................c.........",
+    "........c...rrrrrrrrr...c..........",
+    ".........c..r.......r..c...........",
+    "............r..rRr..r..............",
+    "............r.......r..............",
+    "............rrrrrrrrr..............",
+    "...................................",
+    "...........ccccccccccccc...........",
+    "...................................",
+    "............c.....c.....c..........",
+    "............c.....c.....c..........",
+    "...................................",
+    "..........ccccccccccccccc..........",
+)
+_GOLEM_HELM = rows_of(16,
+    "....hhhhhhhh....",
+    "..hhhhhhhhhhhh..",
+    ".hhhhhhhhhhhhhh.",
+    "hhhhhhhhhhhhhhhh",
+    "hhhhhhhhhhhhhhhh",
+    "hkkkkkkkkkkkkhhh",
+    "keeEEEEEEeeekhhh",
+    "hkkkkkkkkkkkkhhh",
+    "hhhhhhhhhhhhhhhh",
+    ".hhhhhhhhhhhhhh.",
+    "..hhhchhhchhhh..",
+    "...hhhhhhhhhh...",
+)
+_GOLEM_MOSS = rows_of(16,
+    "....mmmmmmm.....",
+    "..mmMmmmmMmmm...",
+    ".mmmmmMmmmmmmm..",
+    "mm.mm..mmm.mmm..",
+    "m...m...m...m...",
+)
+_GOLEM_PAULDRON = inset(spans(None, ellipse(16, 13), "b"), "b", "B", 3)
+_GOLEM_FIST = spans(None, ellipse(18, 15), "a")
+_GOLEM_KNUCKLE = rows_of(18, "..................", "...c...c...c...c..", "...c...c...c...c..",
+                         "..................", "..cccccccccccccc..")
+_GOLEM_RUNE = rows_of(5, "..R..", ".RrR.", "RrrrR", ".RrR.", "..R..")
+
+
+def _golem(pose):
+    cv = canvas(80, 80)
+    ox = -4 if pose == "attack" else 0
+    # legs: pillars with knee plates
+    for x, mat in ((46, "d"), (30, "a")):
+        tube(cv, [(x + ox, 54, 7.5), (x + ox - 1, 65, 6.8), (x + ox - 2, 74, 7.4)], mat)
+        stamp(cv, x + ox - 6, 61, spans(None, ellipse(12, 8), "b"))
+    # arms per pose: (shoulder, elbow, fist centre)
+    arms = {"idle": (((24, 30), (18, 42), (16, 54)), ((58, 30), (62, 42), (62, 54))),
+            "attack": (((24, 30), (14, 34), (4, 34)), ((58, 30), (60, 42), (56, 52))),
+            "cast": (((24, 30), (12, 24), (6, 14)), ((58, 30), (70, 24), (74, 14)))}[pose]
+    far, near = arms
+    for (sx, sy), (ex, ey), (fx, fy) in (far,):
+        tube(cv, [(sx + ox, sy, 6.0), (ex + ox, ey, 6.2), (fx + ox, fy, 6.6)], "d")
+        stamp(cv, fx + ox - 9, fy - 7, [r.replace("a", "d") for r in _GOLEM_FIST])
+    stamp(cv, 23 + ox, 24, _GOLEM_TORSO)
+    stamp(cv, 23 + ox, 24, _GOLEM_PLATES, onto=True)
+    stamp(cv, 32 + ox, 10, _GOLEM_HELM)
+    stamp(cv, 32 + ox, 8, _GOLEM_MOSS)
+    stamp(cv, 14 + ox, 20, _GOLEM_PAULDRON)
+    for (sx, sy), (ex, ey), (fx, fy) in (near,):
+        tube(cv, [(sx + ox, sy, 6.4), (ex + ox, ey, 6.6), (fx + ox, fy, 7.0)], "a")
+        stamp(cv, fx + ox - 9, fy - 7, _GOLEM_FIST)
+        stamp(cv, fx + ox - 9, fy - 7, _GOLEM_KNUCKLE, onto=True)
+    stamp(cv, 50 + ox, 20, _GOLEM_PAULDRON)
+    stamp(cv, 50 + ox, 18, mirror(_GOLEM_MOSS))
+    if pose == "cast":
+        for x, y in ((2, 40), (70, 42), (36, 0), (10, 64), (66, 66)):
+            stamp(cv, x, y, _GOLEM_RUNE)
+    return finish(cv)
+
+
+GOLEM_MAT = {
+    "a": M((128, 136, 148), "stone"), "d": M((104, 110, 124), "stone"),
+    "b": M((150, 146, 136), "stone"), "B": M((176, 170, 158), "stone"),
+    "h": M((140, 146, 150), "stone"),
+    "c": M((78, 84, 98), "stone", over="a"),
+    "r": M((90, 230, 220), "gem", emissive=0.7, over="a"),
+    "R": M((220, 255, 250), "gem", emissive=0.95),
+    "k": M((30, 30, 40), "gem", flat=True),
+    "e": M((100, 240, 230), "gem", flat=True), "E": M((230, 255, 255), "gem", flat=True),
+    "m": M((84, 140, 66), "plant"), "M": M((140, 190, 90), "plant"),
+}
+
+# --------------------------------------------------------------------------
+# CERBERUS (80) - the hound of the underworld gate: lean, black, split by
+# cracks of banked fire, three heads on three necks and every one of them
+# snarling. The collars are iron. The chains were cut a long time ago.
+# --------------------------------------------------------------------------
+_CERB_HEAD = rows_of(20,
+    ".........kk....kk...",
+    "........kaak..kaak..",
+    ".......kaaak.kaaak..",
+    "......aaaaaaaaaaaa..",
+    "....aaaaaaaaaaaaaaa.",
+    "..aaaaarreeaaaaaaaa.",
+    ".aaaaaaaarraaaaaaaa.",
+    "naaaaaaaaaaaaaaaaa..",
+    "nnaaaaaaaaaaaaaaa...",
+    ".TqTqTqqqqaaaaaaa...",
+    "..qqqqqqqqqaaaaa....",
+    "..TqTqTaaaaaaaa.....",
+    "....aaaaaaaa........",
+)
+_CERB_HEAD_OPEN = rows_of(20,
+    ".........kk....kk...",
+    "........kaak..kaak..",
+    ".......kaaak.kaaak..",
+    "......aaaaaaaaaaaa..",
+    "....aaaaaaaaaaaaaaa.",
+    "..aaaaarreeaaaaaaaa.",
+    ".aaaaaaaarraaaaaaaa.",
+    "naaaaaaaaaaaaaaaaa..",
+    "nnaaaaaaaaaaaaaaa...",
+    ".TqTqTqqqqqaaaaaa...",
+    "..qqqqqqqqqqqaaaa...",
+    "...qqqQQQqqqqaaa....",
+    "....qqqqqqqqaaaa....",
+    "...TqTqTqaaaaaa.....",
+    ".....aaaaaaa........",
+)
+_CERB_COLLAR = rows_of(10, "..X..X..X.", ".xxxxxxxxx", "xxxxxxxxxx", ".xxxxxxxx.")
+_CERB_FLAME = rows_of(8, "...f....", "..fF..f.", ".fFWf.F.", "fFWWFfF.", ".fFFFff.", "..fff...")
+
+
+def _cerb_mane(cv, pts):
+    """Flame spikes along the neck and spine."""
+    for (x, y), h in pts:
+        sp = plume(h, 2, 3, 1, 4, w_base=3, peak=0.3)
+        f = spans(None, sp, "f")
+        f = recolour(f, (0, h // 2), "f", "F")
+        pin(cv, f, base_of(f), (x, y))
+
+
+def _cerberus(pose):
+    cv = canvas(80, 80)
+    low = 4 if pose == "attack" else 0
+    # the tail: a whip, lit at the end
+    tube(cv, [(60, 40 + low, 3.0), (68, 34, 2.4), (74, 24, 1.8), (72, 16, 1.2)], "b")
+    stamp(cv, 68, 8, _CERB_FLAME)
+    # far legs, body, near legs
+    for (x0, x1, x2) in ((34, 32, 30), (56, 60, 57)):
+        tube(cv, [(x0, 46 + low, 4.2), (x1, 62, 2.6), (x2, 76, 2.4)], "b")
+    tube(cv, [(28, 40 + low, 9.0), (40, 43 + low, 7.2), (52, 42 + low, 6.4),
+              (60, 40 + low, 6.4)], "a")
+    for (x0, x1, x2) in ((26, 24, 21), (54, 60, 55)):
+        tube(cv, [(x0, 46 + low, 4.8), (x1, 62, 3.0), (x2, 76, 2.8)], "a")
+        stamp(cv, x2 - 3, 75, rows_of(7, "k.k.k..", "kkkkkk."))
+    # ember cracks through the hide
+    for a, b in (((30, 36), (36, 44)), ((36, 44), (34, 50)), ((46, 38), (50, 46)),
+                 ((56, 38), (58, 44)), ((22, 54), (24, 62))):
+        for y, row in enumerate(vein(finish(cv), a, b, "r")):
+            cv[y][:] = row
+    _cerb_mane(cv, [((40, 38 + low), 7), ((46, 37 + low), 8), ((52, 37 + low), 7),
+                    ((58, 36 + low), 6)])
+    # three necks, three heads: far-low, high-middle, near-forward
+    # stacked far apart enough that each reads as its own head
+    heads = {"idle": ((0, 40), (3, 24), (11, 8)),
+             "attack": ((-6, 44), (-5, 28), (1, 12)),
+             "cast": ((0, 32), (5, 16), (13, 0))}[pose]
+    art = _CERB_HEAD_OPEN if pose != "idle" else _CERB_HEAD
+    for i, (hx, hy) in enumerate(heads):
+        mat = "b" if i == 0 else "a"
+        tube(cv, [(28, 36 + low, 6.2), (hx + 14, hy + 7, 5.0)], mat)
+        head = art if i != 0 else [r.replace("a", "b") for r in art]
+        if pose == "cast":
+            head, _ = rotate(head, 20)
+        stamp(cv, hx, hy, head)
+        stamp(cv, hx + 11, hy + 10, _CERB_COLLAR)
+        _cerb_mane(cv, [((hx + 17, hy + 4), 5), ((hx + 20, hy + 6), 6)])
+    if pose == "cast":
+        for hx, hy in heads:
+            stamp(cv, hx - 4, hy - 8, _CERB_FLAME)
+    return finish(cv)
+
+
+CERBERUS_MAT = {
+    "a": M((46, 40, 46), "fur"), "b": M((32, 28, 34), "fur"),
+    "k": M((20, 16, 20), "fur"),
+    "r": M((255, 110, 40), "gem", emissive=0.8, over="a"),
+    "e": M((255, 210, 80), "gem", flat=True),
+    "n": M((14, 10, 14), "gem", flat=True),
+    "q": M((90, 20, 20), "gem", flat=True), "Q": M((255, 120, 40), "gem", emissive=0.9),
+    "T": M((250, 244, 230), "gem", flat=True),
+    "x": M((110, 106, 116), "metal"), "X": M((190, 190, 200), "metal"),
+    "f": M((255, 140, 50), "gem", emissive=0.85), "F": M((255, 80, 40), "gem", emissive=0.7),
+    "W": M((255, 244, 200), "gem", emissive=1.0),
+}
+
+# --------------------------------------------------------------------------
+# BAKU (80) - the dream-eater of the old scrolls: tapir's trunk, elephant's
+# tusks, a tiger's striped legs, a mane of violet smoke and a body like a
+# strip of night sky. It wears the moon on its brow and takes what it likes.
+# --------------------------------------------------------------------------
+_BAKU_HEAD = rows_of(24,
+    "........g.....g.........",
+    ".........gGGGg..........",
+    ".......hhhhhhhhhh.......",
+    ".....hhhhhhhhhhhhhh.....",
+    "....hhhhhhhhhhhhhhhh....",
+    "...hhhkkkhhhhhhhhhhhh...",
+    "...hhkeekhhhhhhhhhhhh...",
+    "..hhhhkkhhhhhhhhhhhhh...",
+    "..hhhhhhhhhhhhhhhhhhh...",
+    ".hhhhhhhhhhhhhhhhhhh....",
+    ".hhhhhhhhhhhhhhhhhh.....",
+    "..hhhhhhhhhhhhhhhh......",
+    "...wwhhhhhhhhhhh........",
+    "..ww..hhhhhhhh..........",
+)
+_BAKU_MIST = rows_of(10, "..mmm.....", ".mMMmm.mm.", "mMMMmmmMm.", ".mmMMmmm..", "..mmm.....")
+_BAKU_STAR = rows_of(3, ".s.", "sSs", ".s.")
+_BAKU_ORB = rows_of(9, "..ddddd..", ".dDDddd..", "dDDdddddd", "ddddddDdd", ".ddddddd.", "..ddddd..")
+
+
+def _baku(pose):
+    cv = canvas(80, 80)
+    low = 4 if pose == "attack" else 0
+    # a mane of dream-smoke behind the head, blown back
+    hx0, hy0 = {"idle": (6, 14), "attack": (0, 26), "cast": (8, 8)}[pose]
+    # the mane rides the neck and spine, streaming back
+    for x, y in ((hx0 + 16, hy0 - 2), (hx0 + 22, hy0 + 2), (hx0 + 26, hy0 + 8),
+                 (34, 26 + low), (42, 28 + low), (50, 28 + low), (58, 30 + low),
+                 (hx0 + 18, hy0 + 8), (38, 22 + low)):
+        stamp(cv, x, y, _BAKU_MIST)
+    # legs: a tiger's, striped
+    legs = ((30, 30, 28), (56, 60, 58))
+    for (x0, x1, x2), mat in zip(legs, ("L", "L")):
+        tube(cv, [(x0 + 4, 48 + low, 4.6), (x1 + 3, 62, 3.6), (x2 + 3, 76, 3.4)], "L")
+    tube(cv, [(30, 42 + low, 10.0), (42, 44 + low, 9.4), (54, 42 + low, 8.6),
+              (60, 40 + low, 7.0)], "a")
+    # the night-sky saddle
+    for y in range(34, 54):
+        for x in range(36, 56):
+            if cv[y][x] == "a" and (x - 46) ** 2 / 90.0 + (y - 43 - low) ** 2 / 60.0 < 1.0:
+                cv[y][x] = "n"
+    for x, y in ((40, 40 + low), (47, 38 + low), (51, 44 + low), (43, 46 + low)):
+        cv[y][x] = "S"
+    for (x0, x1, x2) in legs:
+        tube(cv, [(x0, 48 + low, 5.0), (x1, 62, 4.0), (x2, 76, 3.8)], "l")
+        for yy in (56, 62, 68):                      # tiger stripes
+            for xx in range(x1 - 4, x1 + 5):
+                if cv[yy][xx] == "l":
+                    cv[yy][xx] = "t"
+        stamp(cv, x2 - 4, 75, rows_of(8, "oooooooo", "o.oo.oo."))
+    # the head, lowered to charge or raised to drink a dream
+    hx, hy = {"idle": (6, 14), "attack": (0, 26), "cast": (8, 8)}[pose]
+    tube(cv, [(28, 38 + low, 8.0), (hx + 14, hy + 10, 7.0)], "h")
+    stamp(cv, hx + 12, hy + 4, spans(None, ellipse(9, 12), "E"))   # the ear
+    stamp(cv, hx, hy, _BAKU_HEAD)
+    # the trunk: curled in rest, thrust down to charge, raised to the orb
+    trunk = {"idle": [(hx + 4, hy + 12, 3.4), (hx + 1, hy + 20, 2.8), (hx + 4, hy + 25, 2.2), (hx + 8, hy + 23, 1.6)],
+             "attack": [(hx + 4, hy + 12, 3.4), (hx + 1, hy + 20, 2.6), (hx + 2, hy + 27, 2.0)],
+             "cast": [(hx + 4, hy + 12, 3.4), (hx - 1, hy + 6, 2.8), (hx - 1, hy - 1, 2.2), (hx + 2, hy - 5, 1.6)]}[pose]
+    tube(cv, trunk, "h")
+    # tusks
+    tube(cv, [(hx + 7, hy + 14, 1.6), (hx + 4, hy + 20, 1.3), (hx + 1, hy + 22, 0.9)], "w")
+    if pose == "cast":
+        stamp(cv, hx - 4, hy - 16, _BAKU_ORB)
+    for x, y in ((66, 6), (72, 30), (2, 6)):
+        stamp(cv, x, y, _BAKU_STAR)
+    return finish(cv)
+
+
+BAKU_MAT = {
+    "a": M((70, 58, 104), "fur"), "h": M((84, 70, 124), "fur"),
+    "n": M((26, 28, 70), "fur", over="a"),
+    "l": M((186, 136, 80), "fur"), "L": M((150, 108, 64), "fur"),
+    "E": M((100, 84, 140), "fur"),
+    "t": M((50, 30, 30), "fur", over="l"),
+    "o": M((220, 210, 190), "stone"),
+    "w": M((244, 238, 222), "stone"),
+    "k": M((20, 16, 34), "gem", flat=True), "e": M((255, 214, 120), "gem", flat=True),
+    "g": M((236, 196, 90), "metal", outline=(80, 56, 26)),
+    "G": M((255, 244, 190), "metal", outline=(80, 56, 26)),
+    "m": M((150, 110, 200), "cloth", emissive=0.35), "M": M((210, 180, 250), "cloth", emissive=0.5),
+    "d": M((250, 190, 230), "cloth", emissive=0.5), "D": M((255, 240, 250), "cloth", emissive=0.7),
+    "s": M((230, 230, 255), "gem", flat=True, outline=False),
+    "S": M((255, 255, 255), "gem", flat=True, outline=False),
+}
+
+# --------------------------------------------------------------------------
+# MINOTAUR (80) - the labyrinth's keeper, cornered and furious and not sure
+# why: a bull's head on a champion's body, a black mane over the shoulders,
+# one bronze pauldron and a labrys it swings as if it weighed nothing.
+# --------------------------------------------------------------------------
+_MINO_HEAD = rows_of(22,
+    "......................",
+    ".....mmmmmmmmmm.......",
+    "...mmmmmmmmmmmmmm.....",
+    "..aaaaaaaaaaaaaaaa....",
+    ".aaaaaaaaaaaaaaaaaa...",
+    ".aakkkaaaaakkkaaaaa...",
+    "aaaeEkaaaaakEeaaaaa...",
+    "aaaakkaaaaaakkaaaaa...",
+    "aaaaaaaaaaaaaaaaaa....",
+    "AAAAAAAAAAAaaaaaaa....",
+    "AnnAAAAnnAAAaaaaa.....",
+    "AAAAAAAAAAAAaaaa......",
+    ".AAoooooAAAAaaa.......",
+    "..AoAAAoAAAaa.........",
+    "...AoooAAAa...........",
+    ".....AAAA.............",
+)
+_MINO_HORN = spans(None, plume(18, 12, 2, 4, 5, w_base=5, w_tip=1, peak=0.2), "h")
+_MINO_HORN = recolour(_MINO_HORN, (0, 5), "h", "H")
+_MINO_TORSO = spans(None, [(5, 27), (2, 30), (1, 31), (0, 32), (0, 32), (1, 31),
+                           (2, 30), (3, 29), (4, 28), (5, 27), (6, 26), (7, 25),
+                           (7, 25), (8, 24), (8, 24), (8, 24)], "a")
+_MINO_MUSCLE = rows_of(33,
+    ".................................",
+    ".................................",
+    ".................................",
+    ".......bbbbbbb.....bbbbbbb.......",
+    "......b.......bbbbb.......b......",
+    ".................................",
+    "...............b.b...............",
+    "............bb.b.b.bb............",
+    "...............b.b...............",
+    "............bb.b.b.bb............",
+    "...............b.b...............",
+)
+_MINO_PAULDRON = inset(spans(None, ellipse(16, 12), "g"), "g", "G", 2)
+_MINO_SPIKES = rows_of(16, "..X...X...X.....", ".XX..XX..XX.....")
+_MINO_LOIN = spans(24, [(0, 23), (0, 23), (1, 22), (2, 21), (3, 20), (4, 19),
+                        (6, 17), (8, 15)], "c")
+_MINO_LOIN[0] = _MINO_LOIN[1] = "g" * 24
+_MINO_AXE = rows_of(22,
+    ".....x..........x.....",
+    "...xxxx........xxxx...",
+    "..xXXxx........xxXXx..",
+    ".xXXxxxxx....xxxxxXXx.",
+    "xXXxxxxxxwwwwxxxxxxXXx",
+    "xXxxxxxxxwwwwxxxxxxxXx",
+    "xXxxxxxxxwwwwxxxxxxxXx",
+    "xXXxxxxxxwwwwxxxxxxXXx",
+    ".xXXxxxxx.ww.xxxxxXXx.",
+    "..xXXxx...ww...xxXXx..",
+    "...xxxx...ww...xxxx...",
+    ".....x....ww....x.....",
+) + ["..........ww.........."] * 22
+_MINO_STEAM = rows_of(7, "..vv...", ".vVVv..", "vVVVvv.", ".vvvVv.", "...vv..")
+
+
+def _wrap(cv, arm, ox):
+    """Bandages at the wrist only: a band, not a sleeve."""
+    (x1, y1, r1), (x2, y2, r2) = arm[-2], arm[-1]
+    tube(cv, [(x1 + (x2 - x1) * 0.55 + ox, y1 + (y2 - y1) * 0.55, r2 * 0.95),
+              (x2 + ox, y2, r2)], "r")
+
+
+def _minotaur(pose):
+    cv = canvas(80, 80)
+    ox = -3 if pose == "attack" else 0
+    # the axe: on the shoulder, brought down, or held low while it roars
+    if pose == "attack":
+        axe, _ = rotate(_MINO_AXE, -64)
+        stamp(cv, -2, 8, axe)
+    elif pose == "cast":
+        axe, _ = rotate(_MINO_AXE, 170)
+        stamp(cv, 48, 30, axe)
+    else:
+        axe, _ = rotate(_MINO_AXE, 28)
+        stamp(cv, 42, -2, axe)
+    # legs: thick, braced, ending in hooves
+    for x, mat in ((48, "d"), (34, "a")):
+        tube(cv, [(x + ox, 56, 6.2), (x + ox + 2, 66, 5.0), (x + ox, 75, 4.2)], mat)
+        stamp(cv, x + ox - 4, 74, rows_of(9, "kkkk.kkkk", "kkkk.kkkk"))
+    stamp(cv, 24 + ox, 26, _MINO_TORSO)
+    stamp(cv, 24 + ox, 26, _MINO_MUSCLE, onto=True)
+    stamp(cv, 28 + ox, 48, _MINO_LOIN)
+    arms = {"idle": ([(28, 30, 5.2), (22, 42, 4.4), (22, 52, 4.0)],
+                     [(54, 30, 5.6), (60, 22, 4.6), (58, 14, 4.2)]),
+            "attack": ([(28, 30, 5.2), (18, 30, 4.4), (10, 30, 4.0)],
+                       [(54, 30, 5.6), (44, 30, 4.6), (22, 28, 4.2)]),
+            "cast": ([(28, 30, 5.2), (20, 40, 4.4), (16, 48, 4.4)],
+                     [(54, 30, 5.6), (60, 42, 4.6), (58, 50, 4.4)])}[pose]
+    far, near = arms
+    tube(cv, [(x + ox, y, r) for x, y, r in far], "d")
+    _wrap(cv, far, ox)
+    # head: lowered on the swing, thrown back to roar
+    hx, hy = {"idle": (22, 10), "attack": (14, 14), "cast": (24, 6)}[pose]
+    tube(cv, [(40 + ox, 30, 8.0), (hx + 10, hy + 12, 7.0)], "a")     # a bull's neck
+    stamp(cv, hx + 14, hy - 8, _MINO_HORN)
+    stamp(cv, hx + 2 - len(_MINO_HORN[0]) + 10, hy - 8, mirror(_MINO_HORN))
+    stamp(cv, hx, hy, _MINO_HEAD)
+    stamp(cv, 50 + ox, 22, _MINO_PAULDRON)
+    stamp(cv, 50 + ox, 19, _MINO_SPIKES)
+    tube(cv, [(x + ox, y, r) for x, y, r in near], "a")
+    _wrap(cv, near, ox)
+    if pose == "cast":
+        stamp(cv, hx - 6, hy + 10, mirror(_MINO_STEAM))
+        stamp(cv, hx - 8, hy + 16, mirror(_MINO_STEAM))
+    return finish(cv)
+
+
+MINOTAUR_MAT = {
+    "a": M((122, 70, 46), "fur"), "d": M((96, 54, 38), "fur"),
+    "b": M((80, 44, 32), "fur", over="a"),
+    "A": M((170, 120, 90), "fur"), "n": M((40, 20, 20), "gem", flat=True),
+    "m": M((30, 24, 28), "fur"),
+    "k": M((28, 20, 20), "stone"),
+    "e": M((255, 90, 60), "gem", flat=True), "E": M((255, 220, 180), "gem", flat=True),
+    "o": M((230, 186, 80), "metal", outline=(80, 50, 24)),
+    "h": M((230, 220, 190), "stone"), "H": M((120, 100, 80), "stone"),
+    "g": M((200, 140, 70), "metal", outline=(70, 40, 20)),
+    "G": M((240, 190, 110), "metal", outline=(70, 40, 20)),
+    "X": M((210, 210, 220), "metal"),
+    "c": M((140, 36, 40), "cloth"),
+    "r": M((170, 150, 120), "cloth"),
+    "x": M((160, 166, 180), "metal"), "w": M((100, 70, 50), "matte"),
+    "v": M((236, 240, 248), "cloth", outline=False), "V": M((255, 255, 255), "cloth", outline=False),
+}
+
+# --------------------------------------------------------------------------
+# MEDUSA (80) - the gorgon as she tells it: cold, poised, dressed for a
+# funeral that is not hers, with hair that hisses and eyes that settle
+# arguments permanently. Her snakes are friendlier than she is. Barely.
+# --------------------------------------------------------------------------
+_MEDUSA_HEAD = rows_of(16,
+    "....hhhhhhhh....",
+    "..hhhhhhhhhhhh..",
+    ".hhhhhhhhhhhhhh.",
+    "hhbbhhhbbhhhbhhh",
+    "hbaaaaaaaaabbhhh",
+    "hakkkaakkkkbhhhh",
+    "hayykaayyykahhhh",
+    "haakkaaakkkahhhh",
+    "haaanaaaaaaabhhh",
+    ".aaaaaaaaaabbhh.",
+    ".aammmaaaaabhhh.",
+    "..aaaaaaaabbhh..",
+    "...aaaaaabbhh...",
+    "....aaaabb......",
+    ".....abb........",
+)
+_MEDUSA_HEAD_GAZE = [r.replace("y", "Y") for r in _MEDUSA_HEAD]
+_MEDUSA_SNAKE = rows_of(7, "..sss..", ".sssss.", "sWkssss", "ssssss.", "uuuus..", ".uu....")
+_MEDUSA_TORSO = spans(None, [(5, 8), (5, 8), (2, 11), (1, 12), (1, 12), (1, 12),
+                             (2, 11), (2, 11), (3, 10), (3, 10), (3, 10), (3, 10)], "a")
+_MEDUSA_GOWN = spans(None, [(3, 10), (2, 11), (1, 12), (2, 11), (3, 10), (3, 10),
+                            (2, 11), (2, 12), (1, 12), (1, 13), (0, 13), (0, 14),
+                            (0, 14), (0, 15), (0, 15), (0, 16), (0, 16), (0, 17),
+                            (0, 17), (0, 18), (0, 18), (0, 19), (0, 19), (0, 20),
+                            (0, 20), (0, 21), (0, 21), (0, 22), (0, 22), (0, 22),
+                            (0, 22), (0, 22), (1, 21), (2, 20)], "d")
+_MEDUSA_GOWN[0] = _MEDUSA_GOWN[0].replace("d", "g")
+_MEDUSA_GOWN[5] = _MEDUSA_GOWN[5].replace("d", "g")
+_MEDUSA_BEAM = rows_of(24, "YY..YYY...YYYY....YYYYYY", ".YYYYYYYYYYYYYYYYYYYYYYY", "YY..YYY...YYYY....YYYYYY")
+
+
+def _snakes(cv, hx, hy, strike):
+    """Snake locks rooted round the crown, coiling out; they lunge to strike."""
+    reach = 6 if strike else 0
+    roots = ((hx + 3, hy + 3), (hx + 6, hy + 1), (hx + 10, hy), (hx + 13, hy + 1),
+             (hx + 15, hy + 4), (hx + 15, hy + 8))
+    ends = ((hx - 6 - reach, hy + 2), (hx - 2 - reach, hy - 8), (hx + 8, hy - 12),
+            (hx + 18, hy - 10), (hx + 24, hy - 2), (hx + 24, hy + 10))
+    for i, ((rx, ry), (ex, ey)) in enumerate(zip(roots, ends)):
+        mid = ((rx + ex) // 2 + (3 if i % 2 else -3), (ry + ey) // 2 - 3)
+        body = "s" if i % 2 else "S"
+        tube(cv, [(rx, ry, 2.2), (mid[0], mid[1], 2.0), (ex, ey, 1.8)], body, belly="u")
+        head = [r.replace("s", body) for r in _MEDUSA_SNAKE]
+        stamp(cv, ex - 3, ey - 3, head if ex > hx + 8 else mirror(head))
+
+
+def _medusa(pose):
+    cv = canvas(80, 80)
+    ox = -4 if pose == "attack" else 0
+    hx, hy = 30 + ox, 12
+    _snakes(cv, hx, hy, pose == "attack")
+    # the gown, slit to the thigh: one leg shows
+    tube(cv, [(40 + ox, 48, 2.8), (43 + ox, 62, 2.4), (44 + ox, 74, 2.0), (42 + ox, 77, 1.4)], "a")
+    stamp(cv, 28 + ox, 38, _MEDUSA_GOWN)
+    stamp(cv, 32 + ox, 26, _MEDUSA_TORSO)
+    stamp(cv, 32 + ox, 26, spans(14, [None, None, None, (1, 12), (1, 12), (2, 11), (2, 11),
+                                       (2, 11), (3, 10), (3, 10), (3, 10), (3, 10)], "d"),
+          onto=True)
+    arms = {"idle": ([(34, 30, 2.1), (30, 38, 1.9), (40, 38, 1.7)],
+                     [(44, 30, 2.3), (48, 37, 2.0), (38, 39, 1.8)]),
+            "attack": ([(34, 30, 2.1), (24, 30, 1.9), (14, 28, 1.7)],
+                       [(44, 30, 2.3), (48, 38, 2.0), (46, 46, 1.8)]),
+            "cast": ([(34, 30, 2.1), (28, 24, 1.9), (30, 17, 1.7)],
+                     [(44, 30, 2.3), (48, 38, 2.0), (46, 46, 1.8)])}[pose]
+    for arm, mat in zip(arms, ("b", "a")):
+        tube(cv, [(x + ox, y, r) for x, y, r in arm], mat)
+        x, y, r = arm[1]
+        tube(cv, [(x + ox, y, r + 0.3)], "g")                 # serpent armlets
+    if pose == "attack":
+        x, y, _ = arms[0][-1]
+        for dy in (-4, 0, 4):                        # the rake of her nails
+            tube(cv, [(x + ox - 3, y + dy - 2, 0.6), (x + ox - 10, y + dy + 2, 0.5)], "Y")
+    stamp(cv, hx, hy, _MEDUSA_HEAD_GAZE if pose == "cast" else _MEDUSA_HEAD)
+    if pose == "cast":
+        stamp(cv, hx - 24, hy + 5, _MEDUSA_BEAM)
+    return finish(cv)
+
+
+MEDUSA_MAT = {
+    "a": M((210, 216, 200), "cel"), "b": M((180, 188, 176), "cel"),
+    "h": M((40, 60, 50), "fur"),
+    "k": M((20, 20, 24), "gem", flat=True),
+    "y": M((230, 240, 80), "gem", flat=True), "Y": M((255, 255, 190), "gem", flat=True),
+    "n": M((170, 176, 160), "cel", flat=True), "m": M((110, 60, 80), "cel", flat=True),
+    "s": M((52, 130, 90), "scale"), "S": M((80, 160, 90), "scale"),
+    "u": M((220, 214, 150), "scale", over="s"),
+    "W": M((255, 255, 255), "gem", flat=True),
+    "d": M((70, 40, 100), "cloth"), "g": M((220, 180, 80), "metal", outline=(80, 54, 26)),
+}
+MEDUSA_MAT["Y"] = M((255, 255, 190), "gem", flat=True, outline=False)
+
+# --------------------------------------------------------------------------
+# HARPY (80) - shrieks first, considers later. A storm-crow of a woman:
+# wings where her arms should be, war paint across the eyes, a wild crest
+# of feathers for hair and talons made for exactly what they do.
+# --------------------------------------------------------------------------
+_HARPY_WING = wing([26, 29, 27, 23, 18, 13], [("b", "e"), ("d", "e")], gap=2, edge="e")
+_HARPY_WING_F = [r.replace("b", "B").replace("d", "D").replace("e", "E")
+                 for r in wing([22, 25, 23, 19, 14], [("b", "e"), ("d", "e")], gap=2, edge="e")]
+_HARPY_HEAD = rows_of(18,
+    "....h..hh.h..h....",
+    "...hhhhhhhhhhhh...",
+    "..hhHHHhhhhhhhhh..",
+    ".hhhHHhhhhhhhhhhh.",
+    ".hhhhhhhhhhhhhhhhh",
+    "hjhhhjhhhhjhhhhhhh",
+    "hjbbhjbbhhbjhhhhhh",
+    "hjbaajaaaabbhhhhhh",
+    "hjpkkkpakkkkkhhhhh",
+    "hja+ikaai+iiekhhhh",
+    "hjpppkaappppeahhhh",
+    "hjaaaaaaakkaaahhhh",
+    "hj.aanaaaaaaaabhhh",
+    "hj.aaaaaaaaaabbhhh",
+    "hj..aqqqaaaabhhhh.",
+    "hj...aaaaaabbhhh..",
+    ".j....aaaabbhhh...",
+    "......abb..hh.....",
+)
+_HARPY_SHRIEK = [r.replace("aqqqaaaab", "aQQQQaaab") for r in _HARPY_HEAD]
+_HARPY_SHRIEK[13] = _HARPY_SHRIEK[13].replace("aaaaaaaaaabb", "aaQQQQaaaabb", 1)
+_HARPY_TORSO = spans(None, [(5, 8), (4, 9), (2, 11), (1, 12), (1, 12), (2, 11),
+                            (2, 11), (3, 10), (3, 10), (3, 10), (4, 9), (4, 9)], "a")
+_HARPY_BODICE = spans(14, [None, None, (1, 12), (1, 12), (2, 11), (2, 11), (2, 11),
+                           (3, 10), None, None, (4, 9), (4, 9)], "c")
+_HARPY_TAIL = rows_of(16,
+    "......bbbb......",
+    "....bbdbdbbb....",
+    "..bbdbbdbbdbbb..",
+    ".bdbb.bdb.bbdbb.",
+    "bdb...bdb...bdbb",
+    "bb....bdb....bbb",
+    "......bb........",
+)
+_HARPY_GUST = rows_of(9, "..s....s.", ".s..ss...", "s..s....s", ".ss...ss.")
+
+
+def _harpy(pose):
+    cv = canvas(80, 80)
+    dive = pose == "attack"
+    ox = -4 if dive else 0
+    near_a, far_a = {"idle": (-30, -150), "attack": (10, 170), "cast": (-78, -104)}[pose]
+    pin_rotated(cv, _HARPY_WING_F, (0, 7), (35 + ox, 30), far_a)
+    stamp(cv, 30 + ox, 50, _HARPY_TAIL)
+    # bird legs: scaled, knees back, talons spread
+    legs = {"idle": ((36, 50), (34, 62), (36, 72)), "attack": ((36, 50), (28, 58), (20, 62)),
+            "cast": ((36, 50), (34, 62), (36, 72))}[pose]
+    for dx in (0, 7):
+        (x0, y0), (x1, y1), (x2, y2) = legs
+        tube(cv, [(x0 + dx + ox, y0, 3.0), (x1 + dx + ox, y1, 1.8), (x2 + dx + ox, y2, 1.6)], "l")
+        stamp(cv, x2 + dx + ox - 4, y2, rows_of(8, "t..t..t.", ".t.t.t..", "..ttt..."))
+    # feathers from the waist down: a skirt of them over the thighs
+    tube(cv, [(38 + ox, 40, 5.0), (39 + ox, 47, 6.0), (40 + ox, 52, 5.5)], "f")
+    for y in range(42, 57, 3):
+        for x in range(30, 50):
+            if cv[y][x] == "f" and (x + y) % 3 == 0:
+                cv[y][x] = "F"
+    stamp(cv, 32 + ox, 27, _HARPY_TORSO)
+    stamp(cv, 32 + ox, 27, _HARPY_BODICE, onto=True)
+    stamp(cv, 28 + ox, 10, _HARPY_SHRIEK if pose == "cast" else _HARPY_HEAD)
+    pin_rotated(cv, _HARPY_WING, (0, 7), (44 + ox, 30), near_a)
+    if pose == "cast":
+        for x, y in ((2, 16), (4, 30), (0, 44)):
+            stamp(cv, x, y, _HARPY_GUST)
+    return finish(cv)
+
+
+HARPY_MAT = {
+    "a": M((238, 206, 180), "cel"), "p": M((170, 40, 50), "cel", flat=True),
+    "h": M((150, 90, 50), "fur"), "H": M((210, 150, 90), "fur", over="h"),
+    "j": M((100, 56, 34), "fur"), "b2": None,
+    "k": M((30, 20, 20), "gem", flat=True),
+    "i": M((230, 160, 40), "gem", flat=True), "I": M((255, 220, 120), "gem", flat=True),
+    "+": GLINT, "n": M((200, 160, 140), "cel", flat=True),
+    "q": M((110, 40, 50), "cel", flat=True), "Q": M((70, 20, 30), "gem", flat=True),
+    "b": M((150, 90, 52), "fur"), "d": M((190, 130, 72), "fur"), "e": M((80, 44, 30), "fur"),
+    "B": M((120, 70, 42), "fur"), "D": M((160, 104, 60), "fur"), "E": M((64, 36, 26), "fur"),
+    "c": M((220, 200, 170), "fur"), "f": M((170, 110, 64), "fur"),
+    "F": M((120, 72, 44), "fur", over="f"),
+    "l": M((236, 186, 70), "scale"), "t": M((40, 30, 30), "stone"),
+    "s": M((255, 250, 230), "gem", flat=True, outline=False),
+}
+del HARPY_MAT["b2"]
+HARPY_MAT["e2"] = None
+del HARPY_MAT["e2"]
+
+# --------------------------------------------------------------------------
+# CYCLOPS (80) - one of the smiths who forged the thunderbolt, and never
+# once thanked for it: a giant under a heavy brow, one great eye, a beard
+# singed at the ends, and a forge hammer that has flattened better things
+# than you.
+# --------------------------------------------------------------------------
+_CYC_HEAD = rows_of(22,
+    "......hhhhhhhh........",
+    "....hhaaaaaaaahh......",
+    "...aaaaaaaaaaaaaa.....",
+    "..aaaaaaaaaaaaaaaa....",
+    ".aabbbbbbbbbbbbbaaa...",
+    ".akkkkkkkkkkkkkkaaa...",
+    "aakwwwwwiiiwwwwkaaa...",
+    "aakwwwwiIIiiwwwkaaa...",
+    "aakwwwwiI+iiwwwkaaa...",
+    "aaakkwwiiiiiwwkkaaa...",
+    "aaaaakkkkkkkkkaaaa....",
+    "aaaaaaaanaaaaaaaaa....",
+    ".aaaaaannnaaaaaaa.....",
+    ".rrrrrraaaarrrrrr.....",
+    "rrrrrrqqqqqrrrrrrr....",
+    "rrrrrrrrrrrrrrrrrr....",
+    ".rrrrrrrrrrrrrrrr.....",
+    "..rrrRrrrrRrrrrr......",
+    "...rRrrRrrrRrrr.......",
+    "....rr..rr..rr........",
+)
+_CYC_TORSO = spans(None, [(6, 30), (3, 33), (1, 35), (0, 36), (0, 36), (0, 36),
+                          (1, 35), (2, 34), (3, 33), (4, 32), (5, 31), (6, 30),
+                          (6, 30), (7, 29), (7, 29), (8, 28), (8, 28), (8, 28)], "a")
+_CYC_TATTOO = rows_of(37,
+    ".....................................",
+    ".....................................",
+    ".....................................",
+    "...t.t.t.........................t.t.",
+    "....ttt.........................ttt..",
+    ".....t...........................t...",
+)
+_CYC_APRON = spans(24, [(2, 21), (2, 21), (2, 21), (2, 21), (3, 20), (3, 20),
+                        (3, 20), (4, 19), (4, 19), (4, 19), (5, 18), (5, 18),
+                        (5, 18), (6, 17), (6, 17), (7, 16)], "l")
+_CYC_APRON[0] = _CYC_APRON[1] = "x" * 24
+_CYC_HAMMER = rows_of(16,
+    "xxxxxxxxxxxxxxxx",
+    "xXXXXXXXXXXXXXXx",
+    "xXxxxxxxxxxxxxXx",
+    "xxxxxxxxxxxxxxxx",
+    "xxxxxxxxxxxxxxxx",
+    "xXxxxxxxxxxxxxXx",
+    "xxxxxxxxxxxxxxxx",
+    "......oooo......",
+) + ["......oooo......"] * 26 + [".....xxxxxx....."]
+_CYC_GLARE = rows_of(24, "YY.YYY..YYYY..YYYYYYYYYY", ".YYYYYYYYYYYYYYYYYYYYYYY", "YY.YYY..YYYY..YYYYYYYYYY")
+
+
+def _bracer(cv, arm, ox):
+    """An iron band round the forearm, short of the wrist: a bracer, not a
+    gauntlet swallowing the whole arm."""
+    (x1, y1, _), (x2, y2, r2) = arm[-2], arm[-1]
+    a, b = 0.45, 0.8
+    tube(cv, [(x1 + (x2 - x1) * a + ox, y1 + (y2 - y1) * a, r2 + 0.5),
+              (x1 + (x2 - x1) * b + ox, y1 + (y2 - y1) * b, r2 + 0.5)], "x")
+
+
+def _cyclops(pose):
+    cv = canvas(80, 80)
+    ox = -3 if pose == "attack" else 0
+    # the hammer: grounded, raised, or overhead mid-smash
+    if pose == "attack":
+        # a flat sidesweep at chest height: the swing reads, and so does he
+        ham, _ = rotate(_CYC_HAMMER, 96)
+        stamp(cv, -4, 24, ham)
+    else:
+        ham, _ = rotate(_CYC_HAMMER, 12)
+        stamp(cv, 50, 30, ham)
+    for x, mat in ((48, "b"), (30, "a")):
+        tube(cv, [(x + ox, 56, 6.4), (x + ox - 1, 66, 5.6), (x + ox, 75, 5.2)], mat)
+        stamp(cv, x + ox - 6, 73, rows_of(12, "kkkkkkkkkkk.", "kkkkkkkkkkkk"))
+    stamp(cv, 21 + ox, 26, _CYC_TORSO)
+    stamp(cv, 21 + ox, 26, _CYC_TATTOO, onto=True)
+    stamp(cv, 27 + ox, 44, _CYC_APRON)
+    arms = {"idle": ([(24, 30, 5.8), (16, 42, 4.8), (14, 52, 4.6)],
+                     [(54, 30, 6.2), (58, 42, 5.2), (56, 50, 5.0)]),
+            "attack": ([(24, 30, 5.8), (16, 36, 4.8), (12, 38, 4.6)],
+                       [(54, 30, 6.2), (38, 38, 5.2), (20, 40, 5.0)]),
+            "cast": ([(24, 30, 5.8), (16, 42, 4.8), (14, 52, 4.6)],
+                     [(54, 30, 6.2), (58, 42, 5.2), (56, 50, 5.0)])}[pose]
+    far, near = arms
+    tube(cv, [(x + ox, y, r) for x, y, r in far], "b")
+    _bracer(cv, far, ox)
+    tube(cv, [(40 + ox, 28, 7.0), (40 + ox, 22, 7.0)], "a")        # a neck like a bole
+    hx, hy = {"idle": (28, 4), "attack": (24, 8), "cast": (28, 2)}[pose]
+    stamp(cv, hx, hy, _CYC_HEAD)
+    tube(cv, [(x + ox, y, r) for x, y, r in near], "a")
+    _bracer(cv, near, ox)
+    if pose == "cast":
+        stamp(cv, hx - 24, hy + 5, _CYC_GLARE)
+    return finish(cv)
+
+
+CYCLOPS_MAT = {
+    "a": M((196, 150, 120), "skin"), "b": M((166, 124, 100), "skin"),
+    "h": M((60, 40, 30), "fur"),
+    "k": M((50, 36, 30), "stone"),
+    "w": M((250, 246, 236), "gem", flat=True),
+    "i": M((210, 120, 40), "gem", flat=True), "I": M((255, 200, 90), "gem", flat=True),
+    "+": GLINT, "n": M((150, 104, 84), "skin", flat=True),
+    "r": M((140, 60, 30), "fur"), "R": M((200, 110, 50), "fur", over="r"),
+    "q": M((70, 30, 30), "gem", flat=True),
+    "t": M((60, 50, 110), "skin", over="a", flat=True),
+    "l": M((120, 80, 50), "cloth"), "x": M((96, 96, 110), "metal"),
+    "X": M((170, 170, 186), "metal"), "o": M((110, 80, 56), "matte"),
+    "Y": M((255, 240, 180), "gem", flat=True, outline=False),
+}
+
+# --------------------------------------------------------------------------
+# PEGASUS (80) - insufferably graceful: a white war-steed of the high air,
+# gold at the brow and hoof, mane like struck light, swan's wings held half
+# open as if it might leave at any moment, which it would prefer.
+# --------------------------------------------------------------------------
+_PEG_WING = wing([26, 30, 30, 28, 24, 20, 16], [("w", "e"), ("W", "e")], gap=3, edge="e")
+_PEG_WING_F = [r.replace("w", "v").replace("W", "V").replace("e", "E")
+               for r in wing([22, 26, 26, 23, 19, 15], [("w", "e"), ("W", "e")], gap=3, edge="e")]
+_PEG_HEAD = rows_of(20,
+    "..........aa........",
+    ".........aaa........",
+    "........aaaaa.......",
+    "......gggaaaaa......",
+    "....aaaaaaaaaaa.....",
+    "..aaaakkaaaaaaaa....",
+    ".aaaaakaaaaaaaaaa...",
+    "aaaaaaaaaaaaaaaaa...",
+    "nAAAAAaaaaaaaaaa....",
+    "AAAAAAAaaaaaaaa.....",
+    ".AAAAAAaaaaaaa......",
+    "..AAAAaaaaaa........",
+)
+_PEG_SPARK = rows_of(3, ".s.", "sSs", ".s.")
+
+
+def _pegasus(pose):
+    cv = canvas(80, 80)
+    rear = pose == "attack"
+    lift = -8 if rear else 0
+    near_a, far_a = {"idle": (-58, -78), "attack": (-36, -56), "cast": (-86, -100)}[pose]
+    pin_rotated(cv, _PEG_WING_F, (0, 7), (40, 36 + lift), far_a)
+    # the tail streams back
+    tube(cv, [(60, 38 + lift // 2, 3.2), (68, 42, 3.6), (72, 52, 3.0), (70, 62, 2.2),
+              (74, 68, 1.2)], "m")
+    tube(cv, [(62, 40, 1.4), (69, 48, 1.6), (70, 58, 1.2)], "M")
+    # far legs, body, near legs; rearing lifts the forehand
+    fore = ((28, 48 + lift), (22, 56 + lift), (16, 52 + lift)) if rear else ((28, 48), (27, 62), (26, 76))
+    fore_f = ((32, 48 + lift), (26, 58 + lift), (22, 60 + lift)) if rear else ((33, 48), (33, 62), (32, 76))
+    for (a, b, c) in (fore_f, ((56, 48), (58, 62), (56, 76))):
+        tube(cv, [(a[0], a[1], 3.4), (b[0], b[1], 2.2), (c[0], c[1], 2.0)], "b")
+        stamp(cv, c[0] - 2, c[1] - 1, rows_of(5, "ggggg", "ggggg"))
+    tube(cv, [(30, 40 + lift, 8.0), (42, 42 + lift // 2, 7.2), (54, 42, 7.0),
+              (60, 40, 6.4)], "a")
+    for (a, b, c) in (fore, ((52, 48), (54, 62), (50, 76))):
+        tube(cv, [(a[0], a[1], 3.8), (b[0], b[1], 2.4), (c[0], c[1], 2.2)], "a")
+        stamp(cv, c[0] - 2, c[1] - 1, rows_of(5, "ggggg", "ggggg"))
+    # a proud neck, the head held high
+    hx, hy = {"idle": (8, 8), "attack": (6, 0), "cast": (10, 4)}[pose]
+    tube(cv, [(32, 36 + lift, 6.4), (hx + 14, hy + 10, 5.2)], "a")
+    # the mane falls along the crest of the neck
+    tube(cv, [(hx + 14, hy + 4, 3.0), (hx + 20, hy + 12, 3.4), (26, 26 + lift, 3.4),
+              (32, 32 + lift, 2.6)], "m")
+    tube(cv, [(hx + 15, hy + 6, 1.2), (hx + 20, hy + 14, 1.4), (27, 28 + lift, 1.2)], "M")
+    stamp(cv, hx, hy, _PEG_HEAD)
+    pin_rotated(cv, _PEG_WING, (0, 7), (46, 36 + lift), near_a)
+    if pose == "cast":
+        for x, y in ((6, 30), (70, 6), (2, 52), (62, 30)):
+            stamp(cv, x, y, _PEG_SPARK)
+    return finish(cv)
+
+
+PEGASUS_MAT = {
+    "a": M((246, 246, 252), "fur"), "b": M((212, 214, 232), "fur"),
+    "A": M((230, 226, 240), "fur"), "n": M((150, 140, 170), "fur", flat=True),
+    "k": M((40, 40, 80), "gem", flat=True),
+    "g": M((236, 196, 90), "metal", outline=(80, 56, 26)),
+    "m": M((250, 226, 150), "fur"), "M": M((255, 248, 210), "fur"),
+    "w": M((250, 250, 255), "fur"), "W": M((226, 232, 250), "fur"),
+    "e": M((150, 170, 220), "fur"),
+    "v": M((214, 218, 240), "fur"), "V": M((196, 202, 230), "fur"), "E": M((130, 146, 196), "fur"),
+    "s": M((255, 250, 220), "gem", flat=True, outline=False),
+    "S": M((255, 255, 255), "gem", flat=True, outline=False),
+}
+
+# --------------------------------------------------------------------------
+# CHIMERA (80) - three animals, one very bad mood: a lion with a mane like
+# a banked fire, a black goat rising out of its back with horns wound tight,
+# and a viper for a tail that is always, always looking at you.
+# --------------------------------------------------------------------------
+_CHIM_LION = rows_of(22,
+    ".....aaaaaaaaaa.......",
+    "...aaaaaaaaaaaaaa.....",
+    "..aaakkkaaaaaaaaaa....",
+    ".aaaakeykaaaaaaaaa....",
+    "aaaaaakkaaaaaaaaaa....",
+    "AAAAAaaaaaaaaaaaa.....",
+    "nAAAAAAaaaaaaaaaa.....",
+    "nnAAAAAAaaaaaaaa......",
+    ".TqTqTAAAaaaaa........",
+    "..qqqqqqAAaaa.........",
+    "...TqTqAAAa...........",
+    ".....AAAA.............",
+)
+_CHIM_LION_ROAR = rows_of(22,
+    ".....aaaaaaaaaa.......",
+    "...aaaaaaaaaaaaaa.....",
+    "..aaakkkaaaaaaaaaa....",
+    ".aaaakeykaaaaaaaaa....",
+    "aaaaaakkaaaaaaaaaa....",
+    "AAAAAaaaaaaaaaaaa.....",
+    "nAAAAAAaaaaaaaaaa.....",
+    ".TqTqTqqAaaaaaaa......",
+    "..qqqqqqqqAaaaa.......",
+    "..qqQQQqqqAaaa........",
+    "...qqqqqqAAaa.........",
+    "...TqTqTqAAa..........",
+    ".....AAAAA............",
+)
+_CHIM_GOAT = rows_of(12,
+    "....gggggg..",
+    "..gggggggggg",
+    ".ggkkgggggg.",
+    "gggkegggggg.",
+    "Gggggggggg..",
+    "GGGggggggg..",
+    ".GGGgggg....",
+    "..GGgg......",
+    "...GG.......",
+)
+_CHIM_VIPER = rows_of(9, "..sssss..", ".sssssss.", "sWkssssss", "sssssss..", "uuuuus...", ".uuu.....")
+_CHIM_FIRE = rows_of(14,
+    "........fF....",
+    "....ffFFfWf...",
+    "..ffFFWWWFff..",
+    "fFFWWWWWWWFf..",
+    ".fFFWWWWFFff..",
+    "..ffFFWFFf....",
+    "....fff.......",
+)
+
+
+def _mane(w, h):
+    """A ragged mane: an ellipse cut into tufts at the rim, streaked inward."""
+    import math
+    rows = [list(r) for r in inset(spans(None, ellipse(w, h), "r"), "r", "R", 4)]
+    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
+    for y in range(h):
+        for x in range(len(rows[y])):
+            if rows[y][x] == ".":
+                continue
+            ang = math.atan2(y - cy, x - cx)
+            rad = math.hypot((x - cx) / (w / 2.0), (y - cy) / (h / 2.0))
+            # scallop the rim into tufts
+            if rad > 0.82 + 0.14 * math.cos(ang * 9):
+                rows[y][x] = "."
+            elif rows[y][x] == "R" and int((ang + math.pi) * 9) % 3 == 0:
+                rows[y][x] = "r"
+    return ["".join(r) for r in rows]
+
+
+_CHIM_MANE = _mane(34, 32)
+
+
+def _chimera(pose):
+    cv = canvas(80, 80)
+    low = 4 if pose == "attack" else 0
+    # the viper tail rises behind, head cocked
+    tube(cv, [(60, 42 + low, 3.4), (68, 36, 3.0), (72, 26, 2.6), (68, 18, 2.4)], "s", belly="u")
+    stamp(cv, 60, 12, mirror(_CHIM_VIPER))
+    # legs and body: a lion's, heavy in the shoulder
+    for (x0, x1, x2) in ((32, 30, 28), (56, 60, 56)):
+        tube(cv, [(x0, 48 + low, 4.8), (x1, 62, 3.4), (x2, 76, 3.2)], "b")
+    tube(cv, [(30, 42 + low, 10.0), (42, 44 + low, 8.4), (54, 43 + low, 7.4),
+              (60, 42 + low, 6.8)], "c")
+    for (x0, x1, x2) in ((26, 24, 21), (54, 58, 53)):
+        tube(cv, [(x0, 48 + low, 5.4), (x1, 62, 3.8), (x2, 76, 3.6)], "c")
+        stamp(cv, x2 - 4, 74, rows_of(9, "cc.cc.cc.", "ccccccccc"))
+    # the goat rises from the back on its own neck, horns wound back
+    tube(cv, [(48, 38 + low, 5.0), (52, 24 + low, 4.2), (53, 12 + low, 3.8)], "g")
+    for side in (0, 1):
+        tube(cv, [(55 + side * 2, 7 + low, 2.4), (61 + side, 5 + low, 2.0),
+                  (64, 11 + low, 1.6), (61, 15 + low, 1.2)], "h")
+    stamp(cv, 46, 6 + low, _CHIM_GOAT)
+    # the lion: mane first, then the face in it
+    hx, hy = {"idle": (4, 16), "attack": (-2, 24), "cast": (6, 10)}[pose]
+    stamp(cv, hx + 4, hy - 8, _CHIM_MANE)
+    stamp(cv, hx, hy + 2, _CHIM_LION_ROAR if pose != "idle" else _CHIM_LION)
+    if pose == "cast":
+        stamp(cv, hx - 12, hy + 4, mirror(_CHIM_FIRE))
+    return finish(cv)
+
+
+CHIMERA_MAT = {
+    "c": M((214, 160, 90), "fur"), "b": M((176, 128, 72), "fur"),
+    "a": M((222, 170, 100), "fur"), "A": M((240, 214, 170), "fur"),
+    "r": M((140, 40, 34), "fur"), "R": M((190, 70, 40), "fur", over="r"),
+    "k": M((40, 20, 16), "gem", flat=True),
+    "e": M((255, 190, 60), "gem", flat=True), "y": M((255, 240, 180), "gem", flat=True),
+    "n": M((40, 20, 20), "gem", flat=True),
+    "q": M((80, 16, 20), "gem", flat=True), "Q": M((255, 110, 40), "gem", emissive=0.9),
+    "T": M((250, 244, 230), "gem", flat=True),
+    "g": M((40, 36, 44), "fur"), "G": M((80, 76, 86), "fur"), "h": M((170, 150, 120), "stone"),
+    "s": M((70, 120, 70), "scale"), "u": M((210, 204, 140), "scale", over="s"),
+    "W": M((255, 255, 255), "gem", flat=True),
+    "f": M((255, 140, 50), "gem", emissive=0.85), "F": M((255, 80, 40), "gem", emissive=0.7),
+}
+CHIMERA_MAT["W2"] = None
+del CHIMERA_MAT["W2"]
+
+# --------------------------------------------------------------------------
+# SATYR (80) - a faun of the wine roads, all charm and no conscience: curled
+# horns, a crooked grin, goat's legs and a set of pipes he will not stop
+# playing, even to kick you.
+# --------------------------------------------------------------------------
+_SATYR_HEAD = rows_of(19,
+    "...hhhhhhhhhhhh....",
+    "..hhhhHHHhhhhhhh...",
+    ".hhhhHHhhhhhhhhhh..",
+    "hhhhhhhhhhhhhhhhh..",
+    "hjhhhjhhhhjhhhhhhh.",
+    "hjbbhjbbhhbjhhhhhh.",
+    "hjbaajaaaabbhhhhhh.",
+    "hjakkkaakkkkkhhhhh.",
+    "hja+ikaai+iiekhhhh.",
+    "hjaiIkaaiIIieahhhh.",
+    "hjaakaaaakkkaahhhh.",
+    "hjaaaoaaaaaaaabhhh.",
+    "hj.aaaaaaaaaabbhhh.",
+    "hj.aaaamaaaambhhh..",
+    "hj..aaaammmmbbhh...",
+    "hj...aaaaaabbhh....",
+    ".j....aaaabbh......",
+    "......abb..........",
+)
+_SATYR_HORN = spans(None, [(3, 6), (2, 7), (1, 7), (0, 6), (0, 5), (1, 5), (2, 6),
+                           (4, 8), (6, 9), (7, 9)], "w")
+_SATYR_HORN = [r[:3] + r[3:5].replace("w", "W") + r[5:] for r in _SATYR_HORN]
+_SATYR_TORSO = spans(None, [(5, 8), (5, 8), (2, 11), (1, 12), (1, 12), (1, 12),
+                            (2, 11), (2, 11), (3, 10), (3, 10), (3, 10), (3, 10)], "a")
+_SATYR_VEST = spans(14, [None, None, (1, 4), (1, 5), (1, 5), (1, 5), (2, 5), (2, 5),
+                         (3, 5), (3, 5), (3, 5), (3, 5)], "v")
+_SATYR_VEST = [r[:8] + "".join("v" if c == "a" else c for c in r[8:]) for r in _SATYR_VEST]
+_SATYR_PIPES = rows_of(11,
+    "ppppppppppp",
+    "PPPPPPPPPPP",
+    "p.p.p.p.p.p",
+    "p.p.p.p.p..",
+    "p.p.p.p....",
+    "p.p.p......",
+    "p.p........",
+)
+_SATYR_NOTE = rows_of(4, "...n", "..nn", "..n.", "..n.", "nnn.", "nnn.")
+
+
+def _satyr(pose):
+    cv = canvas(80, 80)
+    ox = -4 if pose == "attack" else 0
+    # goat legs: thigh forward, hock back; one kicks out to strike
+    far = [(38, 46, 4.0), (35, 55, 3.0), (39, 63, 2.4), (37, 74, 2.0)]
+    near = ([(44, 46, 4.4), (36, 54, 3.2), (26, 56, 2.6), (18, 54, 2.2)] if pose == "attack"
+            else [(44, 46, 4.4), (48, 55, 3.2), (43, 63, 2.6), (46, 74, 2.2)])
+    tube(cv, [(x + ox, y, r) for x, y, r in far], "F")
+    stamp(cv, far[-1][0] + ox - 3, 74, rows_of(6, "kkkkk.", "kk.kk."))
+    stamp(cv, 31 + ox, 24, _SATYR_TORSO)
+    stamp(cv, 31 + ox, 24, _SATYR_VEST, onto=True)
+    tube(cv, [(41 + ox, 40, 6.0), (41 + ox, 46, 6.2)], "f")       # the goat half
+    tube(cv, [(x + ox, y, r) for x, y, r in near], "f")
+    nx, ny, _ = near[-1]
+    stamp(cv, nx + ox - 3, ny - 1, rows_of(6, "kkkkk.", "kk.kk."))
+    # arms and pipes: held at the lips in all but the kick
+    if pose == "attack":
+        arms = ([(34, 28, 2.1), (26, 24, 1.9), (20, 18, 1.7)], [(44, 28, 2.3), (50, 20, 2.0), (54, 12, 1.8)])
+    else:
+        arms = ([(34, 28, 2.1), (28, 24, 1.9), (30, 19, 1.7)], [(44, 28, 2.3), (44, 22, 2.0), (38, 19, 1.8)])
+    tube(cv, [(x + ox, y, r) for x, y, r in arms[0]], "b")
+    stamp(cv, 26 + ox, 4, _SATYR_HEAD)
+    stamp(cv, 40 + ox, 0, _SATYR_HORN)
+    stamp(cv, 26 + ox, 2, mirror(_SATYR_HORN))
+    if pose != "attack":
+        stamp(cv, 24 + ox, 17, _SATYR_PIPES)
+    tube(cv, [(x + ox, y, r) for x, y, r in arms[1]], "a")
+    if pose == "cast":
+        for x, y in ((4, 8), (12, 20), (2, 30), (62, 6), (66, 24)):
+            stamp(cv, x, y, _SATYR_NOTE)
+    return finish(cv)
+
+
+SATYR_MAT = {
+    "a": M((238, 198, 164), "cel"), "b": M((214, 176, 146), "cel"),
+    "h": M((120, 60, 40), "fur"), "H": M((180, 110, 70), "fur", over="h"),
+    "j": M((80, 38, 26), "fur"),
+    "k": M((30, 22, 20), "gem", flat=True), "e": M((250, 250, 250), "gem", flat=True),
+    "i": M((120, 170, 60), "gem", flat=True), "I": M((200, 230, 120), "gem", flat=True),
+    "+": GLINT, "n2": None,
+    "m": M((150, 70, 70), "cel", flat=True),
+    "w": M((96, 84, 74), "stone"), "W": M((150, 136, 120), "stone", over="w"),
+    "v": M((100, 60, 120), "cloth"),
+    "f": M((130, 90, 60), "fur"), "F": M((104, 70, 48), "fur"),
+    "p": M((230, 190, 90), "plant", outline=(90, 60, 30)), "P": M((150, 110, 60), "plant"),
+}
+del SATYR_MAT["n2"]
+SATYR_MAT["n"] = M((255, 246, 200), "gem", flat=True, outline=False)
+SATYR_MAT["o"] = M((200, 150, 120), "cel", flat=True)
+
+# --------------------------------------------------------------------------
+# NEMEAN LION (80) - its hide has never once been cut: a lion the size of
+# a cart, coat like beaten gold, mane like a thundercloud at sunset, and at
+# its feet the heads of every spear that tried.
+# --------------------------------------------------------------------------
+def _lion_mane(w, h):
+    import math
+    rows = [list(r) for r in inset(spans(None, ellipse(w, h), "r"), "r", "R", 5)]
+    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
+    for y in range(h):
+        for x in range(len(rows[y])):
+            if rows[y][x] == ".":
+                continue
+            ang = math.atan2(y - cy, x - cx)
+            rad = math.hypot((x - cx) / (w / 2.0), (y - cy) / (h / 2.0))
+            if rad > 0.8 + 0.16 * math.cos(ang * 11):
+                rows[y][x] = "."
+            elif int((ang + math.pi) * 11) % 3 == 0 and rad > 0.35:
+                rows[y][x] = "r" if rows[y][x] == "R" else "j"
+    return ["".join(r) for r in rows]
+
+
+_NEM_MANE = _lion_mane(40, 38)
+# a broad face, set into the mane rather than poking out of it
+_NEM_FACE = rows_of(22,
+    "......aaaaaaaaa.......",
+    "....aaaaaaaaaaaaa.....",
+    "...aaaaaaaaaaaaaaa....",
+    "..akkkkaaaaakkkkkaa...",
+    ".aaaaeekkaaaaaeekaa...",
+    ".aaaaaaaaaaaaaaaaaa...",
+    "aaaaaaaaaaaaaaaaaaa...",
+    "AAAAAAaaaaaaaaaaaa....",
+    "AAAAAAAAaaaaaaaaaa....",
+    "nnAAAAAAAAaaaaaaa.....",
+    "nAAAAAAAAAAaaaaa......",
+    ".AAqqqqAAAAAaaa.......",
+    "..AAAAAAAAAaa.........",
+    "....AAAAAA............",
+)
+_NEM_ROAR = rows_of(22,
+    "......aaaaaaaaa.......",
+    "....aaaaaaaaaaaaa.....",
+    "...aaaaaaaaaaaaaaa....",
+    "..akkkkaaaaakkkkkaa...",
+    ".aaaaeekkaaaaaeekaa...",
+    ".aaaaaaaaaaaaaaaaaa...",
+    "aaaaaaaaaaaaaaaaaaa...",
+    "AAAAAAaaaaaaaaaaaa....",
+    "nnAAAAAAaaaaaaaaaa....",
+    ".TqTqTqTAAaaaaaaa.....",
+    "..qqqQQQqqAAaaaa......",
+    "..qqQQQQqqqAaaa.......",
+    "..qqqqqqqqAAaa........",
+    "..TqTqTqTAAa..........",
+    "....AAAAAAA...........",
+)
+_NEM_SPEAR = rows_of(14, "..............", "ss............", "sss...........",
+                     "sswwwwwwwww...", "sss...........", "ss............")
+_NEM_WAVE = rows_of(5, "..Y..", ".Y...", "Y....", ".Y...", "..Y..")
+
+
+def _nemean(pose):
+    cv = canvas(80, 80)
+    low = 4 if pose == "attack" else 0
+    # tail with its dark tuft
+    tube(cv, [(64, 46 + low, 2.8), (72, 42, 2.4), (75, 32, 2.0)], "b")
+    stamp(cv, 70, 24, spans(None, ellipse(9, 9), "r"))
+    for (x0, x1, x2) in ((34, 32, 30), (58, 62, 59)):
+        tube(cv, [(x0, 54 + low, 5.2), (x1, 65, 4.0), (x2, 76, 3.8)], "b")
+    # long and low, all chest
+    tube(cv, [(30, 48 + low, 11.5), (44, 50 + low, 9.4), (56, 49 + low, 8.4),
+              (64, 48 + low, 7.2)], "a")
+    # the near forepaw raised, claws out, to pounce
+    fore = ([(26, 54 + low, 5.8), (16, 58, 4.2), (8, 58, 4.0)] if pose == "attack"
+            else [(26, 54 + low, 5.8), (24, 65, 4.4), (22, 76, 4.2)])
+    for leg in (fore, [(56, 54 + low, 5.8), (60, 65, 4.4), (56, 76, 4.2)]):
+        tube(cv, leg, "a")
+        x, y, _ = leg[-1]
+        stamp(cv, x - 4, y - 1, rows_of(9, "aaaaaaaa.", "aaaaaaaaa", "T.T.T...."))
+    hx, hy = {"idle": (4, 20), "attack": (-2, 26), "cast": (6, 14)}[pose]
+    stamp(cv, hx - 4, hy - 12, _NEM_MANE)
+    stamp(cv, hx, hy, _NEM_ROAR if pose != "idle" else _NEM_FACE)
+    stamp(cv, 2, 72, _NEM_SPEAR)
+    stamp(cv, 60, 70, mirror(_NEM_SPEAR))
+    if pose == "cast":
+        for i in range(3):
+            stamp(cv, hx - 4 - i * 5, hy + 6 + i, _NEM_WAVE)
+    return finish(cv)
+
+
+NEMEAN_MAT = {
+    # the hide is lit as metal: it has never been cut because it is not fur
+    "a": M((236, 186, 80), "metal", outline=(90, 56, 22)),
+    "b": M((200, 150, 64), "metal", outline=(90, 56, 22)),
+    "A": M((252, 226, 160), "metal", outline=(90, 56, 22)),
+    "r": M((120, 60, 30), "fur"), "R": M((170, 96, 40), "fur", over="r"),
+    "j": M((90, 44, 26), "fur", over="r"),
+    "k": M((50, 30, 16), "gem", flat=True), "e": M((255, 230, 120), "gem", flat=True),
+    "n": M((50, 30, 20), "gem", flat=True),
+    "q": M((90, 30, 20), "gem", flat=True), "Q": M((255, 190, 90), "gem", emissive=0.8),
+    "T": M((250, 244, 230), "gem", flat=True),
+    "s": M((170, 176, 190), "metal"), "w": M((130, 96, 60), "matte"),
+    "Y": M((255, 236, 150), "gem", flat=True, outline=False),
+}
+
+# --------------------------------------------------------------------------
+# SIREN (80) - the song is the dangerous part: a sea-singer on a floe,
+# pearls at the brow, hair the colour of deep water, and a finned tail that
+# ends in a train like a gown. She is only ever singing to one of you.
+# --------------------------------------------------------------------------
+_SIREN_HEAD = rows_of(19,
+    "......oOoOo........",
+    ".....hhhhhhhhh.....",
+    "...hhhhhhhhhhhhh...",
+    "..hhhhHHHHhhhhhhh..",
+    ".hhhhHHHhhhhhhhhhh.",
+    ".hhhhhhhhhhhhhhhhhh",
+    "hhjhhhjhhhhjhhhhhhh",
+    "hjbbhhjbbhhbjhhhhhh",
+    "hhbaajaaaabbhhhhhhh",
+    "hhaaaaaaaaaaahhhhhh",
+    "hhakkkkaakkkkkhhhhh",
+    "hhaaiiaaaaiiiahhhhh",
+    "hhaaaaaaaaaaaabhhhh",
+    "hhaaanaaaaaaaabhhhh",
+    "hh.aaaaaaaaaabbhhhh",
+    "hh.aammaaaaaabhhhhh",
+    "hh..aaaaaaaabbhhhhh",
+    "hh...aaaaaabbhhhhhh",
+    "hhh...aaaabbhhhhhhh",
+    "hhh....abb..hhhhhh.",
+)
+_SIREN_SING = [r.replace("aammaa", "aaMMaa") for r in _SIREN_HEAD]
+_SIREN_TORSO = spans(None, [(5, 8), (5, 8), (2, 11), (1, 12), (1, 12), (1, 12),
+                            (2, 11), (2, 11), (3, 10), (3, 10), (3, 10)], "a")
+_SIREN_SHELLS = spans(14, [None, None, None, (1, 12), (1, 12), (2, 11), None, None,
+                           None, None, None], "c")
+_SIREN_SHELLS[3] = ".cCcCc.cCcCc.."
+_SIREN_FIN = rows_of(16,
+    "ff............ff",
+    "fFf..........fFf",
+    ".fFff......ffFf.",
+    ".ffFFff..ffFFff.",
+    "..ffFFFffFFFff..",
+    "...ffFFFFFFff...",
+    ".....ffFFff.....",
+    ".......ff.......",
+)
+_SIREN_ROCK = inset(spans(None, ellipse(48, 16), "r"), "r", "I", 3)
+_SIREN_NOTE = rows_of(4, "...n", "..nn", "..n.", "..n.", "nnn.", "nnn.")
+_SIREN_SPRAY = rows_of(7, "..w.w..", ".w.w.w.", "w.w.w.w", ".w...w.")
+
+
+def _siren(pose):
+    cv = canvas(80, 80)
+    # hair: long, falling down her back and over the rock
+    tube(cv, [(44, 14, 7.0), (50, 26, 6.4), (52, 40, 5.4), (50, 52, 4.0), (54, 60, 2.2)], "h")
+    tube(cv, [(45, 16, 2.2), (50, 30, 2.4), (51, 44, 1.8)], "H")
+    stamp(cv, 16, 62, _SIREN_ROCK)
+    # the tail curls over the lip of the floe; it lashes to strike
+    if pose == "attack":
+        path = [(36, 42, 6.4), (32, 52, 6.0), (22, 58, 5.0), (12, 54, 3.6), (4, 46, 2.2)]
+        fin_at, fin_rot = (-6, 30), -70
+    else:
+        path = [(36, 42, 6.4), (36, 52, 6.2), (44, 60, 5.4), (56, 62, 4.0), (64, 58, 2.4)]
+        fin_at, fin_rot = (60, 44), 20
+    tube(cv, path, "s", belly="u")
+    scales(cv, "s", "S", 4)
+    fin, _ = rotate(_SIREN_FIN, fin_rot)
+    stamp(cv, fin_at[0], fin_at[1], fin)
+    stamp(cv, 29, 28, _SIREN_TORSO)
+    stamp(cv, 29, 28, _SIREN_SHELLS, onto=True)
+    arms = {"idle": ([(31, 31, 2.0), (26, 38, 1.8), (22, 46, 1.6)],
+                     [(41, 31, 2.2), (42, 38, 2.0), (36, 36, 1.8)]),
+            "attack": ([(31, 31, 2.0), (26, 38, 1.8), (22, 46, 1.6)],
+                       [(41, 31, 2.2), (46, 38, 2.0), (48, 46, 1.8)]),
+            "cast": ([(31, 31, 2.0), (22, 26, 1.8), (14, 22, 1.6)],
+                     [(41, 31, 2.2), (50, 26, 2.0), (58, 20, 1.8)])}[pose]
+    tube(cv, arms[0], "b")
+    stamp(cv, 26, 9, _SIREN_SING if pose == "cast" else _SIREN_HEAD)
+    tube(cv, arms[1], "a")
+    if pose == "cast":
+        for x, y in ((4, 8), (12, 0), (64, 4), (70, 16), (2, 26)):
+            stamp(cv, x, y, _SIREN_NOTE)
+    if pose == "attack":
+        for x, y in ((0, 38), (8, 30), (2, 56)):
+            stamp(cv, x, y, _SIREN_SPRAY)
+    return finish(cv)
+
+
+SIREN_MAT = {
+    "a": M((246, 222, 216), "cel"), "b": M((222, 196, 196), "cel"),
+    "h": M((40, 120, 150), "fur"), "H": M((110, 200, 210), "fur", over="h"),
+    "j": M((24, 70, 100), "fur"),
+    "k": M((20, 30, 50), "gem", flat=True),
+    "i": M((80, 180, 220), "gem", flat=True),
+    "n": M((200, 230, 255), "gem", flat=True, outline=False),
+    "m": M((180, 100, 120), "cel", flat=True), "M": M((110, 40, 70), "gem", flat=True),
+    "o": M((250, 246, 240), "gem"), "O": M((230, 220, 250), "gem"),
+    "c": M((246, 170, 190), "stone"), "C": M((255, 220, 230), "stone", over="c"),
+    "s": M((70, 140, 210), "scale"), "S": M((50, 110, 180), "scale", over="s"),
+    "u": M((200, 236, 240), "scale", over="s"),
+    "f": M((120, 200, 240), "gem"), "F": M((210, 244, 255), "gem"),
+    "i2": None,
+    "I": M((226, 242, 255), "stone"), "w": M((220, 244, 255), "gem", flat=True, outline=False),
+}
+del SIREN_MAT["i2"]
+SIREN_MAT["r"] = M((196, 222, 240), "stone")
+
+# --------------------------------------------------------------------------
+# TALOS (80) - the bronze guardian of Crete: a hoplite cast rather than born,
+# crested helm, riveted cuirass gone green in the seams, and one vein of
+# ichor from neck to heel, stoppered with a nail that was never quite tight.
+# --------------------------------------------------------------------------
+_TALOS_HELM = rows_of(18,
+    "......aaaaaa......",
+    "....aaaaaaaaaa....",
+    "...aaaaaaaaaaaa...",
+    "..aaaaaaaaaaaaaa..",
+    "..aaaaaaaaaaaaaa..",
+    ".kkkkkkaaaaaaaaaa.",
+    "keeeekkaaaaaaaaaa.",
+    ".kkkkkkaaaaaaaaaa.",
+    "..aakkaaaaaaaaaa..",
+    "..aakkaaaaaaaaaa..",
+    "..aakkaaaaaaaaa...",
+    "...akkaaaaaaa.....",
+    "....aaaaaaa.......",
+)
+_TALOS_CUIRASS = spans(None, [(4, 26), (1, 29), (0, 30), (0, 30), (1, 29), (2, 28),
+                              (3, 27), (4, 26), (5, 25), (6, 24), (6, 24), (7, 23),
+                              (7, 23), (7, 23), (7, 23)], "a")
+_TALOS_DETAIL = rows_of(31,
+    "...............................",
+    "...v.......................v...",
+    "...............................",
+    "......qqqqqq......qqqqqq.......",
+    ".....q......qqqqqq......q......",
+    "..............q.q..............",
+    "...........qq.q.q.qq...........",
+    "..............q.q..............",
+    "...........qq.q.q.qq...........",
+    "..............q.q..............",
+    "...v.......................v...",
+)
+_TALOS_SHIELD = inset(spans(None, ellipse(26, 26), "b"), "b", "c", 3)
+_TALOS_BOLT = rows_of(10, "......eeee", ".....eeee.", "....eeee..", "...eeEeeee",
+                      "......eee.", ".....eee..", "....eee...", "...ee.....", "..e.......")
+_TALOS_SPEAR = rows_of(6, "..xx..", ".xXXx.", ".xXXx.", "xXXXXx", "xxxxxx", "..xx..") + ["..ww.."] * 44
+_TALOS_SKIRT = rows_of(20, *["pp.pp.pp.pp.pp.pp.pp"] * 5)
+_TALOS_ARC = rows_of(7, "z......", ".z..z..", "..zz.z.", "...z..z", "..z....")
+
+
+def _talos(pose):
+    cv = canvas(80, 80)
+    ox = -4 if pose == "attack" else 0
+    # the crest, front to back over the helm
+    tube(cv, [(30 + ox, 6, 2.0), (34 + ox, 1, 2.4), (40 + ox, 0, 2.6), (46 + ox, 2, 2.4),
+              (50 + ox, 7, 2.0)], "r")
+    # the spear: grounded, levelled to thrust, or lifted
+    if pose == "attack":
+        near = [(52, 30, 4.2), (42, 32, 3.6), (30, 32, 3.4)]
+    else:
+        stamp(cv, 58, 2 if pose == "idle" else -6, _TALOS_SPEAR)
+        near = [(52, 30, 4.2), (58, 38, 3.6), (60, 32 if pose == "cast" else 40, 3.4)]
+    stride = {"idle": (0, 0), "attack": (-5, 3), "cast": (-1, 1)}[pose]
+    for (x, mat), dx in zip(((46, "b"), (32, "a")), stride):
+        x += ox + dx
+        tube(cv, [(x, 48, 5.4), (x, 58, 4.4)], mat)                     # thigh
+        tube(cv, [(x, 59, 4.2), (x - 1, 64, 4.8), (x - 1, 71, 3.0)], "g")  # greave
+        tube(cv, [(x - 1, 74, 3.0), (x - 5, 76, 2.4)], mat)              # sandal
+    stamp(cv, 25 + ox, 24, _TALOS_CUIRASS)
+    stamp(cv, 25 + ox, 24, _TALOS_DETAIL, onto=True)
+    stamp(cv, 29 + ox, 45, _TALOS_SKIRT)
+    far = {"idle": [(28, 30, 4.0), (20, 38, 3.4), (16, 40, 3.2)],
+           "attack": [(28, 30, 4.0), (22, 36, 3.4), (18, 38, 3.2)],
+           "cast": [(28, 30, 4.0), (20, 22, 3.4), (16, 14, 3.2)]}[pose]
+    tube(cv, [(x + ox, y, r) for x, y, r in far], "b")
+    stamp(cv, 31 + ox, 6, _TALOS_HELM)
+    # the ichor vein, neck to heel, and the nail where it leaks
+    for x, y in ((40, 26), (40, 28), (39, 30), (39, 32), (40, 34), (40, 36), (41, 38),
+                 (41, 40), (42, 42), (43, 44), (45, 56), (46, 58), (46, 60), (46, 62)):
+        if cv[y][x + ox] not in ".":
+            cv[y][x + ox] = "i"
+    stamp(cv, 44 + ox, 66, rows_of(3, "nnn", "nNn", "nnn"))
+    stamp(cv, 45 + ox, 69, rows_of(2, "i.", "ii", ".i"))
+    # the shield on the far arm: guarding, or raised to call the storm
+    sx, sy = {"idle": (4, 28), "attack": (6, 26), "cast": (2, 0)}[pose]
+    stamp(cv, sx + ox, sy, _TALOS_SHIELD)
+    stamp(cv, sx + 8 + ox, sy + 8, _TALOS_BOLT)
+    if pose == "attack":
+        sp, _ = rotate(_TALOS_SPEAR, -84)
+        stamp(cv, 1, 27, sp)
+    tube(cv, [(x + ox, y, r) for x, y, r in near], "a")
+    for x, y in ((28, 27), (50, 27)):                                   # pauldrons
+        tube(cv, [(x + ox - 3, y, 3.6), (x + ox + 3, y, 3.6)], "c")
+    if pose == "cast":
+        for x, y in ((30, 4), (2, 30), (66, 40)):
+            stamp(cv, x, y, _TALOS_ARC)
+    return finish(cv)
+
+
+TALOS_MAT = {
+    "a": M((206, 134, 70), "metal", outline=(80, 40, 20)),
+    "b": M((180, 114, 60), "metal", outline=(80, 40, 20)),
+    "c": M((222, 160, 90), "metal", outline=(80, 40, 20)),
+    "g": M((150, 128, 84), "metal", outline=(48, 40, 26)),
+    "q": M((140, 80, 44), "metal", over="a"), "v": M((255, 226, 170), "metal", over="a"),
+    "k": M((40, 24, 20), "gem", flat=True),
+    "e": M((140, 240, 255), "gem", emissive=0.9), "E": M((255, 255, 255), "gem", emissive=1.0),
+    "r": M((190, 40, 44), "fur"),
+    "x": M((200, 206, 220), "metal"), "X": M((250, 252, 255), "metal"),
+    "w": M((110, 80, 56), "matte"),
+    "p": M((120, 70, 44), "matte"),
+    "i": M((255, 214, 90), "gem", emissive=0.9),
+    "n": M((110, 110, 120), "metal"), "N": M((200, 200, 210), "metal"),
+    "z": M((200, 240, 255), "gem", flat=True, outline=False),
+}
+
 # ---------------------------------------------------------------------------
 ART = {
     "pixie": Creature(_pixie, PIXIE_MAT),
     "kitsune": Creature(_kitsune, KITSUNE_MAT),
     "kappa": Creature(_kappa, KAPPA_MAT),
     "thunderbird": Creature(_thunderbird, THUNDERBIRD_MAT),
-    "golem": (GOLEM64, GOLEM64_MAT),
+    "golem": Creature(_golem, GOLEM_MAT),
     "wisp": Creature(_wisp, WISP_MAT),
-    "naga": (NAGA64, NAGA64_MAT),
-    "tengu": (TENGU64, TENGU64_MAT),
+    "naga": Creature(_naga, NAGA_MAT),
+    "tengu": Creature(_tengu, TENGU_MAT),
     "mandrake": Creature(_mandrake, MANDRAKE_MAT),
-    "cerberus": (CERBERUS64, CERBERUS64_MAT),
-    "baku": (BAKU64, BAKU64_MAT),
+    "cerberus": Creature(_cerberus, CERBERUS_MAT),
+    "baku": Creature(_baku, BAKU_MAT),
     "anubis": Creature(_anubis, ANUBIS_MAT),
-    "minotaur": (MINOTAUR64, MINOTAUR64_MAT),
-    "medusa": (MEDUSA64, MEDUSA64_MAT),
-    "harpy": (HARPY64, HARPY64_MAT),
-    "cyclops": (CYCLOPS64, CYCLOPS64_MAT),
-    "pegasus": (PEGASUS64, PEGASUS64_MAT),
-    "chimera": (CHIMERA64, CHIMERA64_MAT),
-    "satyr": (SATYR64, SATYR64_MAT),
-    "nemean": (NEMEAN64, NEMEAN64_MAT),
-    "siren": (SIREN64, SIREN64_MAT),
-    "talos": (TALOS64, TALOS64_MAT),
+    "minotaur": Creature(_minotaur, MINOTAUR_MAT),
+    "medusa": Creature(_medusa, MEDUSA_MAT),
+    "harpy": Creature(_harpy, HARPY_MAT),
+    "cyclops": Creature(_cyclops, CYCLOPS_MAT),
+    "pegasus": Creature(_pegasus, PEGASUS_MAT),
+    "chimera": Creature(_chimera, CHIMERA_MAT),
+    "satyr": Creature(_satyr, SATYR_MAT),
+    "nemean": Creature(_nemean, NEMEAN_MAT),
+    "siren": Creature(_siren, SIREN_MAT),
+    "talos": Creature(_talos, TALOS_MAT),
 }
 
 _cache = {}
