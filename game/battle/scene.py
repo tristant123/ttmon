@@ -308,6 +308,17 @@ class BattleScene(Scene):
                     "%s %s" % (e["stat"].upper(), arrow), r.centerx, r.y + 4,
                     P.ICON_FULL if e["delta"] > 0 else P.EL_DARK))
             return 0.22
+        if t == "charge":
+            r = self.rect_of(e["actor"])
+            self.floats.append(effects.FloatText(
+                "!! SCALES RAISED !!", r.centerx, r.y + 10, P.ICON_FULL))
+            self.flash_screen((255, 214, 120), 60)
+            sfx.play("repel")
+            return 0.6
+        if t == "discharge":
+            self.flash_screen((255, 240, 200), 110)
+            self.shake_world = 0.3
+            return 0.25
         if t == "capture_try":
             tgt = e["target"]
             r = self.crect_of(tgt)
@@ -503,7 +514,10 @@ class BattleScene(Scene):
                 self.start_target("skill", payload, ENEMY)
         elif self.mode == "item":
             sfx.play("confirm")
-            self.start_target("item", payload, PLAYER, allow_downed=True)
+            if payload.whole_side:
+                self.run_action(Action("item", item=payload.key))
+            else:
+                self.start_target("item", payload, PLAYER, allow_downed=True)
         elif self.mode == "sigil":
             sfx.play("confirm")
             self.start_target("capture", payload, ENEMY)
@@ -535,10 +549,11 @@ class BattleScene(Scene):
                 lines.insert(1, "Each survivor gained %d XP." % xp)
         elif res == "lose":
             sfx.play("defeat")
-            lost = int(player.gold * 0.3)
-            player.gold -= lost
             lines.append("Your monsters can fight no more...")
-            lines.append("You wake at the Hollow, %d coin lighter." % lost)
+            if not self.b.boss:
+                lost = int(player.gold * 0.3)
+                player.gold -= lost
+                lines.append("You wake at the Hollow, %d coin lighter." % lost)
         elif res == "fled":
             lines.append("You got away.")
         elif res == "stalemate":
@@ -608,6 +623,14 @@ class BattleScene(Scene):
                 c = self.crect_of(mon)
                 fx.add_light(c.centerx, c.centery - 6, 86, (196, 150, 255),
                              0.30 + 0.06 * math.sin(self.game.time * 2.0))
+        for mon in self.b.foes:
+            if mon.charged and not mon.down:
+                # a wound-up blow glows gold and throbs: the warning has to
+                # read from across the room, not only in the message box
+                c = self.crect_of(mon)
+                beat = 0.5 + 0.5 * math.sin(self.game.time * 7.0)
+                fx.add_light(c.centerx, c.y + c.h // 3, 120, (255, 214, 120),
+                             0.45 + 0.35 * beat)
 
     def draw_monster(self, canvas, mon, enemy):
         rect = self.crect_of(mon)
@@ -680,11 +703,33 @@ class BattleScene(Scene):
         x = r.centerx - 13
         uimod.gauge(ui, x, y, 26, 3, ratio, uimod.hp_color(ratio))
         self.draw_ailment_dot(ui, mon, x - 2, y + 4)
+        self.draw_stage_tags(ui, mon, x + 28, y - 2)
+        if mon.charged and self.game.blink:
+            get_font().draw(ui, "SCALES RAISED", r.centerx - 26, y + 5,
+                            P.ICON_FULL, P.BLACK)
         if self.actor_mark is mon and self.mode in (
                 "command", "skill", "item", "sigil", "target"):
             if self.game.blink:
                 get_font().draw(ui, "\x03", r.centerx - 2, r.y - 8,
                                 P.ICON_FULL, P.BLACK)
+
+    def flash_screen(self, colour, alpha):
+        self.screen_flash = [colour, alpha, 0.0]
+
+    STAGE_LETTER = {"atk": "A", "dfn": "D", "agi": "S"}
+
+    def draw_stage_tags(self, surf, mon, x, y):
+        """A foe's stages as short tags - D+2 in gold, A-1 in red - so a
+        gilded boss is visibly gilded without scanning anything."""
+        font = get_font()
+        for key in ("atk", "dfn", "agi"):
+            v = mon.buffs[key]
+            if not v:
+                continue
+            text = "%s%+d" % (self.STAGE_LETTER[key], v)
+            font.draw(surf, text, x, y, P.ICON_FULL if v > 0 else P.HP_BAD,
+                      P.BLACK)
+            y += 8
 
     def draw_ailment_dot(self, surf, mon, x, y):
         if not mon.ailment:
@@ -714,10 +759,19 @@ class BattleScene(Scene):
                 from ..monster import AILMENT_SHORT
                 font.draw(surf, AILMENT_SHORT[mon.ailment], x + w - 34, y + 8,
                           P.EL_DARK)
-            for j, (k, v) in enumerate(mon.buffs.items()):
-                if v:
-                    c = P.ICON_FULL if v > 0 else P.HP_BAD
-                    pygame.draw.rect(surf, c, (x + 3 + j * 5, y + 13, 4, 1))
+            px = x + 3
+            for k in ("atk", "dfn", "agi"):
+                v = mon.buffs[k]
+                if not v:
+                    continue
+                c = P.ICON_FULL if v > 0 else P.HP_BAD
+                # a letter, then a pip per stage: A.. D. S...
+                get_font().draw(surf, self.STAGE_LETTER[k], px, y + 12, c)
+                px += 5
+                for _ in range(abs(v)):
+                    pygame.draw.rect(surf, c, (px, y + 15, 2, 2))
+                    px += 3
+                px += 2
 
     def draw_turn_strip(self, surf):
         font = get_font()

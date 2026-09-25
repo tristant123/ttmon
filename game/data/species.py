@@ -47,7 +47,7 @@ _sp("pixie", "Pixie", "Fairy", "pixie",
     {PHYS: WEAK, DARK: WEAK, WIND: RESIST, ELEC: RESIST},
     _b(26, 22, 6, 11, 6, 12, 10),
     [(1, "gust"), (1, "mend"), (3, "spark"), (6, "haste"), (9, "cleanse"),
-     (12, "maelstrom"), (15, "mend_all")],
+     (11, "dispel"), (13, "maelstrom"), (15, "mend_all")],
     catch=55, xp=20,
     desc="A hedge-sprite the size of a teacup. Bites.")
 
@@ -140,8 +140,8 @@ _sp("baku", "Baku", "Dream", "baku",
 _sp("satyr", "Satyr", "Fairy", "satyr",
     {PHYS: WEAK, ICE: WEAK, WIND: RESIST},
     _b(34, 26, 9, 12, 9, 14, 13),
-    [(1, "gust"), (1, "lullaby"), (5, "haste"), (8, "sap"), (12, "cyclone"),
-     (16, "dispel")],
+    [(1, "gust"), (1, "lullaby"), (5, "haste"), (8, "sap"), (10, "dispel"),
+     (12, "cyclone")],
     catch=38, xp=34,
     desc="Pipes at all hours. Takes requests, ignores them.")
 
@@ -220,7 +220,7 @@ _sp("nemean", "Nemean Lion", "Beast", "nemean",
 _sp("anubis", "Anubis", "Deity", "anubis",
     {WIND: WEAK, LIGHT: REPEL, DARK: DRAIN, PHYS: RESIST, FIRE: RESIST,
      ICE: RESIST},
-    _b(115, 60, 16, 18, 16, 15, 14),
+    _b(105, 60, 16, 18, 16, 15, 14),
     [(1, "scale_of_ma"), (1, "judgement_blade"), (1, "radiance"),
      (1, "mythos_ray"), (1, "crack"), (1, "bolster"), (1, "dread")],
     catch=0, xp=300, flee=True, press=1, scale=2,
@@ -237,8 +237,14 @@ def stat_at(base_value, level, growth=0.06):
     return max(1, int(round(base_value * (1.0 + growth * (level - 1)))))
 
 
+# Everyone carries a quarter more HP than the damage model alone suggests.
+# Weakness hits hand out extra actions, so the difference between "lost a
+# monster" and "lost the fight" in one enemy turn was too thin to react in.
+HP_SCALE = 1.25
+
+
 def hp_at(base_value, level):
-    return int(round(base_value * (1.0 + 0.115 * (level - 1))))
+    return int(round(base_value * HP_SCALE * (1.0 + 0.115 * (level - 1))))
 
 
 def mp_at(base_value, level):

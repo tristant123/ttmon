@@ -176,6 +176,7 @@ VILLAGE = GameMap(
         ], name="Nen"),
         NPC(17, 8, "shop", [
             "Herbs, draughts, sigils. Coin first.",
+            "Going to the shrine? Then you want\nincense, salt and a bell. Trust me.",
         ], name="Pell the Trader", action="shop"),
         NPC(16, 12, "ward", [
             "Rest here, binder. Your monsters look\nlike a bad night's sleep.",
@@ -321,6 +322,13 @@ SHRINE = GameMap(
         NPC(7, 6, "ward", [
             "The spring still runs clean. Drink,\nand your monsters will too.",
         ], name="Spring", action="heal"),
+        NPC(4, 13, "pilgrim", [
+            "You mean to stand before the scale?\nThen hear what it cost me to learn.",
+            "He gilds his hide first. Strip the gold\nwith Dispel, or a bell - or Crack it -\nor nothing you have will bite.",
+            "When he lifts the scales, you have one\nturn. Ward yourselves. Sap him. Brace.\nHeal whoever is hurt. Do not attack.",
+            "The desert wind was always what he\nfeared. Light he throws back, and dark\nhe drinks.",
+            "And near the end, his anger rises.\nSap it, or it will be the end of you.",
+        ], name="Pilgrim Sefa"),
     ])
 
 # ---------------------------------------------------------------------------

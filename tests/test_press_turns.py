@@ -282,3 +282,91 @@ class TestStalemate(unittest.TestCase):
                 continue
             b.execute(b.ai_pick(b.current_actor))
         self.assertEqual(b.finished, "win")
+
+
+class TestStagesAndBosses(unittest.TestCase):
+    def test_a_stage_changes_damage_by_a_quarter(self):
+        m = Monster("golem", 10)
+        m.apply_buff("dfn", 1)
+        self.assertAlmostEqual(m.buff_mult("dfn"), 1.25)
+        m.apply_buff("dfn", -3)
+        self.assertAlmostEqual(m.buff_mult("dfn"), 1 / 1.5)
+
+    def test_stages_wear_off_after_three_rounds(self):
+        m = Monster("golem", 10)
+        m.apply_buff("atk", 1)
+        self.assertEqual(m.tick_buffs(), [])
+        self.assertEqual(m.tick_buffs(), [])
+        self.assertEqual(m.tick_buffs(), ["atk"])
+        self.assertEqual(m.buffs["atk"], 0)
+
+    def test_dispel_strips_buffs_but_leaves_debuffs(self):
+        m = Monster("anubis", 15)
+        m.apply_buff("dfn", 2)
+        m.apply_buff("atk", -1)
+        self.assertTrue(m.clear_buffs())
+        self.assertEqual((m.buffs["dfn"], m.buffs["atk"]), (0, -1))
+
+    def test_ailment_skills_deal_no_damage(self):
+        a, t = Monster("mandrake", 10), Monster("golem", 10)
+        b = Battle([a], [t], rng=random.Random(1))
+        b.begin()
+        hp = t.hp
+        b.execute(Action("skill", SK.get("snare"), [t]))
+        self.assertEqual(t.hp, hp)
+
+    def test_bosses_shrug_off_ailments(self):
+        a, boss = Monster("mandrake", 14), Monster("anubis", 15)
+        b = Battle([a], [boss], rng=random.Random(1), boss=True)
+        b.begin()
+        for _ in range(20):
+            boss.ailment = None
+            b._apply_ailment(a, SK.get("snare"), [boss])
+            self.assertIsNone(boss.ailment)
+
+    def test_the_weighing_never_lands_in_the_round_it_is_announced(self):
+        party = [Monster(k, 14) for k in ("golem", "kappa", "tengu")]
+        boss = Monster("anubis", 15)
+        b = Battle(party, [boss], rng=random.Random(5), boss=True,
+                   inventory={"draught": 20, "ash": 10})
+        b.begin()
+        announced = {}
+        for _ in range(400):
+            if b.finished:
+                break
+            if b.current_actor is None:
+                b._settle()
+                continue
+            rnd = b.round          # execute() may roll into the next round
+            for e in b.execute(b.ai_pick(b.current_actor)):
+                if e["type"] == "act" and e.get("skill"):
+                    key = e["skill"].key
+                    if key == "lift_scales":
+                        announced[rnd] = True
+                    if key == "weighing":
+                        self.assertTrue(any(r < rnd for r in announced))
+                        self.assertNotIn(rnd, announced)
+        self.assertTrue(announced, "the rite should reach the warning")
+
+    def test_a_wind_up_is_not_spent_by_another_attack(self):
+        boss = Monster("anubis", 15)
+        b = Battle([Monster("golem", 15)], [boss], rng=random.Random(2),
+                   boss=True)
+        b.begin()
+        boss.charged = "weighing"
+        ev = []
+        b._do_attack(boss, SK.get("verdict"), list(b.party), ev)
+        self.assertEqual(boss.charged, "weighing")
+        b._do_attack(boss, SK.get("weighing"), list(b.party), ev)
+        self.assertFalse(boss.charged)
+
+    def test_stage_items_hit_a_whole_side(self):
+        party = [Monster("kappa", 10), Monster("golem", 10)]
+        foes = [Monster("naga", 10), Monster("tengu", 10)]
+        b = Battle(party, foes, rng=random.Random(1),
+                   inventory={"incense": 1, "salt": 1})
+        b.begin()
+        b.execute(Action("item", item="incense"))
+        self.assertTrue(all(m.buffs["dfn"] == 1 for m in party))
+        b.execute(Action("item", item="salt"))
+        self.assertTrue(all(m.buffs["atk"] == -1 for m in foes))

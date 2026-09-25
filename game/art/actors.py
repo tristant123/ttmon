@@ -232,6 +232,12 @@ WARD_PAL = _recolour(h=M((64, 64, 90), "cloth"), H=M((104, 104, 138), "cloth"),
                      C=M((140, 182, 238), "cloth"),
                      t=M((56, 72, 112), "cloth"))
 
+# a pilgrim in dusty ochre, hood up
+PILGRIM_PAL = _recolour(h=M((150, 120, 84), "cloth"), H=M((190, 160, 112), "cloth"),
+                        c=M((170, 128, 80), "cloth"),
+                        C=M((212, 172, 116), "cloth"),
+                        t=M((110, 84, 60), "cloth"))
+
 
 def build():
     """Lit walk cycles at 32x48, drawn at their authored resolution."""
@@ -249,5 +255,6 @@ def build():
         "shop": lit(VILLAGER, SHOP_PAL),
         "kid": lit(VILLAGER, KID_PAL),
         "ward": lit(VILLAGER, WARD_PAL),
+        "pilgrim": lit(VILLAGER, PILGRIM_PAL),
     }
     return hero, npcs

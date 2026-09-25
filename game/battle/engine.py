@@ -32,6 +32,11 @@ ENEMY = "enemy"
 # What matters is damage the player actually deals.
 STALEMATE_ROUNDS = 8
 
+# How often a wild monster plays its best line rather than something
+# middling from its top half. Animals are not tacticians; at 0.78 a chance
+# early matchup was all but unwinnable.
+WILD_INTEL = 0.6
+
 # icon costs
 NORMAL, BONUS, MISS, NULLED, REFLECT = "normal", "bonus", "miss", "null", "reflect"
 
@@ -121,6 +126,7 @@ class Battle:
         # which nobody's HP moves at all, both sides disengage.
         self._player_damage = 0
         self._stale_rounds = 0
+        self.script = {}                # scratch space for a boss script
 
     # --- helpers ----------------------------------------------------------
     def members(self, side):
@@ -189,6 +195,9 @@ class Battle:
             count += 1
         self.turns = PressTurns(count)
         self.guarding -= set(self.members(side))
+        worn = []
+        if side == PLAYER and not first:
+            worn = self._tick_stages()
         if side == PLAYER:
             self.round += 1
             if self.round > 1:
@@ -203,7 +212,22 @@ class Battle:
                         _ev("end", result="stalemate")]
         ev = [_ev("phase", side=side, text="Your turn" if side == PLAYER
                   else "Foe's turn")]
+        ev += worn
         ev += self._settle()
+        return ev
+
+    STAGE_WORDS = {"atk": "attack", "dfn": "defence", "agi": "speed"}
+
+    def _tick_stages(self):
+        """A new round: every stage counts down, and some wear off."""
+        ev = []
+        for mon in self.party + self.foes:
+            if mon.down:
+                continue
+            for key in mon.tick_buffs():
+                ev.append(_ev("buff", target=mon, stat=key, delta=0))
+                ev.append(_ev("msg", text="%s's %s returns to normal."
+                              % (mon.name, self.STAGE_WORDS[key])))
         return ev
 
     def _end_side(self):
@@ -319,6 +343,8 @@ class Battle:
     def _do_skill(self, actor, action):
         skill = action.skill
         ev = [_ev("act", actor=actor, skill=skill)]
+        if skill.say:
+            ev.append(_ev("msg", text=skill.say.replace("%s", actor.name)))
         actor.spend(skill)
         targets = [t for t in action.targets if not t.down] or None
         if targets is None:
@@ -351,6 +377,12 @@ class Battle:
             return ev, NORMAL
         if skill.kind in (SK.BUFF, SK.DEBUFF):
             return self._do_stages(actor, skill, targets, ev)
+        if skill.kind == SK.CHARGE:
+            # the wind-up names the blow it is for; nothing else spends it
+            actor.charged = skill.effect
+            self.script["charged_round"] = self.round
+            ev.append(_ev("charge", actor=actor))
+            return ev, NORMAL
         if skill.kind == SK.SCAN:
             for t in targets:
                 t.scanned = True
@@ -441,6 +473,9 @@ class Battle:
     def _do_attack(self, actor, skill, targets, ev):
         outcome = None
         landed_any = False
+        if actor.charged and actor.charged == skill.key:
+            actor.charged = False
+            ev.append(_ev("discharge", actor=actor))
         for t in targets:
             if t.down:
                 continue
@@ -484,6 +519,14 @@ class Battle:
                               element=skill.element))
                 ev.append(_ev("msg", text="%s blocks it." % t.name))
                 outcome = self._worse(outcome, NULLED)
+                continue
+
+            if skill.kind == SK.AILMENT:
+                # A status move. Its power is a chance, not a damage figure;
+                # it once dealt damage equal to that chance, which made
+                # Lullaby a heavier hit than Gust.
+                landed_any = True
+                outcome = self._worse(outcome, NORMAL)
                 continue
 
             hits = self._hit_count(skill)
@@ -542,7 +585,10 @@ class Battle:
             elif aff == RESIST:
                 chance *= 0.5
             if self.boss and self.side_of(t) == ENEMY:
-                chance *= 0.4
+                # A boss that can be bound or slept through its turns is a
+                # boss that can be skipped. Debuffs are the tool here.
+                ev.append(_ev("msg", text="%s is unmoved." % t.name))
+                continue
             if self.rng.random() < max(0.05, min(0.9, chance)):
                 if t.inflict(skill.effect, self.rng):
                     ev.append(_ev("status", target=t, ailment=skill.effect))
@@ -581,6 +627,7 @@ class Battle:
         atk = actor.stat("st") if skill.element == PHYS else actor.stat("ma")
         dfn = target.stat("vi")
         raw = skill.power * atk / math.sqrt(max(1.0, dfn)) / 9.0
+        raw *= actor.buff_mult("atk") / target.buff_mult("dfn")
         raw *= self.rng.uniform(0.92, 1.08)
         if crit:
             raw *= 1.55
@@ -611,8 +658,15 @@ class Battle:
             return [_ev("msg", text="None left!")], NORMAL
         self.inventory[action.item] -= 1
         targets = action.targets or [actor]
+        if item.whole_side:
+            side = self.side_of(actor)
+            targets = self.living(side if item.side == "ally"
+                                  else self.opposite(side))
         for t in targets:
             ev += item.use(t, self)
+        if item.kind == "stage":
+            word = "rises" if item.side == "ally" else "falls"
+            ev.append(_ev("msg", text="%s - power %s." % (item.name, word)))
         return ev, NORMAL
 
     def _do_capture(self, actor, action):
@@ -683,12 +737,18 @@ class Battle:
         """Pick an action for `actor`. Works for either side, which lets the
         balance simulator drive both teams."""
         actor = actor or self.current_actor
+        if self.boss and self.side_of(actor) == ENEMY:
+            from .bosses import SCRIPTS
+            script = SCRIPTS.get(actor.species.key)
+            if script:
+                return script(self, actor)
         side = self.side_of(actor)
         foes = self.living(self.opposite(side))
         allies = self.living(side)
         usable = [SK.basic()] + [s for s in actor.skill_objs()
-                                 if actor.can_pay(s) and s.kind != SK.SCAN]
-        intel = 1.0 if self.boss else 0.78
+                                 if actor.can_pay(s)
+                                 and s.kind not in (SK.SCAN, SK.CHARGE)]
+        intel = 1.0 if self.boss else WILD_INTEL
         if not usable or not foes:
             return Action("guard")
 
@@ -744,7 +804,7 @@ class Battle:
         if aff == NULL:
             return -40.0
         if skill.kind == SK.AILMENT:
-            if target.ailment:
+            if target.ailment or (self.boss and self.side_of(target) == ENEMY):
                 return -5.0
             base = skill.power * 0.55
             if aff == WEAK:
@@ -756,6 +816,7 @@ class Battle:
             return 26.0 + 0.2 * (actor.stat("lu") - target.stat("lu"))
         atk = actor.stat("st") if skill.element == PHYS else actor.stat("ma")
         est = skill.power * atk / math.sqrt(max(1.0, target.stat("vi"))) / 9.0
+        est *= actor.buff_mult("atk") / target.buff_mult("dfn")
         est *= (skill.hits[0] + skill.hits[1]) / 2.0
         est *= AFFINITY_MULT[aff]
         if skill.hp_cost and actor.hp < actor.maxhp * 0.3:

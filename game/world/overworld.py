@@ -233,7 +233,27 @@ class Overworld(Scene):
     def after_battle(self, result):
         player = self.game.player
         music.play(self.map.music, restart=True)
-        if result == "lose":
+        if result == "lose" and self.pending_boss:
+            # Losing to the boss is a lesson, not a penalty: wake at the
+            # shrine door, whole, and be told what went wrong.
+            self.pending_boss = False
+            from ..scenes import Dialogue
+
+            def wake():
+                player.heal_all()
+                player.map_key = "shrine"
+                player.x, player.y = 2, 13
+                self.map = maps.get("shrine")
+                self.tx, self.ty = 2, 13
+                self.px, self.py = 2.0, 13.0
+                self.facing = "right"
+                self.sync()
+                self.game.push(Dialogue(self.game, [
+                    "You wake at the shrine door, whole.\nThe scale has sent you back.",
+                    '"Lighter," says the voice. "Come back\nlighter. Ward your hearts before they\nare weighed, and strip my gold."',
+                ], "Anubis"))
+            self.game.fade_to(wake, 0.5)
+        elif result == "lose":
             def revive():
                 player.heal_all()
                 player.map_key = "village"
@@ -307,7 +327,9 @@ class Overworld(Scene):
         def go():
             self.pending_boss = True
             from ..monster import Monster
-            lvl = max(12, min(18, max(m.level for m in player.active()) + 1))
+            # He meets you at your own level, from 14 to 17. Past that,
+            # out-levelling him is a slower way through, and a fair one.
+            lvl = max(14, min(17, max(m.level for m in player.active())))
             self.start_battle([Monster("anubis", lvl)], boss=True)
 
         self.game.push(Dialogue(self.game, lines, "Anubis", on_close=go))

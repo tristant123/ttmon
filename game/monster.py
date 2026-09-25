@@ -9,7 +9,14 @@ from .data.elements import NEUTRAL, WEAK, RESIST, NULL, DRAIN, REPEL
 STAT_KEYS = ("st", "ma", "vi", "ag", "lu")
 BUFF_KEYS = ("atk", "dfn", "agi")
 BUFF_LIMIT = 3
-BUFF_STEP = 0.22
+# Each stage is worth a quarter: +3 attack hits 1.75x as hard, and -3 hits at
+# 1/1.75. Stages act on damage directly rather than through a stat under a
+# square root, so a Ward is worth casting - under the old rule three stacks
+# of defence took barely a fifth off a hit.
+BUFF_STEP = 0.25
+# Stages wear off after this many rounds (SMT V's rule), so buffing is
+# upkeep rather than a thing done once at the top of a fight.
+BUFF_ROUNDS = 3
 
 AILMENTS = {
     "poison": "Poison",
@@ -32,10 +39,12 @@ class Monster:
         self.hp = self.maxhp
         self.mp = self.maxmp
         self.buffs = {k: 0 for k in BUFF_KEYS}
+        self.buff_rounds = {k: 0 for k in BUFF_KEYS}
         self.ailment = None
         self.ailment_turns = 0
         self.wild = wild
         self.scanned = False
+        self.charged = False          # a telegraphed attack is wound up
 
     # --- identity ---------------------------------------------------------
     @property
@@ -55,13 +64,11 @@ class Monster:
         return SP.stat_at(self.species.base[key], self.level)
 
     def stat(self, key):
-        """Effective stat including buffs and ailment penalties."""
+        """Effective stat including speed stages and ailment penalties.
+        Attack and defence stages are not folded in here; the engine applies
+        them to damage directly (see buff_mult)."""
         val = float(self.base_stat(key))
-        if key == "st" or key == "ma":
-            val *= self.buff_mult("atk")
-        elif key == "vi":
-            val *= self.buff_mult("dfn")
-        elif key == "ag":
+        if key == "ag":
             val *= self.buff_mult("agi")
             if self.ailment == "bind":
                 val *= 0.5
@@ -72,19 +79,37 @@ class Monster:
         return max(1.0, val)
 
     def buff_mult(self, key):
-        return 1.0 + BUFF_STEP * self.buffs[key]
+        """1.25 per stage up; symmetric on the way down (-2 is 1/1.5)."""
+        n = self.buffs[key]
+        if n >= 0:
+            return 1.0 + BUFF_STEP * n
+        return 1.0 / (1.0 + BUFF_STEP * -n)
 
     def apply_buff(self, key, delta):
         before = self.buffs[key]
         self.buffs[key] = max(-BUFF_LIMIT, min(BUFF_LIMIT, before + delta))
+        if self.buffs[key]:
+            self.buff_rounds[key] = BUFF_ROUNDS
         return self.buffs[key] - before
 
+    def tick_buffs(self):
+        """Count every stage down a round; return the keys that wore off."""
+        expired = []
+        for k in BUFF_KEYS:
+            if not self.buffs[k]:
+                continue
+            self.buff_rounds[k] -= 1
+            if self.buff_rounds[k] <= 0:
+                self.buffs[k] = 0
+                expired.append(k)
+        return expired
+
     def clear_buffs(self):
+        """Strip the positive stages (Dispel). Debuffs stay where they are."""
         had = any(v > 0 for v in self.buffs.values())
         for k in BUFF_KEYS:
-            self.buffs[k] = max(0, self.buffs[k])
-        for k in BUFF_KEYS:
-            self.buffs[k] = 0
+            if self.buffs[k] > 0:
+                self.buffs[k] = 0
         return had
 
     # --- affinity ---------------------------------------------------------
@@ -97,8 +122,7 @@ class Monster:
         self.hp = max(0, self.hp - amount)
         if self.hp == 0:
             self.ailment = None
-            for k in BUFF_KEYS:
-                self.buffs[k] = 0
+            self._reset_buffs()
         return amount
 
     def heal(self, amount):
@@ -135,12 +159,16 @@ class Monster:
         self.mp = self.maxmp
         self.ailment = None
         self.ailment_turns = 0
+        self._reset_buffs()
+
+    def _reset_buffs(self):
         for k in BUFF_KEYS:
             self.buffs[k] = 0
+            self.buff_rounds[k] = 0
 
     def reset_battle_state(self):
-        for k in BUFF_KEYS:
-            self.buffs[k] = 0
+        self._reset_buffs()
+        self.charged = False
         if self.ailment in ("sleep", "bind", "fear"):
             self.ailment = None
 

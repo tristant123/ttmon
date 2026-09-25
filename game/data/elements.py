@@ -32,7 +32,7 @@ AFFINITY_NAMES = {
     NEUTRAL: "normal", WEAK: "weak", RESIST: "resistant", NULL: "immune",
     DRAIN: "absorbs", REPEL: "repels",
 }
-AFFINITY_MULT = {NEUTRAL: 1.0, WEAK: 1.7, RESIST: 0.45, NULL: 0.0,
+AFFINITY_MULT = {NEUTRAL: 1.0, WEAK: 1.5, RESIST: 0.45, NULL: 0.0,
                  DRAIN: 0.0, REPEL: 0.0}
 AFFINITY_COLORS = {
     NEUTRAL: P.GREY, WEAK: P.HP_BAD, RESIST: P.MP_FILL, NULL: P.GREY_L,

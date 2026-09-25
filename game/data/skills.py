@@ -12,13 +12,13 @@ from .elements import (PHYS, FIRE, ICE, ELEC, WIND, LIGHT, DARK, ALMIGHTY,
 # target modes
 ONE_FOE, ALL_FOES, ONE_ALLY, ALL_ALLIES, SELF = range(5)
 # skill kinds
-ATTACK, AILMENT, INSTAKILL, BUFF, DEBUFF, RECOVER, REVIVE, CURE, SCAN = range(9)
+ATTACK, AILMENT, INSTAKILL, BUFF, DEBUFF, RECOVER, REVIVE, CURE, SCAN, CHARGE = range(10)
 
 
 class Skill:
     def __init__(self, key, name, element, kind=ATTACK, power=0, cost=0,
                  hp_cost=0.0, target=ONE_FOE, hits=(1, 1), acc=0.95,
-                 crit=0.0, effect=None, stages=None, desc=""):
+                 crit=0.0, effect=None, stages=None, desc="", say=None):
         self.key = key
         self.name = name
         self.element = element
@@ -33,6 +33,7 @@ class Skill:
         self.effect = effect          # ailment key, or buff stat tuple
         self.stages = stages or {}    # {'atk': +1} etc.
         self.desc = desc
+        self.say = say                # a line the battle shows when it is used
 
     @property
     def multi(self):
@@ -100,7 +101,7 @@ _s("gloom", "Gloom", DARK, power=34, cost=6, acc=0.97,
    desc="Dark damage to one foe.")
 _s("mythos_ray", "Mythos Ray", ALMIGHTY, power=31, cost=26, target=ALL_FOES,
    acc=1.0, desc="Damage no affinity can turn aside.")
-_s("scale_of_ma", "Scale of Ma'at", ALMIGHTY, power=70, cost=26, acc=1.0,
+_s("scale_of_ma", "Scale of Ma'at", ALMIGHTY, power=48, cost=26, acc=1.0,
    desc="Weighs one heart and finds it wanting.")
 
 # --- Instant death -----------------------------------------------------------
@@ -134,6 +135,26 @@ _s("slow", "Slow", SUPPORT, kind=DEBUFF, cost=8, target=ALL_FOES,
    stages={"agi": -1}, acc=1.0, desc="Lowers enemy speed.")
 _s("dispel", "Dispel", SUPPORT, kind=DEBUFF, cost=10, target=ALL_FOES,
    stages={"clear": 0}, acc=1.0, desc="Strips enemy buffs.")
+
+# --- Anubis's rite -----------------------------------------------------------
+# Scripted in game/battle/bosses.py. Each threat has an answer in the support
+# skills: gold hide -> Dispel or Crack; the raised scales -> Ward, Sap or
+# Guard; his wrath -> Sap.
+_s("gilded_aegis", "Gilded Aegis", SUPPORT, kind=BUFF, target=SELF,
+   stages={"dfn": 2}, say="%s's hide turns to beaten gold.",
+   desc="Defence up two stages. Dispel strips it.")
+_s("duat_wrath", "Wrath of the Duat", SUPPORT, kind=BUFF, target=SELF,
+   stages={"atk": 2}, say="%s's eyes kindle. The underworld is angry.",
+   desc="Attack up two stages.")
+_s("lift_scales", "Lift the Scales", SUPPORT, kind=CHARGE, target=SELF,
+   effect="weighing",
+   say="%s raises the scales. A heart is set against a feather...",
+   desc="Next turn, every heart is weighed.")
+_s("weighing", "Weighing of the Heart", ALMIGHTY, power=88, target=ALL_FOES,
+   acc=1.0, say="The scales fall!",
+   desc="Almighty damage to all. Brace, ward, or weaken him first.")
+_s("verdict", "Verdict", PHYS, power=16, target=ALL_FOES, acc=0.93, crit=0.05,
+   desc="A sweep of the crook across the whole line.")
 
 # --- Recovery ----------------------------------------------------------------
 _s("mend", "Mend", HEAL, kind=RECOVER, power=45, cost=6, target=ONE_ALLY,
