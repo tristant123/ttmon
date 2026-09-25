@@ -32,7 +32,8 @@ build_windows.bat
 
 This installs PyInstaller, runs the tests, and writes `dist\TabulaMythos.exe`
 — a single file you can copy anywhere and double-click. No Python needed on
-the target machine. Saves go to `%APPDATA%\TabulaMythos\`.
+the target machine. The .exe keeps its save next to itself; running from
+source saves to `%APPDATA%\TabulaMythos\`.
 
 **Any platform, manually:**
 
