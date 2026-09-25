@@ -2,10 +2,12 @@
 
 A proof-of-concept monster-binding RPG for Windows PC. Pixel sprites are lit
 and staged in a diorama, and the finished frame is dithered down to 15-bit
-colour the way a PlayStation framebuffer stored it. Twenty-two cutesy
-monsters drawn from world mythology, Greek and Roman included, a synthesised
-chiptune score, and a battle system built on Shin Megami Tensei's **Press
-Turn** rules rather than Pokémon's.
+colour the way a PlayStation framebuffer stored it. Twenty-two monsters from
+world mythology, Greek and Roman included, drawn at 80×80 in an anime-leaning
+style after Breath of Fire and Xenogears, each with its own attack
+animation. Fire Emblem-style portraits for everyone who speaks. A
+synthesised chiptune score, and a battle system built on Shin Megami
+Tensei's **Press Turn** rules rather than Pokémon's.
 
 You bind creatures instead of catching them, you field three at once, and a
 single misread of an enemy's affinities can cost you the entire turn.
@@ -78,8 +80,44 @@ Practical consequences:
 - **Scan** before you experiment. Guessing at a Repel costs you the round.
 - Physical arts cost HP, magic costs MP, and **Strike** is always free — you
   can never be locked out of acting.
-- Buffs and debuffs stack three deep at 22% each; against the boss they matter
-  more than raw damage.
+- Buffs and debuffs act on damage directly: each stage is worth 25%, they
+  stack three deep, and they wear off after three rounds. Against the boss
+  they matter more than raw damage.
+
+## Buffs, debuffs and the boss
+
+A stage of attack multiplies damage dealt by 1.25, two stages by 1.5, three
+by 1.75; a stage *down* divides by the same amount, so Sap on the attacker
+and Ward on the defender stack against each other. Stages last three rounds
+from the last time they were applied, and **Dispel** strips positive stages
+only — it removes an enemy's buffs without clearing your own debuffs on it.
+
+| Tool | Where | Effect |
+| --- | --- | --- |
+| Bolster / Ward / Haste | skills | allies' attack / defence / speed +1 |
+| Sap / Crack / Slow | skills | foes' attack / defence / speed −1 |
+| Dispel | Pixie (Lv11), Satyr (Lv10) | strips every foe's buffs |
+| Ward Incense | shop, 90 | party defence +1 |
+| Withering Salt | shop, 90 | every foe's attack −1 |
+| Unbinding Bell | shop, 140 | Dispel, from the bag |
+
+**Anubis** (`game/battle/bosses.py`) is scripted rather than greedy, and the
+script is readable from the battle screen:
+
+1. **Gilded Aegis** — his defence goes up two stages; a gold `D+2` tag
+   appears by his gauge. Until you strip it with Dispel or a bell (or drag
+   it back down with Crack), nothing you have hits hard.
+2. **Verdict** — a physical sweep across the party.
+3. **Lift the Scales** — he charges. `SCALES RAISED` flashes over him and
+   you have exactly one turn before **the Weighing**, an Almighty blow to the
+   whole party that no affinity resists. Ward, Sap, heal whoever is low — or
+   eat it.
+4. Below 30% HP he casts **Wrath of the Duat** (attack +2) and goes straight
+   for the scales again. Sap it, or salt it.
+
+He is immune to ailments, so Sleep and Bind are wasted turns. Losing to him
+costs nothing: you wake at the shrine door, healed, with a hint. Pilgrim Sefa
+at the shrine and Pell in the village both tell you what to bring.
 
 ## Spell effects
 
@@ -124,22 +162,32 @@ You carry six monsters; the **first three** fight, and you reorder them with
 4. Shrine of the Scale — deeper grass, Lv8–16 monsters, a healing spring.
 5. The altar — **Anubis**, who repels Light, drains Dark, resists Physical,
    Fire and Ice, acts **twice per turn**, and is weak to exactly one thing:
-   **Wind**. Bring a Tengu, a Pixie or a Mandrake, and bring draughts.
+   **Wind**. He meets you at your own level, from 14 to 17. Bring Dispel or
+   a bell, bring incense and salt, and read the section above.
 
-Simulated against the engine's own AI, a level 13 party wins about 60% of the
-time and a level 15 party around 95%. Wind is not strictly required — the
-extra press turns it grants mainly shorten the fight — but survivability is:
-a team that resists Physical soaks his Judge's Blade, and a team that does not
-tends to lose two monsters in one turn. Cast Light at him once and you will
-lose the entire round.
+`tools/simulate.py` plays the same party and bag through the fight two ways:
+a *tactician* that strips his gold, wards before the Weighing and saps his
+wrath, and a *brute* that only ever attacks and heals.
+
+| Level 14 party | Tactician | Brute |
+| --- | --- | --- |
+| Tengu, Pixie, Kappa | 87% | 3% |
+| Thunderbird, Golem, Harpy | 100% | 28% |
+| Kitsune, Kappa, Cerberus (all resisted) | 0% | 0% |
+
+Playing him well is what wins; so is out-levelling him, slowly — a brute
+party at level 19 wins 76% and at level 21, 94%. Cast Light at him once and
+you will lose the entire round.
 
 ## The monsters
 
 Twenty-two species, each with an affinity table meant to be exploited in both
-directions, and each with a joke in how it is drawn: the Thunderbird is too
-pleased with itself to open its eyes fully, Medusa's snakes are delighted to
-meet you and she is not, the Nemean Lion sits among the arrows that bounced
-off it, and Talos's ankle is leaking.
+directions. They are drawn at 80×80 (Anubis at 112) in three-quarter view,
+in a style closer to Breath of Fire IV and Xenogears than to a cute
+collectable: long limbs, sharp faces, slit eyes, and a detail of story in
+each — the Nemean Lion stands among the arrows that bounced off it, the
+Wisp is a lantern-carrying wraith under a cowl, and Talos's ankle is
+leaking ichor round the nail.
 
 ![roster](docs/roster.png)
 
@@ -179,6 +227,45 @@ The Nemean Lion is the roster's teaching moment: the free Strike is physical,
 so a party carrying nothing but physical skills cannot scratch it. Bring
 magic, or walk away — if you land nothing at all for eight rounds the fight is
 called off rather than grinding on forever.
+
+## Attack animations
+
+Every species is authored in three poses — `idle`, `attack` and `cast` —
+from the same parts (`game/art/parts.py`: tapered tubes, feathers, wings,
+rotation about a pivot), so a Minotaur's axe is lifted and swung rather than
+redrawn. `game/battle/perform.py` turns a skill into a performance:
+
+- **Melee** (physical attacks): a wind-up, a dash toward the target with
+  afterimages, the hit, and the return.
+- **Cast** (magic): the caster rises into the cast pose with a glow, holds,
+  and settles.
+- **Support** (buffs, heals, the boss's charge): a shorter rise and hold.
+
+The spell effect waits for the performance's impact frame, so the fire
+column erupts when the Kitsune's tails flare, not before.
+`python tools/anim_strip.py kitsune ember out.png` films one action in a
+real battle scene, frame by frame.
+
+## Portraits
+
+![portraits](docs/portraits.png)
+
+Everyone who speaks has a bust in the Fire Emblem idiom: a three-quarter
+face beside the text box, shoulders tucked behind it, sliding in as the
+dialogue opens. Anubis speaks from the right, turned to face you, and the
+pause menu shows the binder.
+
+They come from their own renderer (`game/art/portraits.py`) because the
+lighting they want is the opposite of the sprites'. Instead of normals and
+banded Lambert shading, it is cel shading: a flat base, one shadow and one
+light. Form shadows are crisp bands down the side away from the key light;
+cast shadows fall under the fringe and the chin; the silhouette gets a dark
+line and overlapping shapes get a softer one. Hair is built from tapered
+locks that each end in a point. The eyes are stamped by hand, because in
+anime faces they carry the character: lidded for the trader, narrowed for
+the elder, sharp for the warden, round for Nen. Portraits are drawn at the
+world's full 480×320 resolution through a `draw_front` hook, after the
+colour grade but under the UI.
 
 ## Music
 
@@ -342,7 +429,9 @@ game/
   scenes.py             title, dialogue, party, bag, shop, bestiary
   art/
     shading.py          material maps -> lit sprites (fields, normals, ramps)
-    monsters.py         22 species, composed from parts
+    parts.py            sprite authoring: tubes, feathers, wings, rotation
+    monsters.py         22 species, three poses each, composed from parts
+    portraits.py        cel-shaded dialogue portraits
     terrain.py          procedural ground, seamless, four variants each
     tiles.py            standing props, lit through shading.py
     actors.py           overworld characters
@@ -354,11 +443,14 @@ game/
   battle/effects.py     per-element spell choreography
   battle/
     engine.py           the Press Turn rules - no pygame, fully testable
+    bosses.py           Anubis's script
+    perform.py          attack and cast performances
     scene.py            battle presentation and input
     effects.py          damage numbers, element bursts, sigil throws
   data/                 elements, skills, species, items
   world/                maps.py, overworld.py
-tests/test_press_turns.py    26 tests over the turn economy and the engine
+tests/                  39 tests: the turn economy, the engine, stages and
+                        the boss, and that every speaker has a portrait
 tools/                  headless playtest + balance simulation harnesses
 ```
 
@@ -385,7 +477,7 @@ artifact you can download to see what that commit actually looked like.
 ## Development
 
 ```
-python -m unittest discover -s tests   # 28 tests, press turn rules and engine
+python -m unittest discover -s tests   # 39 tests: press turns, engine, boss, portraits
 python tools/simulate.py 300           # play 300 battles per matchup, print win rates
 python tools/run_playtest.py out/      # drive the real game headlessly, save screenshots
 python tools/run_world_test.py out/    # walk village -> route -> shrine, talk, shop, boss
@@ -393,20 +485,25 @@ python tools/contact_sheet.py out.png  # render every monster sprite
 python tools/preview.py kitsune        # one sprite, blown up for inspection
 python tools/render_music.py out/      # export every music track to WAV
 python tools/make_roster_image.py      # regenerate docs/roster.png
+python tools/make_portrait_image.py    # regenerate docs/portraits.png
+python tools/anim_strip.py tengu gust out.png  # film one attack animation
 python tools/effect_strip.py out.png   # filmstrip of every spell effect
 python tools/shot_maps.py out/         # render each map in the diorama
 python tools/bench_frame.py            # frame cost, with and without post-processing
 ```
 
 The balance numbers in `tools/simulate.py` are what the difficulty was tuned
-against: roughly 95% wins at level with a 3-monster party, 65% against a
-higher-level group, near-zero four levels under, and a boss that needs both the
-right element and the right defences.
+against: 95–100% wins at level against ordinary wild groups, about half
+against a full group a level above you, near zero four levels under, and a
+boss that a thoughtful party beats most of the time and a button-masher
+almost never does. A badly matched starter against two monsters that hit
+its weakness wins only about 7%, which is what Flee is for.
 
 ## Scope
 
 This is a proof of concept, so it stops where the systems have been proven:
-four maps, twenty-two species, forty skills, one boss, a bestiary, a shop,
+four maps, twenty-two species with attack animations, seven portraits,
+forty-odd skills, one scripted boss, a bestiary, a shop,
 saving, a complete Press Turn implementation, eight music tracks and a
 diorama renderer with a PS1 finish. There is no fusion, no trading and no
 multi-area story — those are the obvious next steps, not oversights.

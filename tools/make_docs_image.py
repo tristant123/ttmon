@@ -50,7 +50,13 @@ def main():
     ov.px, ov.py = 7.0, 6.0
     p.map_key = "shrine"; ov._setup_render(); ov.banner_t = 0.0
     h.tick(30)
+    # a pilgrim at the shrine door, to show the portraits
+    from game.scenes import Dialogue
+    sefa = maps.get("shrine").npcs[1]
+    h.game.push(Dialogue(h.game, sefa.lines[1:2], sefa.name))
+    h.tick(120)
     shots.append(grab(h, "shrine"))
+    h.game.pop()
     # the greek ruins
     ov.map = maps.get("ruins"); ov.tx, ov.ty = 9, 8
     ov.px, ov.py = 9.0, 8.0

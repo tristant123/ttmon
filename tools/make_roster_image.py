@@ -13,8 +13,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "docs", "roster.png")
 
 order = [k for k in SP.SPECIES]
+# Sprites are 80x80, drawn at 2x. Anything larger (the boss) is fitted into
+# the same cell rather than given a row of its own.
 Z, COLS, PAD = 2, 8, 8
-cell = 64 * Z
+cell = 80 * Z
 rows = (len(order) + COLS - 1) // COLS
 sheet = pygame.Surface((COLS * (cell + PAD) + PAD,
                         rows * (cell + 20) + PAD))
@@ -25,7 +27,12 @@ for i, key in enumerate(order):
     x = PAD + (i % COLS) * (cell + PAD)
     y = PAD + (i // COLS) * (cell + 20)
     pygame.draw.rect(sheet, (58, 54, 82), (x, y, cell, cell))
-    sheet.blit(pygame.transform.scale(MON.sprite(sp.art), (cell, cell)), (x, y))
+    spr = MON.sprite(sp.art)
+    w, h = spr.get_size()
+    k = min(Z, cell / max(w, h))
+    size = (int(w * k), int(h * k))
+    sheet.blit(pygame.transform.scale(spr, size),
+               (x + (cell - size[0]) // 2, y + cell - size[1]))
     font.draw(sheet, sp.name, x + 2, y + cell + 4, (226, 224, 238))
     font.draw(sheet, sp.race, x + 2, y + cell + 12, (150, 148, 178))
 pygame.image.save(sheet, OUT)
