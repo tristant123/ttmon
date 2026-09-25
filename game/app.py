@@ -36,7 +36,9 @@ class Scene:
     Drawing happens in two layers. `draw_world` paints the full-resolution
     480x320 diorama and goes through the HD-2D post-processing stack;
     `draw` paints the 240x160 UI layer, which is scaled up afterwards so text
-    and frames stay crisp and are never blurred or bloomed.
+    and frames stay crisp and are never blurred or bloomed. `draw_front`
+    sits between the two: full resolution, after the grade, under the UI -
+    for portraits, which want the world's pixel density but not its fog.
     """
 
     opaque = True          # if False, the scene below is drawn first
@@ -46,6 +48,9 @@ class Scene:
         self.game = game
 
     def draw_world(self, canvas):
+        pass
+
+    def draw_front(self, canvas):
         pass
 
     def enter(self):
@@ -288,6 +293,8 @@ class Game:
             self.fx.apply(self.canvas, postfx.get(grade))
         else:
             self.fx.clear_lights()
+        for s in visible:
+            s.draw_front(self.canvas)
 
         # 2. the UI, authored at 240x160 and doubled, so it stays sharp
         self.ui.fill((0, 0, 0, 0))

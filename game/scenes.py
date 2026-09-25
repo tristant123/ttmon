@@ -8,6 +8,7 @@ from . import config, music, palette as P, save, sfx, ui
 from .app import Scene, CONFIRM, CANCEL, direction_of
 from .font import get_font, CURSOR, LINE_H
 from .art import monsters as MART
+from .art import portraits as PORTRAIT
 from .data import skills as SK
 from .data.items import ITEMS, SHOP_STOCK
 from .data.elements import (NAMES as EL_NAMES, COLORS as EL_COLORS,
@@ -178,10 +179,27 @@ class Intro(Scene):
         self.box.draw(surf, blink_on=self.game.blink)
 
 
+def draw_portrait(canvas, key, bottom, t=1.0, right=None):
+    """A bust beside a text box, Fire Emblem style: full resolution, its
+    shoulders tucked behind the box, sliding in as it fades up."""
+    surf = PORTRAIT.portrait(key)
+    if right is None:
+        right = key in PORTRAIT.RIGHT
+    k = min(1.0, t / 0.18)
+    ease = 1 - (1 - k) ** 3
+    slide = int((1 - ease) * 14)
+    x = config.INTERNAL_W - 16 - surf.get_width() + slide if right else 16 - slide
+    if k < 1.0:
+        surf = surf.copy()
+        surf.set_alpha(int(255 * ease))
+    canvas.blit(surf, (x, bottom - surf.get_height()))
+
+
 class Dialogue(Scene):
     opaque = False
 
-    def __init__(self, game, lines, speaker="", on_close=None, dark=False):
+    def __init__(self, game, lines, speaker="", on_close=None, dark=False,
+                 portrait=None):
         super().__init__(game)
         self.lines = list(lines)
         self.i = 0
@@ -189,6 +207,9 @@ class Dialogue(Scene):
         self.on_close = on_close
         self.box = ui.TextBox((4, 108, 232, 48), dark=dark)
         self.box.show(self.lines[0])
+        # the speaker's face, if they have one
+        self.portrait = portrait or PORTRAIT.SPEAKERS.get(speaker)
+        self.t = 0.0
 
     def handle(self, event):
         if event.type != pygame.KEYDOWN:
@@ -207,14 +228,24 @@ class Dialogue(Scene):
             self.box.show(self.lines[self.i])
 
     def update(self, dt):
+        self.t += dt
         self.box.update(dt)
+
+    def draw_front(self, canvas):
+        if self.portrait:
+            draw_portrait(canvas, self.portrait, 108 * config.UI_SCALE + 14,
+                          self.t)
 
     def draw(self, surf):
         if self.speaker:
             font = get_font()
             w = font.width(self.speaker) + 12
-            ui.panel(surf, (8, 98, w, 13), P.NEAR_BLACK, P.WIN_EDGE_D)
-            font.draw(surf, self.speaker, 14, 101, P.ICON_FULL)
+            # the name plate sits beside a portrait on the left, not on it
+            x = 8
+            if self.portrait and self.portrait not in PORTRAIT.RIGHT:
+                x = 74
+            ui.panel(surf, (x, 98, w, 13), P.NEAR_BLACK, P.WIN_EDGE_D)
+            font.draw(surf, self.speaker, x + 6, 101, P.ICON_FULL)
         self.box.draw(surf, blink_on=self.game.blink)
 
 
@@ -225,6 +256,13 @@ class PauseMenu(Scene):
         super().__init__(game)
         self.menu = ui.Menu(["Party", "Bag", "Record", "Save", "Title"],
                             (160, 6, 74, 68))
+        self.t = 0.0
+
+    def update(self, dt):
+        self.t += dt
+
+    def draw_front(self, canvas):
+        draw_portrait(canvas, "hero", 116 * config.UI_SCALE + 12, self.t)
 
     def handle(self, event):
         if event.type != pygame.KEYDOWN:
