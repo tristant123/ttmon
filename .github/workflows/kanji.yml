@@ -1,0 +1,35 @@
+# Kanji Ladder (kanji/): unit tests plus a headless-browser run through
+# lessons, reviews and every screen. Only runs when kanji/ changes.
+name: kanji
+
+on:
+  push:
+    paths: ["kanji/**", ".github/workflows/kanji.yml"]
+  pull_request:
+    paths: ["kanji/**", ".github/workflows/kanji.yml"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kanji
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Unit tests
+        run: node --test tests/
+      - name: Browser smoke test
+        run: |
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+          node tools/smoke.js smoke_output
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kanji-screenshots
+          path: kanji/smoke_output/

@@ -551,3 +551,9 @@ quads.
 
 Terrain has no blending between surfaces yet — grass meets path on a hard tile
 edge. Fringed transition variants would be the next visible upgrade there.
+
+## Also in this repo
+
+[`kanji/`](kanji/README.md) holds **Kanji Ladder**, a separate WaniKani-style
+SRS app for learning the Jōyō kanji from JLPT N5 to N1. It's a static web page
+and shares nothing with the game.

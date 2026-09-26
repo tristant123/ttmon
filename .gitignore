@@ -13,3 +13,8 @@ docs/_tmp/
 
 # ./check.sh output
 check_output/
+
+# kanji app build inputs (tools/fetch_sources.sh)
+kanji/.sources/
+kanji/smoke_output/
+kanji/node_modules/
