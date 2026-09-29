@@ -1,0 +1,2 @@
+# Only needed for live analysis; the demo mode and tests run on the standard library.
+anthropic>=1.9

@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Japanese Grammar Breakdown</title>
+<style>
+  :root {
+    --bg: #f7f5f0; --panel: #ffffff; --ink: #1d1b18; --muted: #6b665d;
+    --line: #e3ded4; --accent: #b3372b; --accent-ink: #ffffff; --chip: #efebe3;
+    --hl: #fff1c2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151412; --panel: #1f1d1a; --ink: #ece8e1; --muted: #a39d92;
+      --line: #34312c; --accent: #e0685b; --accent-ink: #151412; --chip: #2a2723;
+      --hl: #4a3f1c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .jp { font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  form { display: flex; gap: 8px; }
+  textarea {
+    flex: 1; min-height: 56px; resize: vertical; padding: 12px 14px;
+    font-size: 1.15rem; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); color: var(--ink);
+  }
+  button {
+    border: 0; border-radius: 10px; padding: 0 20px; font-size: 1rem; font-weight: 600;
+    background: var(--accent); color: var(--accent-ink); cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: progress; }
+  .examples { margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 6px; font-size: .9rem; }
+  .examples span { color: var(--muted); }
+  .examples a {
+    background: var(--chip); padding: 2px 10px; border-radius: 999px;
+    color: var(--ink); text-decoration: none; cursor: pointer;
+  }
+  .status { margin: 20px 0; color: var(--muted); }
+  .error { color: var(--accent); }
+  .banner { background: var(--hl); padding: 8px 12px; border-radius: 8px; margin: 20px 0 0; font-size: .9rem; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-top: 20px; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; }
+  .sentence { font-size: 1.9rem; line-height: 2.6; word-break: keep-all; }
+  .tok { border-radius: 4px; padding: 0 1px; cursor: pointer; border-bottom: 2px solid transparent; }
+  .tok.graded { border-bottom-color: var(--line); }
+  .tok.on { background: var(--hl); }
+  rt { font-size: .45em; color: var(--muted); }
+  .romaji { color: var(--muted); margin-top: 4px; }
+  .trans { font-size: 1.15rem; margin: 14px 0 4px; }
+  .literal { color: var(--muted); font-style: italic; }
+  .structure { margin: 14px 0 0; }
+  .gps { display: grid; gap: 12px; }
+  .gp { border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 10px; padding: 14px 16px; cursor: pointer; }
+  .gp.on { background: color-mix(in srgb, var(--c) 10%, transparent); }
+  .gp-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+  .gp-pattern { font-size: 1.3rem; font-weight: 700; }
+  .gp-name { font-weight: 600; }
+  .badge { font-size: .75rem; padding: 1px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+  .badge.jlpt { background: var(--c); color: #fff; }
+  .gp dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 10px 0 0; }
+  .gp dt { color: var(--muted); font-size: .9rem; }
+  .gp dd { margin: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: .85rem; }
+  td.big { font-size: 1.15rem; }
+  .warn { color: var(--muted); font-size: .85rem; margin-top: 12px; }
+  @media (max-width: 560px) {
+    form { flex-direction: column; } button { padding: 12px; }
+    .sentence { font-size: 1.5rem; }
+    .gp dl { grid-template-columns: 1fr; } .gp dt { margin-top: 6px; }
+    .tokens-wrap { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Japanese Grammar Breakdown</h1>
+  <p class="sub">Paste a Japanese sentence to see every grammar point in it and what each one does.</p>
+
+  <form id="f">
+    <textarea id="q" class="jp" placeholder="例：雨が降っていたので、傘を持って出かけました。" required></textarea>
+    <button id="go" type="submit">Analyze</button>
+  </form>
+  <div class="examples" id="examples"><span>Try:</span></div>
+
+  <div id="status" class="status" hidden></div>
+  <div id="out"></div>
+</main>
+
+<script>
+const EXAMPLES = [
+  "雨が降っていたので、傘を持って出かけました。",
+  "日本に来てから、毎日日本語を勉強しなければならないと思っています。",
+  "先生に褒められて、とても嬉しかったです。",
+  "もし時間があったら、一緒に映画を見に行きませんか。",
+];
+const COLORS = ["#c0392b", "#2e7d5b", "#2f5fa7", "#8e44ad", "#b7700f", "#127a86", "#a33b6e", "#5d6d1e"];
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+};
+
+for (const s of EXAMPLES) {
+  const a = el("a", "jp", s);
+  a.onclick = () => { $("q").value = s; run(); };
+  $("examples").append(a);
+}
+
+$("f").onsubmit = (ev) => { ev.preventDefault(); run(); };
+$("q").onkeydown = (ev) => { if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); run(); } };
+
+async function run() {
+  const sentence = $("q").value.trim();
+  if (!sentence) return;
+  $("go").disabled = true;
+  status("Analyzing… this usually takes a few seconds.");
+  $("out").replaceChildren();
+  try {
+    const r = await fetch("/api/analyze", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({sentence}),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    status(null);
+    render(data);
+  } catch (e) {
+    status(e.message, true);
+  } finally {
+    $("go").disabled = false;
+  }
+}
+
+function status(msg, isError) {
+  const s = $("status");
+  s.hidden = !msg;
+  s.textContent = msg || "";
+  s.className = "status" + (isError ? " error" : "");
+}
+
+const hasKanji = (s) => /[一-鿿㐀-䶿々]/.test(s);
+
+function render(a) {
+  const out = $("out");
+  if (a.demo) out.append(el("div", "banner",
+    "Demo mode: this is the built-in sample analysis. Start the server without --demo to analyze your own sentences."));
+
+  // Which grammar points each token belongs to.
+  const owners = a.tokens.map(() => []);
+  a.grammar_points.forEach((gp, g) => gp.token_indices.forEach((i) => owners[i] && owners[i].push(g)));
+
+  // Sentence with furigana.
+  const top = el("section");
+  top.append(el("h2", null, "Sentence"));
+  const sent = el("div", "sentence jp");
+  const tokEls = a.tokens.map((t, i) => {
+    const span = el("span", "tok" + (owners[i].length ? " graded" : ""));
+    if (hasKanji(t.surface) && t.reading && t.reading !== t.surface) {
+      const ruby = el("ruby", null, t.surface);
+      ruby.append(el("rt", null, t.reading));
+      span.append(ruby);
+    } else {
+      span.textContent = t.surface;
+    }
+    span.title = `${t.base_form} · ${t.part_of_speech} · ${t.gloss}`;
+    span.onclick = () => owners[i].length && select(owners[i][0], true);
+    sent.append(span);
+    return span;
+  });
+  top.append(sent, el("div", "romaji", a.romaji));
+  top.append(el("div", "trans", a.translation), el("div", "literal", "Literally: " + a.literal_translation));
+  top.append(el("p", "structure", a.structure));
+  out.append(top);
+
+  // Grammar points.
+  const gpSec = el("section");
+  gpSec.append(el("h2", null, `Grammar points (${a.grammar_points.length})`));
+  const list = el("div", "gps");
+  const cards = a.grammar_points.map((gp, g) => {
+    const card = el("div", "gp");
+    card.style.setProperty("--c", COLORS[g % COLORS.length]);
+    const head = el("div", "gp-head");
+    head.append(el("span", "gp-pattern jp", gp.pattern), el("span", "gp-name", gp.name),
+                el("span", "badge jlpt", gp.jlpt === "none" ? "non-JLPT" : "JLPT " + gp.jlpt),
+                el("span", "badge", gp.category.replace(/_/g, " ")));
+    const dl = el("dl");
+    const row = (k, v, jp) => { dl.append(el("dt", null, k), el("dd", jp ? "jp" : null, v)); };
+    row("In this sentence", gp.matched_text, true);
+    row("Meaning", gp.meaning);
+    row("Here", gp.explanation);
+    row("Formation", gp.formation, true);
+    const ex = el("dd");
+    ex.append(el("span", "jp", gp.example.japanese), document.createTextNode(" — " + gp.example.english));
+    dl.append(el("dt", null, "Example"), ex);
+    card.append(head, dl);
+    card.onclick = () => select(g, false);
+    list.append(card);
+    return card;
+  });
+  gpSec.append(list);
+  out.append(gpSec);
+
+  let current = null;
+  function select(g, scroll) {
+    current = current === g ? null : g;
+    cards.forEach((c, k) => c.classList.toggle("on", k === current));
+    tokEls.forEach((t, i) => t.classList.toggle("on", current !== null && owners[i].includes(current)));
+    if (scroll && current !== null) cards[current].scrollIntoView({behavior: "smooth", block: "center"});
+  }
+
+  // Word list.
+  const words = el("section");
+  words.append(el("h2", null, "Words"));
+  const wrap = el("div", "tokens-wrap");
+  const table = el("table");
+  const hr = el("tr");
+  for (const h of ["Word", "Reading", "Dictionary form", "Part of speech", "Meaning"]) hr.append(el("th", null, h));
+  table.append(hr);
+  for (const t of a.tokens) {
+    if (t.part_of_speech === "punctuation") continue;
+    const tr = el("tr");
+    tr.append(el("td", "big jp", t.surface), el("td", "jp", `${t.reading} (${t.romaji})`),
+              el("td", "jp", t.base_form), el("td", null, t.part_of_speech), el("td", null, t.gloss));
+    table.append(tr);
+  }
+  wrap.append(table);
+  words.append(wrap);
+  for (const w of a.warnings || []) words.append(el("div", "warn", "Note: " + w));
+  out.append(words);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+{
+  "sentence": "雨が降っていたので、傘を持って出かけました。",
+  "reading": "あめがふっていたので、かさをもってでかけました。",
+  "romaji": "Ame ga futte ita node, kasa o motte dekakemashita.",
+  "translation": "It was raining, so I took an umbrella with me when I went out.",
+  "literal_translation": "Rain was falling, because of that, holding an umbrella, (I) went out.",
+  "structure": "Two clauses joined by ので. The first (雨が降っていた) gives the reason; the second (傘を持って出かけました) is the main clause and carries the politeness (ました). The subject of the main clause, 'I', is omitted because it is obvious from context. Register: polite (です/ます).",
+  "tokens": [
+    {"surface": "雨", "reading": "あめ", "romaji": "ame", "part_of_speech": "noun", "base_form": "雨", "gloss": "rain"},
+    {"surface": "が", "reading": "が", "romaji": "ga", "part_of_speech": "particle", "base_form": "が", "gloss": "subject marker"},
+    {"surface": "降って", "reading": "ふって", "romaji": "futte", "part_of_speech": "verb (て-form)", "base_form": "降る", "gloss": "fall (of rain)"},
+    {"surface": "いた", "reading": "いた", "romaji": "ita", "part_of_speech": "auxiliary verb (past)", "base_form": "いる", "gloss": "was (ongoing)"},
+    {"surface": "ので", "reading": "ので", "romaji": "node", "part_of_speech": "conjunctive particle", "base_form": "ので", "gloss": "because, so"},
+    {"surface": "、", "reading": "、", "romaji": ",", "part_of_speech": "punctuation", "base_form": "、", "gloss": "comma"},
+    {"surface": "傘", "reading": "かさ", "romaji": "kasa", "part_of_speech": "noun", "base_form": "傘", "gloss": "umbrella"},
+    {"surface": "を", "reading": "を", "romaji": "o", "part_of_speech": "particle", "base_form": "を", "gloss": "object marker"},
+    {"surface": "持って", "reading": "もって", "romaji": "motte", "part_of_speech": "verb (て-form)", "base_form": "持つ", "gloss": "hold, carry"},
+    {"surface": "出かけ", "reading": "でかけ", "romaji": "dekake", "part_of_speech": "verb (stem)", "base_form": "出かける", "gloss": "go out"},
+    {"surface": "ました", "reading": "ました", "romaji": "mashita", "part_of_speech": "auxiliary verb", "base_form": "ます", "gloss": "polite past"},
+    {"surface": "。", "reading": "。", "romaji": ".", "part_of_speech": "punctuation", "base_form": "。", "gloss": "full stop"}
+  ],
+  "grammar_points": [
+    {
+      "pattern": "が",
+      "name": "Subject marker",
+      "category": "particle",
+      "jlpt": "N5",
+      "matched_text": "が",
+      "token_indices": [1],
+      "meaning": "Marks the grammatical subject, often new or specific information.",
+      "explanation": "Marks 雨 as the thing doing the falling. Inside a subordinate clause like this reason clause, が is used rather than は because the clause describes an event, not the topic of the whole sentence.",
+      "formation": "Noun + が",
+      "example": {"japanese": "猫がいます。", "english": "There is a cat."}
+    },
+    {
+      "pattern": "〜て (て-form)",
+      "name": "Te-form",
+      "category": "conjugation",
+      "jlpt": "N5",
+      "matched_text": "降って",
+      "token_indices": [2],
+      "meaning": "Connecting form of a verb, used to link to auxiliaries like いる or to a following clause.",
+      "explanation": "降る becomes 降って so that いる can attach to it. For う/つ/る godan verbs the て-form ends in って.",
+      "formation": "降る → 降って (godan る-verb: る → って)",
+      "example": {"japanese": "待って。", "english": "Wait."}
+    },
+    {
+      "pattern": "〜ている",
+      "name": "Progressive / ongoing state",
+      "category": "sentence_pattern",
+      "jlpt": "N5",
+      "matched_text": "降っていた",
+      "token_indices": [2, 3],
+      "meaning": "An action in progress, or a state that continues.",
+      "explanation": "降っている means 'is raining'. Here いる is in the past (いた), giving 'was raining': the rain was already falling at the time of going out.",
+      "formation": "Verb て-form + いる",
+      "example": {"japanese": "今、本を読んでいます。", "english": "I'm reading a book now."}
+    },
+    {
+      "pattern": "〜た",
+      "name": "Plain past",
+      "category": "conjugation",
+      "jlpt": "N5",
+      "matched_text": "いた",
+      "token_indices": [3],
+      "meaning": "Past tense in plain (non-polite) form.",
+      "explanation": "いる → いた puts the ongoing rain in the past. The clause is plain even though the sentence is polite, because clauses before ので usually stay plain and only the final verb carries ます.",
+      "formation": "ichidan verb: drop る + た (いる → いた)",
+      "example": {"japanese": "昨日は家にいた。", "english": "I was at home yesterday."}
+    },
+    {
+      "pattern": "〜ので",
+      "name": "Reason: because / so",
+      "category": "conjunction",
+      "jlpt": "N4",
+      "matched_text": "ので",
+      "token_indices": [4],
+      "meaning": "Gives a reason or cause for what follows, presented as a natural or objective consequence.",
+      "explanation": "The rain is the reason for taking the umbrella. ので sounds softer and more objective than から, which suits a polite explanation.",
+      "formation": "Plain form + ので (な-adjective / noun + なので)",
+      "example": {"japanese": "疲れたので、早く寝ます。", "english": "I'm tired, so I'll go to bed early."}
+    },
+    {
+      "pattern": "を",
+      "name": "Direct object marker",
+      "category": "particle",
+      "jlpt": "N5",
+      "matched_text": "を",
+      "token_indices": [7],
+      "meaning": "Marks the direct object of a verb.",
+      "explanation": "傘 is the thing being held (持つ).",
+      "formation": "Noun + を + transitive verb",
+      "example": {"japanese": "水を飲みます。", "english": "I drink water."}
+    },
+    {
+      "pattern": "〜て〜 (manner / accompanying action)",
+      "name": "Te-form linking two actions",
+      "category": "conjugation",
+      "jlpt": "N5",
+      "matched_text": "持って出かけ",
+      "token_indices": [8, 9],
+      "meaning": "A て-form verb before another verb describes the state or manner in which the second action is done.",
+      "explanation": "持って出かける is 'go out holding' — the umbrella is carried during the going out, so it reads as 'took an umbrella with me'. The same pattern gives 持っていく (take along) and 歩いて行く (go on foot).",
+      "formation": "Verb₁ て-form + Verb₂",
+      "example": {"japanese": "歩いて学校に行きます。", "english": "I walk to school."}
+    },
+    {
+      "pattern": "〜ました",
+      "name": "Polite past",
+      "category": "auxiliary",
+      "jlpt": "N5",
+      "matched_text": "出かけました",
+      "token_indices": [9, 10],
+      "meaning": "Past tense in polite (ます) form.",
+      "explanation": "The main verb 出かける takes ました, which makes the whole sentence polite and places it in the past.",
+      "formation": "Verb ます-stem + ました (出かける → 出かけ → 出かけました)",
+      "example": {"japanese": "昨日、映画を見ました。", "english": "I watched a movie yesterday."}
+    }
+  ]
+}
