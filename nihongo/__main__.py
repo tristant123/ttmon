@@ -1,6 +1,7 @@
 """Command line entry point.
 
-    python -m nihongo serve [--port 8000] [--demo] [--effort medium]
+    python -m nihongo                   # start the app and open it in the browser
+    python -m nihongo serve [--port 8000] [--demo] [--effort medium] [--open]
     python -m nihongo "雨が降っていたので、傘を持って出かけました。"
     python -m nihongo --json "..."      # raw JSON instead of the text report
 """
@@ -14,15 +15,22 @@ from .analyzer import EFFORTS, AnalysisError, analyze, demo_analysis
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    # Windows pipes default to a legacy code page that cannot print Japanese.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+    if not argv:  # double-clicked: any free port, straight into the browser
+        argv = ["serve", "--port", "0", "--open"]
     if argv[:1] == ["serve"]:
         p = argparse.ArgumentParser(prog="python -m nihongo serve")
         p.add_argument("--host", default="127.0.0.1")
         p.add_argument("--port", type=int, default=8000)
         p.add_argument("--demo", action="store_true", help="no API calls; always show the sample analysis")
         p.add_argument("--effort", choices=EFFORTS, default="medium")
+        p.add_argument("--open", action="store_true", help="open the page in your browser")
         args = p.parse_args(argv[1:])
         from .server import serve
-        serve(args.host, args.port, demo=args.demo, effort=args.effort)
+        serve(args.host, args.port, demo=args.demo, effort=args.effort, open_browser=args.open)
         return 0
 
     p = argparse.ArgumentParser(prog="python -m nihongo",

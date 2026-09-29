@@ -4,13 +4,14 @@ import json
 import os
 from pathlib import Path
 
+from . import config
 from .schema import ANALYSIS_SCHEMA, validate
 
 MODEL = os.environ.get("NIHONGO_MODEL", "claude-opus-5-5")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 MAX_SENTENCE_CHARS = 400
-NO_CREDENTIALS = ("No valid Anthropic credentials. Set ANTHROPIC_API_KEY "
-                  "(or use --demo to try the app offline).")
+NO_CREDENTIALS = ("No valid Anthropic API key. Paste one into the app, or set "
+                  "ANTHROPIC_API_KEY (or use --demo to try the app offline).")
 
 SYSTEM_PROMPT = """\
 You are a Japanese grammar teacher. A learner gives you one Japanese sentence
@@ -76,7 +77,7 @@ def analyze(sentence, client=None, effort="medium"):
 
     import anthropic  # only needed for live analysis, not for the demo or tests
 
-    client = client or anthropic.Anthropic()
+    client = client or anthropic.Anthropic(api_key=config.api_key())
     try:
         response = client.beta.messages.create(
             model=MODEL,

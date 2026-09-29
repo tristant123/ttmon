@@ -1,13 +1,17 @@
-# Tests for the Japanese grammar analyzer in nihongo/. They use a fake API
-# client, so no key or network is needed.
+# Tests for the Japanese grammar analyzer in nihongo/, then a Windows build of
+# NihongoGrammar.exe. The tests use a fake API client, so no key or network
+# is needed.
+#
+# To download the .exe: open the run on github.com, scroll to "Artifacts",
+# and download "NihongoGrammar-windows".
 
 name: nihongo
 
 on:
   push:
-    paths: ["nihongo/**", ".github/workflows/nihongo.yml"]
+    paths: ["nihongo/**", "nihongo_app.py", "NihongoGrammar.spec", ".github/workflows/nihongo.yml"]
   pull_request:
-    paths: ["nihongo/**", ".github/workflows/nihongo.yml"]
+    paths: ["nihongo/**", "nihongo_app.py", "NihongoGrammar.spec", ".github/workflows/nihongo.yml"]
   workflow_dispatch:
 
 jobs:
@@ -20,3 +24,38 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install -r nihongo/requirements.txt
       - run: python -m unittest discover -s nihongo/tests -t . -v
+
+  windows-exe:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r nihongo/requirements.txt pyinstaller
+      - run: python -m PyInstaller --noconfirm NihongoGrammar.spec
+
+      - name: Smoke-test the exe (demo mode, no API key)
+        shell: pwsh
+        run: |
+          dist\NihongoGrammar.exe --demo > cli.txt
+          if (-not (Select-String -Path cli.txt -Pattern "Grammar points" -Quiet)) { throw "CLI demo printed nothing useful" }
+
+          $p = Start-Process dist\NihongoGrammar.exe -ArgumentList "serve","--demo","--port","8765" -PassThru
+          $status = $null
+          foreach ($i in 1..30) {
+            try { $status = Invoke-RestMethod http://127.0.0.1:8765/api/status; break } catch { Start-Sleep 1 }
+          }
+          if (-not $status.demo) { throw "server did not start" }
+          $a = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/api/analyze `
+                 -ContentType "application/json" -Body '{"sentence": "test"}'
+          if ($a.grammar_points.Count -lt 1) { throw "no analysis returned" }
+          Stop-Process $p
+          "exe OK: $($a.grammar_points.Count) grammar points"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NihongoGrammar-windows
+          path: dist/NihongoGrammar.exe
+          retention-days: 30

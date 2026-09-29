@@ -73,6 +73,15 @@
   th { color: var(--muted); font-weight: 500; font-size: .85rem; }
   td.big { font-size: 1.15rem; }
   .warn { color: var(--muted); font-size: .85rem; margin-top: 12px; }
+  #keybox { margin-bottom: 20px; }
+  #keybox p { margin: 0 0 10px; }
+  #keybox form input {
+    flex: 1; padding: 10px 12px; font-size: 1rem; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--bg); color: var(--ink);
+  }
+  #keybox a, footer a { color: var(--accent); }
+  #keybox .small { color: var(--muted); font-size: .85rem; margin: 10px 0 0; }
+  footer { margin-top: 40px; color: var(--muted); font-size: .85rem; }
   @media (max-width: 560px) {
     form { flex-direction: column; } button { padding: 12px; }
     .sentence { font-size: 1.5rem; }
@@ -86,6 +95,18 @@
   <h1>Japanese Grammar Breakdown</h1>
   <p class="sub">Paste a Japanese sentence to see every grammar point in it and what each one does.</p>
 
+  <section id="keybox" hidden>
+    <h2>One-time setup</h2>
+    <p>Paste your Anthropic API key. You can create one at
+      <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
+    <form id="kf">
+      <input id="key" type="password" placeholder="sk-ant-..." autocomplete="off" required>
+      <button type="submit">Save</button>
+    </form>
+    <p class="small">It is saved on this computer only, in your user settings folder, and sent nowhere except the Anthropic API.</p>
+    <p id="keyerr" class="error" hidden></p>
+  </section>
+
   <form id="f">
     <textarea id="q" class="jp" placeholder="例：雨が降っていたので、傘を持って出かけました。" required></textarea>
     <button id="go" type="submit">Analyze</button>
@@ -94,6 +115,7 @@
 
   <div id="status" class="status" hidden></div>
   <div id="out"></div>
+  <footer id="foot" hidden><a href="#" id="changekey">Change API key</a></footer>
 </main>
 
 <script>
@@ -120,6 +142,29 @@ for (const s of EXAMPLES) {
 }
 
 $("f").onsubmit = (ev) => { ev.preventDefault(); run(); };
+
+function showKeyBox(show) {
+  $("keybox").hidden = !show;
+  $("foot").hidden = show || demoMode;
+  if (show) $("key").focus();
+}
+let demoMode = false;
+fetch("/api/status").then((r) => r.json()).then((st) => {
+  demoMode = st.demo;
+  showKeyBox(!st.has_key);
+}).catch(() => {});
+$("changekey").onclick = (ev) => { ev.preventDefault(); showKeyBox(true); };
+$("kf").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const r = await fetch("/api/key", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({key: $("key").value}),
+  });
+  const data = await r.json();
+  $("keyerr").hidden = r.ok;
+  $("keyerr").textContent = r.ok ? "" : data.error;
+  if (r.ok) { $("key").value = ""; showKeyBox(false); $("q").focus(); }
+};
 $("q").onkeydown = (ev) => { if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); run(); } };
 
 async function run() {
@@ -134,7 +179,10 @@ async function run() {
       body: JSON.stringify({sentence}),
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    if (!r.ok) {
+      if (/API key/.test(data.error || "")) showKeyBox(true);
+      throw new Error(data.error || `HTTP ${r.status}`);
+    }
     status(null);
     render(data);
   } catch (e) {

@@ -1,12 +1,15 @@
 import json
+import os
+import tempfile
 import threading
 import unittest
+from unittest import mock
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 from types import SimpleNamespace
 
-from nihongo import analyzer
+from nihongo import analyzer, config
 from nihongo.__main__ import format_report
 from nihongo.schema import ANALYSIS_SCHEMA, validate
 from nihongo.server import make_handler
@@ -100,9 +103,9 @@ class ServerTests(unittest.TestCase):
         self.addCleanup(server.shutdown)
         return f"http://127.0.0.1:{server.server_address[1]}"
 
-    def post(self, url, body):
-        req = urllib.request.Request(url + "/api/analyze", data=json.dumps(body).encode(),
-                                     headers={"Content-Type": "application/json"})
+    def post(self, url, body, path="/api/analyze", headers=None):
+        req = urllib.request.Request(url + path, data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json", **(headers or {})})
         try:
             with urllib.request.urlopen(req) as r:
                 return r.status, json.loads(r.read())
@@ -127,6 +130,65 @@ class ServerTests(unittest.TestCase):
         url = self.start(analyze_fn=fake, effort="high")
         self.assertEqual(self.post(url, {"sentence": "猫"}), (200, {"echo": "猫", "effort": "high"}))
         self.assertEqual(self.post(url, {"sentence": "bad"}), (422, {"error": "nope"}))
+
+
+    def get_json(self, url):
+        with urllib.request.urlopen(url) as r:
+            return json.loads(r.read())
+
+    def test_key_setup_flow(self):
+        with isolated_config():
+            url = self.start()
+            self.assertEqual(self.get_json(url + "/api/status"), {"demo": False, "has_key": False})
+            status, data = self.post(url, {"key": "hello"}, path="/api/key")
+            self.assertEqual(status, 422)
+            status, data = self.post(url, {"key": "sk-ant-test"}, path="/api/key")
+            self.assertEqual((status, data), (200, {"has_key": True}))
+            self.assertEqual(self.get_json(url + "/api/status")["has_key"], True)
+            self.assertEqual(config.api_key(), "sk-ant-test")
+
+    def test_cross_origin_posts_refused(self):
+        with isolated_config():
+            url = self.start()
+            status, _ = self.post(url, {"key": "sk-ant-evil"}, path="/api/key",
+                                  headers={"Origin": "https://evil.example"})
+            self.assertEqual(status, 403)
+            self.assertIsNone(config.saved_api_key())
+
+
+def isolated_config():
+    """Point the config file at a temp dir and hide any real credentials."""
+    tmp = tempfile.TemporaryDirectory()
+    env = {"NIHONGO_CONFIG": os.path.join(tmp.name, "config.json")}
+    patch = mock.patch.dict(os.environ, env)
+
+    class Ctx:
+        def __enter__(self):
+            patch.start()
+            for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+                os.environ.pop(var, None)
+
+        def __exit__(self, *exc):
+            patch.stop()
+            tmp.cleanup()
+    return Ctx()
+
+
+class ConfigTests(unittest.TestCase):
+    def test_env_var_wins_over_saved_key(self):
+        with isolated_config():
+            self.assertIsNone(config.api_key())
+            config.save_api_key("  sk-ant-saved \n")
+            self.assertEqual(config.api_key(), "sk-ant-saved")
+            os.environ["ANTHROPIC_API_KEY"] = "sk-ant-env"
+            self.assertEqual(config.api_key(), "sk-ant-env")
+
+    def test_rejects_non_keys(self):
+        with isolated_config():
+            for bad in ("", None, "password"):
+                with self.assertRaises(ValueError):
+                    config.save_api_key(bad)
+            self.assertFalse(config.has_key())
 
 
 class ReportTests(unittest.TestCase):

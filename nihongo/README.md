@@ -22,15 +22,39 @@ real words.
 
 ## Running it
 
+### As a single .exe (Windows)
+
+Double-click `NihongoGrammar.exe`. It opens the app in your browser. The
+first time, it asks for your Anthropic API key (make one at
+console.anthropic.com) and remembers it in
+`%APPDATA%\NihongoGrammar\config.json`. To quit, close the black console
+window that opens with it. Python doesn't need to be installed.
+
+There are two ways to get the .exe:
+
+- **Download it from GitHub.** Every push that touches the app builds it on
+  Windows. Open the latest "nihongo" run under the repository's Actions tab,
+  scroll to Artifacts, and download `NihongoGrammar-windows`.
+- **Build it yourself** on a Windows machine with Python 3.9+: run
+  `build_nihongo_windows.bat` from the repository root. It installs what it
+  needs, runs the tests, and writes `dist\NihongoGrammar.exe`.
+
+Windows SmartScreen may warn about an unsigned app the first time; choose
+"More info" then "Run anyway".
+
+### From source
+
 Run these from the repository root:
 
 ```
 pip install -r nihongo/requirements.txt
-export ANTHROPIC_API_KEY=sk-ant-...
-python -m nihongo serve
+python -m nihongo
 ```
 
-Then open http://127.0.0.1:8000/.
+That starts the app on a free port and opens your browser, the same as the
+.exe. The key can be pasted into the page, or set in `ANTHROPIC_API_KEY`
+(which takes priority over a saved key). `python -m nihongo serve` runs it
+on http://127.0.0.1:8000/ without opening a browser.
 
 To try it without an API key, `python -m nihongo serve --demo` serves a
 built-in sample analysis for every request.
@@ -52,10 +76,13 @@ python -m nihongo --demo           # sample, no API call
 |---|---|
 | `analyzer.py` | The prompt and the API call |
 | `schema.py` | The JSON shape of an analysis, plus `validate()` |
-| `server.py` | Local web server: `/` and `POST /api/analyze` |
+| `server.py` | Local web server: the page, the analysis, and key setup |
+| `config.py` | Where the API key is read from and saved to |
 | `static/index.html` | The whole front end, no build step |
 | `demo.json` | The sample analysis used by `--demo` and the tests |
 | `__main__.py` | Command line entry point |
+| `../nihongo_app.py`, `../NihongoGrammar.spec` | Entry point and PyInstaller recipe for the .exe |
+| `../build_nihongo_windows.bat` | One-click Windows build |
 
 ## Tests
 
