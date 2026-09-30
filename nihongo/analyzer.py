@@ -75,7 +75,11 @@ def analyze(sentence, client=None, effort="medium"):
     if effort not in EFFORTS:
         raise AnalysisError(f"effort must be one of {', '.join(EFFORTS)}")
 
-    import anthropic  # only needed for live analysis, not for the demo or tests
+    try:
+        import anthropic  # optional: only the Claude engine needs it
+    except ImportError:
+        raise AnalysisError("The Claude engine needs the anthropic package "
+                            "(pip install anthropic). The default offline engine does not.")
 
     client = client or anthropic.Anthropic(api_key=config.api_key())
     try:

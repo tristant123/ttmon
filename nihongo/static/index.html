@@ -93,7 +93,8 @@
 <body>
 <main>
   <h1>Japanese Grammar Breakdown</h1>
-  <p class="sub">Paste a Japanese sentence to see every grammar point in it and what each one does.</p>
+  <p class="sub">Paste a Japanese sentence to see the grammar points in it and what each one does.
+    <span id="engine-note"></span></p>
 
   <section id="keybox" hidden>
     <h2>One-time setup</h2>
@@ -143,14 +144,20 @@ for (const s of EXAMPLES) {
 
 $("f").onsubmit = (ev) => { ev.preventDefault(); run(); };
 
+// The key box only exists for the optional Claude engine; the default
+// offline engine never asks for one.
 function showKeyBox(show) {
   $("keybox").hidden = !show;
-  $("foot").hidden = show || demoMode;
+  $("foot").hidden = show || engine !== "claude" || demoMode;
   if (show) $("key").focus();
 }
-let demoMode = false;
+let demoMode = false, engine = "offline";
 fetch("/api/status").then((r) => r.json()).then((st) => {
   demoMode = st.demo;
+  engine = st.engine || "offline";
+  $("engine-note").textContent = engine === "offline"
+    ? "Runs entirely on this computer: free, and nothing you type is sent anywhere."
+    : "Using Claude through the Anthropic API (billed per use).";
   showKeyBox(!st.has_key);
 }).catch(() => {});
 $("changekey").onclick = (ev) => { ev.preventDefault(); showKeyBox(true); };
@@ -171,7 +178,7 @@ async function run() {
   const sentence = $("q").value.trim();
   if (!sentence) return;
   $("go").disabled = true;
-  status("Analyzing… this usually takes a few seconds.");
+  status(engine === "claude" ? "Analyzing… this usually takes a few seconds." : "Analyzing…");
   $("out").replaceChildren();
   try {
     const r = await fetch("/api/analyze", {
@@ -180,7 +187,7 @@ async function run() {
     });
     const data = await r.json();
     if (!r.ok) {
-      if (/API key/.test(data.error || "")) showKeyBox(true);
+      if (engine === "claude" && /API key/.test(data.error || "")) showKeyBox(true);
       throw new Error(data.error || `HTTP ${r.status}`);
     }
     status(null);
@@ -200,6 +207,25 @@ function status(msg, isError) {
 }
 
 const hasKanji = (s) => /[一-鿿㐀-䶿々]/.test(s);
+const toHira = (s) => s.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+
+// Put the reading over the kanji only, not the kana around them:
+// 降っ + ふっ → 降(ふ)っ, お茶 + おちゃ → お茶(ちゃ).
+function furigana(surface, reading) {
+  let head = 0, tail = 0;
+  const r = toHira(reading);
+  while (head < surface.length && head < r.length && !hasKanji(surface[head]) && toHira(surface[head]) === r[head]) head++;
+  while (tail < surface.length - head && tail < r.length - head
+         && !hasKanji(surface[surface.length - 1 - tail])
+         && toHira(surface[surface.length - 1 - tail]) === r[r.length - 1 - tail]) tail++;
+  const frag = document.createDocumentFragment();
+  if (head) frag.append(surface.slice(0, head));
+  const ruby = el("ruby", null, surface.slice(head, surface.length - tail));
+  ruby.append(el("rt", null, r.slice(head, r.length - tail)));
+  frag.append(ruby);
+  if (tail) frag.append(surface.slice(surface.length - tail));
+  return frag;
+}
 
 function render(a) {
   const out = $("out");
@@ -217,9 +243,7 @@ function render(a) {
   const tokEls = a.tokens.map((t, i) => {
     const span = el("span", "tok" + (owners[i].length ? " graded" : ""));
     if (hasKanji(t.surface) && t.reading && t.reading !== t.surface) {
-      const ruby = el("ruby", null, t.surface);
-      ruby.append(el("rt", null, t.reading));
-      span.append(ruby);
+      span.append(furigana(t.surface, t.reading));
     } else {
       span.textContent = t.surface;
     }
@@ -229,7 +253,11 @@ function render(a) {
     return span;
   });
   top.append(sent, el("div", "romaji", a.romaji));
-  top.append(el("div", "trans", a.translation), el("div", "literal", "Literally: " + a.literal_translation));
+  if (a.translation) {
+    top.append(el("div", "trans", a.translation), el("div", "literal", "Literally: " + a.literal_translation));
+  } else {
+    top.append(el("div", "literal", "Word by word: " + a.literal_translation));
+  }
   top.append(el("p", "structure", a.structure));
   out.append(top);
 
@@ -287,6 +315,7 @@ function render(a) {
   wrap.append(table);
   words.append(wrap);
   for (const w of a.warnings || []) words.append(el("div", "warn", "Note: " + w));
+  if (a.attribution) words.append(el("div", "warn", a.attribution));
   out.append(words);
 }
 </script>

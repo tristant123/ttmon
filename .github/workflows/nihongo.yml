@@ -1,6 +1,6 @@
 # Tests for the Japanese grammar analyzer in nihongo/, then a Windows build of
-# NihongoGrammar.exe. The tests use a fake API client, so no key or network
-# is needed.
+# NihongoGrammar.exe. Everything runs offline; the optional Claude engine is
+# tested with a fake client, so no key is needed.
 #
 # To download the .exe: open the run on github.com, scroll to "Artifacts",
 # and download "NihongoGrammar-windows".
@@ -22,7 +22,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install -r nihongo/requirements.txt
+      # anthropic is optional; installing it here means its tests run too.
+      - run: python -m pip install -r nihongo/requirements.txt anthropic
       - run: python -m unittest discover -s nihongo/tests -t . -v
 
   windows-exe:
@@ -36,22 +37,26 @@ jobs:
       - run: python -m pip install -r nihongo/requirements.txt pyinstaller
       - run: python -m PyInstaller --noconfirm NihongoGrammar.spec
 
-      - name: Smoke-test the exe (demo mode, no API key)
+      - name: Smoke-test the exe (offline, no API key)
         shell: pwsh
         run: |
-          dist\NihongoGrammar.exe --demo > cli.txt
-          if (-not (Select-String -Path cli.txt -Pattern "Grammar points" -Quiet)) { throw "CLI demo printed nothing useful" }
+          # Japanese goes in through a file to dodge console code pages.
+          [IO.File]::WriteAllText("body.json", '{"sentence": "雨が降っていたので、傘を持って出かけました。"}', [Text.UTF8Encoding]::new($false))
 
-          $p = Start-Process dist\NihongoGrammar.exe -ArgumentList "serve","--demo","--port","8765" -PassThru
+          $p = Start-Process dist\NihongoGrammar.exe -ArgumentList "serve","--port","8765" -PassThru
           $status = $null
-          foreach ($i in 1..30) {
+          foreach ($i in 1..60) {
             try { $status = Invoke-RestMethod http://127.0.0.1:8765/api/status; break } catch { Start-Sleep 1 }
           }
-          if (-not $status.demo) { throw "server did not start" }
+          if ($status.engine -ne "offline") { throw "server did not start" }
           $a = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/api/analyze `
-                 -ContentType "application/json" -Body '{"sentence": "test"}'
-          if ($a.grammar_points.Count -lt 1) { throw "no analysis returned" }
+                 -ContentType "application/json; charset=utf-8" -InFile body.json
           Stop-Process $p
+          $names = $a.grammar_points | ForEach-Object { $_.name }
+          "found: $($names -join ', ')"
+          if ($names -notcontains "Ongoing action / resulting state") { throw "〜ている not found" }
+          if ($a.romaji -ne "Ame ga futte ita node, kasa o motte dekakemashita.") { throw "romaji wrong: $($a.romaji)" }
+          if (-not ($a.tokens | Where-Object { $_.gloss -like "*umbrella*" })) { throw "dictionary lookup failed" }
           "exe OK: $($a.grammar_points.Count) grammar points"
 
       - uses: actions/upload-artifact@v4

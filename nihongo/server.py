@@ -1,8 +1,8 @@
 """A tiny local web server.
 
     GET  /              the page
-    GET  /api/status    whether an API key is set up, and whether this is the demo
-    POST /api/key       {"key": "sk-ant-..."} saves the key for next time
+    GET  /api/status    the engine in use, and whether it still needs an API key
+    POST /api/key       {"key": "sk-ant-..."} saves a key (Claude engine only)
     POST /api/analyze   {"sentence": "..."} returns an analysis
 """
 
@@ -14,18 +14,25 @@ from pathlib import Path
 
 from . import config
 from .analyzer import AnalysisError, analyze, demo_analysis
+from .offline import analyze_offline
+
+ENGINES = {"offline": analyze_offline, "claude": analyze}
 
 STATIC = Path(__file__).with_name("static")
 
 
-def make_handler(demo=False, effort="medium", analyze_fn=analyze):
+def make_handler(demo=False, effort="medium", engine="offline", analyze_fn=None):
+    analyze_fn = analyze_fn or ENGINES[engine]
+    needs_key = engine == "claude" and not demo
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             if self.path in ("/", "/index.html"):
                 body = (STATIC / "index.html").read_bytes()
                 self._send(200, body, "text/html; charset=utf-8")
             elif self.path == "/api/status":
-                self._send_json(200, {"demo": demo, "has_key": demo or config.has_key()})
+                self._send_json(200, {"demo": demo, "engine": engine,
+                                      "has_key": not needs_key or config.has_key()})
             else:
                 self._send_json(404, {"error": "not found"})
 
@@ -79,11 +86,14 @@ def make_handler(demo=False, effort="medium", analyze_fn=analyze):
     return Handler
 
 
-def serve(host="127.0.0.1", port=8000, demo=False, effort="medium", open_browser=False):
+def serve(host="127.0.0.1", port=8000, demo=False, effort="medium", engine="offline",
+          open_browser=False):
     """Serve until Ctrl+C. port=0 picks any free port."""
-    server = ThreadingHTTPServer((host, port), make_handler(demo=demo, effort=effort))
+    server = ThreadingHTTPServer((host, port), make_handler(demo=demo, effort=effort, engine=engine))
     url = f"http://{host}:{server.server_address[1]}/"
-    mode = " (demo mode: every request returns the sample analysis)" if demo else ""
+    mode = (" (demo mode: every request returns the sample analysis)" if demo
+            else " (using Claude; API charges apply)" if engine == "claude"
+            else " (offline: free, nothing leaves this computer)")
     print(f"Japanese grammar analyzer running at {url}{mode}")
     print("Close this window or press Ctrl+C to stop.", flush=True)
     if open_browser:

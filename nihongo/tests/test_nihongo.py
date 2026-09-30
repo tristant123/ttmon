@@ -7,12 +7,28 @@ from unittest import mock
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
+from importlib.util import find_spec
 from types import SimpleNamespace
 
-from nihongo import analyzer, config
+from nihongo import analyzer, config, dictionary
 from nihongo.__main__ import format_report
+from nihongo.kana import to_romaji
+from nihongo.offline import analyze_offline
 from nihongo.schema import ANALYSIS_SCHEMA, validate
 from nihongo.server import make_handler
+
+HAS_ANTHROPIC = find_spec("anthropic") is not None
+_cache = tempfile.TemporaryDirectory()
+
+
+def setUpModule():
+    # Unpack the dictionary into a throwaway folder, not the real user cache.
+    os.environ["NIHONGO_CACHE"] = _cache.name
+
+
+def tearDownModule():
+    dictionary._conn = None
+    _cache.cleanup()
 
 
 class FakeClient:
@@ -68,6 +84,7 @@ class SchemaTests(unittest.TestCase):
 
 
 class AnalyzerTests(unittest.TestCase):
+    @unittest.skipUnless(HAS_ANTHROPIC, "the optional anthropic package is not installed")
     def test_sends_sentence_with_schema_and_parses_reply(self):
         client = FakeClient(demo_json())
         result = analyzer.analyze("  雨が降っていたので、傘を持って出かけました。 ", client=client)
@@ -85,6 +102,7 @@ class AnalyzerTests(unittest.TestCase):
                 analyzer.analyze(bad, client=client)
         self.assertIsNone(client.request)
 
+    @unittest.skipUnless(HAS_ANTHROPIC, "the optional anthropic package is not installed")
     def test_refusal_and_truncation_become_errors(self):
         for stop in ("refusal", "max_tokens"):
             with self.assertRaises(analyzer.AnalysisError):
@@ -138,14 +156,27 @@ class ServerTests(unittest.TestCase):
 
     def test_key_setup_flow(self):
         with isolated_config():
-            url = self.start()
-            self.assertEqual(self.get_json(url + "/api/status"), {"demo": False, "has_key": False})
+            url = self.start(engine="claude")
+            self.assertEqual(self.get_json(url + "/api/status"),
+                             {"demo": False, "engine": "claude", "has_key": False})
             status, data = self.post(url, {"key": "hello"}, path="/api/key")
             self.assertEqual(status, 422)
             status, data = self.post(url, {"key": "sk-ant-test"}, path="/api/key")
             self.assertEqual((status, data), (200, {"has_key": True}))
             self.assertEqual(self.get_json(url + "/api/status")["has_key"], True)
             self.assertEqual(config.api_key(), "sk-ant-test")
+
+    def test_offline_is_the_default_and_needs_no_key(self):
+        with isolated_config():
+            url = self.start()
+            self.assertEqual(self.get_json(url + "/api/status"),
+                             {"demo": False, "engine": "offline", "has_key": True})
+            status, data = self.post(url, {"sentence": "猫が好きです。"})
+            self.assertEqual(status, 200)
+            self.assertEqual(data["engine"], "offline")
+            self.assertIn("が", [p["pattern"] for p in data["grammar_points"]])
+            status, data = self.post(url, {"sentence": "hello"})
+            self.assertEqual(status, 422)
 
     def test_cross_origin_posts_refused(self):
         with isolated_config():
@@ -201,3 +232,92 @@ class ReportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def patterns(sentence):
+    return [p["pattern"] for p in analyze_offline(sentence)["grammar_points"]]
+
+
+class OfflineTests(unittest.TestCase):
+    EXAMPLES = {
+        "雨が降っていたので、傘を持って出かけました。":
+            ["が", "〜ている", "〜ので", "を", "〜ました"],
+        "日本に来てから、毎日日本語を勉強しなければならないと思っています。":
+            ["〜てから", "〜なければならない", "〜と思う", "〜ている"],
+        "先生に褒められて、とても嬉しかったです。":
+            ["〜れる / 〜られる", "〜かった", "〜です"],
+        "もし時間があったら、一緒に映画を見に行きませんか。":
+            ["〜たら", "〜に行く / 〜に来る", "〜ませんか"],
+        "母が作ったケーキはとてもおいしかった。": ["Noun-modifying clause", "は", "〜かった"],
+        "窓を開けてもいいですか。": ["〜てもいい", "か"],
+        "ここで写真を撮らないでください。": ["〜ないでください"],
+        "富士山に登ったことがありますか。": ["〜たことがある"],
+        "明日は雨が降るかもしれない。": ["〜かもしれない"],
+        "お荷物をお持ちします。": ["お〜する"],
+        "ちょっと待って！": ["〜て (request)"],
+    }
+
+    def test_finds_expected_grammar(self):
+        for sentence, expected in self.EXAMPLES.items():
+            with self.subTest(sentence=sentence):
+                found = patterns(sentence)
+                for p in expected:
+                    self.assertIn(p, found)
+
+    def test_every_analysis_is_valid(self):
+        for sentence in self.EXAMPLES:
+            with self.subTest(sentence=sentence):
+                self.assertEqual(analyze_offline(sentence)["warnings"], [])
+
+    def test_no_duplicate_or_swallowed_points(self):
+        # ん inside ませんか, and ます inside ました, are not separate points.
+        found = patterns("一緒に行きませんか。")
+        self.assertNotIn("〜ん", found)
+        self.assertNotIn("〜ます", patterns("昨日、映画を見ました。"))
+
+    def test_matches_read_as_whole_words(self):
+        a = analyze_offline("先生に褒められて、とても嬉しかったです。")
+        texts = {p["pattern"]: p["matched_text"] for p in a["grammar_points"]}
+        self.assertEqual(texts["〜て (て-form)"], "褒められて")
+        self.assertEqual(texts["〜れる / 〜られる"], "褒められ")
+
+    def test_sentence_romaji_and_reading(self):
+        a = analyze_offline("雨が降っていたので、傘を持って出かけました。")
+        self.assertEqual(a["romaji"], "Ame ga futte ita node, kasa o motte dekakemashita.")
+        self.assertEqual(a["reading"], "あめがふっていたので、かさをもってでかけました。")
+
+    def test_word_meanings_come_from_the_dictionary(self):
+        words = {t["surface"]: t["gloss"] for t in analyze_offline("傘を持って出かけた。")["tokens"]}
+        self.assertIn("umbrella", words["傘"])
+        self.assertIn("hold", words["持っ"])
+
+    def test_rejects_non_japanese_and_empty(self):
+        for bad in ("", "   ", "hello world"):
+            with self.assertRaises(analyzer.AnalysisError):
+                analyze_offline(bad)
+
+    def test_register_and_sentence_type(self):
+        self.assertIn("polite", analyze_offline("行きませんか。")["structure"])
+        self.assertIn("invitation", analyze_offline("行きませんか。")["structure"])
+        self.assertIn("plain", analyze_offline("行かない。")["structure"])
+
+
+class DictionaryTests(unittest.TestCase):
+    def test_reading_picks_the_right_homograph(self):
+        self.assertIn("fall", dictionary.lookup("降る", "ふっ", "v"))
+        self.assertIn("descend", dictionary.lookup("降る", "くだ", "v"))
+
+    def test_part_of_speech_picks_the_particle(self):
+        self.assertIn("subject", dictionary.lookup("が", "が", "prt"))
+
+    def test_unknown_word(self):
+        self.assertIsNone(dictionary.lookup("ｘｙｚｚｙ"))
+
+
+class KanaTests(unittest.TestCase):
+    def test_romaji(self):
+        cases = {"きょう": "kyou", "がっこう": "gakkou", "しんぶん": "shinbun", "きんえん": "kin'en",
+                 "ちゃ": "cha", "まっちゃ": "matcha", "コーヒー": "koohii", "ティー": "tii"}
+        for kana, romaji in cases.items():
+            with self.subTest(kana=kana):
+                self.assertEqual(to_romaji(kana), romaji)
