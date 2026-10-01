@@ -65,6 +65,17 @@
   .gp-name { font-weight: 600; }
   .badge { font-size: .75rem; padding: 1px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
   .badge.jlpt { background: var(--c); color: #fff; }
+  .phrases { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ph { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 9px; cursor: pointer;
+        min-width: 72px; background: var(--bg); }
+  .ph.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .ph-text { font-size: 1.25rem; line-height: 1.9; }
+  .ph-role { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+  .ph-gps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .chip { font-size: .75rem; padding: 0 7px; border-radius: 999px; color: #fff; background: var(--c); white-space: nowrap; }
+  .gp a.more { color: var(--accent); font-size: .9rem; text-decoration: none; }
+  .gp a.more:hover { text-decoration: underline; }
+  .levels { color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 6px; }
   .gp dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 10px 0 0; }
   .gp dt { color: var(--muted); font-size: .9rem; }
   .gp dd { margin: 0; }
@@ -261,9 +272,48 @@ function render(a) {
   top.append(el("p", "structure", a.structure));
   out.append(top);
 
+  // Phrase by phrase: each bunsetsu, what it does, and the grammar inside it.
+  let phEls = [];
+  if (a.phrases && a.phrases.length) {
+    const phSec = el("section");
+    phSec.append(el("h2", null, "Phrase by phrase"));
+    const row = el("div", "phrases");
+    phEls = a.phrases.map((ph) => {
+      const box = el("div", "ph");
+      const text = el("div", "ph-text jp");
+      for (const i of ph.token_indices) {
+        const t = a.tokens[i];
+        if (t.part_of_speech === "punctuation") continue;
+        if (hasKanji(t.surface) && t.reading && t.reading !== t.surface) text.append(furigana(t.surface, t.reading));
+        else text.append(t.surface);
+      }
+      box.append(text, el("div", "ph-role", ph.role));
+      if (ph.grammar.length) {
+        const chips = el("div", "ph-gps");
+        for (const g of ph.grammar) {
+          const c = el("span", "chip jp", a.grammar_points[g].pattern);
+          c.style.setProperty("--c", COLORS[g % COLORS.length]);
+          c.onclick = (ev) => { ev.stopPropagation(); select(g, true); };
+          chips.append(c);
+        }
+        box.append(chips);
+      }
+      box.onclick = () => ph.grammar.length && select(ph.grammar[0], true);
+      row.append(box);
+      return box;
+    });
+    phSec.append(row);
+    out.append(phSec);
+  }
+
   // Grammar points.
   const gpSec = el("section");
-  gpSec.append(el("h2", null, `Grammar points (${a.grammar_points.length})`));
+  const h = el("h2", null, `Grammar points (${a.grammar_points.length})`);
+  const counts = {};
+  a.grammar_points.forEach((gp) => { counts[gp.jlpt] = (counts[gp.jlpt] || 0) + 1; });
+  const lv = ["N5", "N4", "N3", "N2", "N1"].filter((l) => counts[l]).map((l) => `${l} ×${counts[l]}`).join(" · ");
+  if (lv) h.append(el("span", "levels", lv));
+  gpSec.append(h);
   const list = el("div", "gps");
   const cards = a.grammar_points.map((gp, g) => {
     const card = el("div", "gp");
@@ -282,6 +332,13 @@ function render(a) {
     ex.append(el("span", "jp", gp.example.japanese), document.createTextNode(" — " + gp.example.english));
     dl.append(el("dt", null, "Example"), ex);
     card.append(head, dl);
+    if (gp.lookup_url) {
+      const more = el("a", "more", "Look this up on Bunpro →");
+      more.href = gp.lookup_url; more.target = "_blank"; more.rel = "noopener";
+      more.onclick = (ev) => ev.stopPropagation();
+      const p = el("p"); p.style.margin = "10px 0 0"; p.append(more);
+      card.append(p);
+    }
     card.onclick = () => select(g, false);
     list.append(card);
     return card;
@@ -293,6 +350,7 @@ function render(a) {
   function select(g, scroll) {
     current = current === g ? null : g;
     cards.forEach((c, k) => c.classList.toggle("on", k === current));
+    phEls.forEach((b, k) => b.classList.toggle("on", current !== null && a.phrases[k].grammar.includes(current)));
     tokEls.forEach((t, i) => t.classList.toggle("on", current !== null && owners[i].includes(current)));
     if (scroll && current !== null) cards[current].scrollIntoView({behavior: "smooth", block: "center"});
   }

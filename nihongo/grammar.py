@@ -75,6 +75,7 @@ class Rule:
     at_end: bool = False             # match must close the sentence (punctuation aside)
     check: object = None             # callable(toks, start, end) -> bool
     hides: tuple = field(default_factory=tuple)
+    generic: bool = False            # a building block, folded into bigger patterns
 
     def find(self, toks):
         for i in range(len(toks)):
@@ -209,10 +210,10 @@ rule("nai", "〜ない", "Plain negative", "conjugation", "N5",
      "Negates {base}: 'not {gloss}'.")
 rule("negative_n", "〜ん", "Negative ん", "auxiliary", "N5",
      m(s="ん", p="助動詞"),
-     "The negative ぬ/ん; almost always seen inside ません.", "Verb stem + ん", ("分かりません。", "I don't understand."),
+     "The negative ぬ/ん: inside ません, and on its own in casual or dialect speech.", "Verb ない-stem + ん", ("そんなこと、知らん。", "Dunno about that."),
      "Negates the verb.", hides=())
 rule("ta_past", "〜た", "Plain past", "conjugation", "N5",
-     m(b="た", f="基本形"),
+     [[m(b="た", f="基本形")], [m(p=("動詞", "形容詞"), f="連用タ"), m(s="だ", f="基本形")]],
      "Past tense (or a completed action) in plain form.", "Verb た-form (like the て-form with た)", ("昨日、本を読んだ。", "I read a book yesterday."),
      lambda c: (f"Puts {c['base']} in the past or marks it as completed."
                 if c["base"] else "Marks the action as past or completed."))
@@ -230,7 +231,7 @@ rule("volitional", "〜う / 〜よう", "Volitional form", "conjugation", "N4",
      "Expresses the speaker's will or suggestion to {gloss}.",
      check=prev_not("です", "だ", "ます"))
 rule("imperative", "Imperative", "Command form", "conjugation", "N4",
-     m(p="動詞", f="命令ｅ"),
+     m(p="動詞", f=("命令ｅ", "命令ｒｏ", "命令ｙｏ")),
      "A blunt command. Used in signs, sports, and by some speakers among close friends.", "Godan: え-row (行く → 行け); ichidan: stem + ろ", ("早く寝ろ。", "Go to sleep already."),
      "A direct order to do {base}.")
 rule("nasai", "〜なさい", "Command: do …", "sentence_pattern", "N4",
@@ -320,7 +321,7 @@ rule("te_kudasai", "〜てください", "Please do", "sentence_pattern", "N5",
 rule("naide_kudasai", "〜ないでください", "Please don't", "sentence_pattern", "N5",
      [m(b="ない"), m(s="で"), m(b="くださる", f="命令")],
      "A polite request not to do something.", "Verb ない-form + でください", ("ここで写真を撮らないでください。", "Please don't take photos here."),
-     "Politely asks the listener not to {base}.", hides=("nai", "te_form"))
+     "Politely asks the listener not to {base}.", hides=("nai", "te_form", "n4_naide"))
 rule("te_hoshii", "〜てほしい", "Want someone to do", "sentence_pattern", "N4",
      [VERB_REN, TE, m(b="ほしい")],
      "The speaker wants someone else to do something.", "Verb て-form + ほしい", ("もっとゆっくり話してほしい。", "I want you to speak more slowly."),
@@ -483,7 +484,11 @@ rule("mae_ni", "〜前に", "Before", "sentence_pattern", "N5",
      [m(b="前"), m(s="に")],
      "'Before …'. The verb before 前に is always in dictionary form.", "Verb dictionary form / noun + の + 前に", ("寝る前に歯を磨く。", "I brush my teeth before going to bed."),
      "The main action happens before what comes before 前に.",
-     before=m(p=("動詞", "助詞,連体化")), hides=("ni_particle",))
+     before=m(p=("動詞", "助詞,連体化")), hides=("ni_particle",),
+     # 駅の前にある is "in front of the station", not "before"
+     check=lambda toks, i, j: not (j < len(toks) and toks[j].base in ("ある", "いる", "立つ", "座る", "止まる", "置く"))
+     and not (i >= 2 and toks[i - 1].pos.startswith("助詞,連体化") and toks[i - 2].pos.startswith(("名詞,一般", "名詞,固有")) and not toks[i - 2].pos.startswith("名詞,サ変")
+              and toks[i - 2].base not in ("授業", "食事", "試験", "会議", "出発", "仕事", "結婚", "旅行")))
 rule("ato_de", "〜後で", "After", "sentence_pattern", "N5",
      [m(b=("後", "あと")), m(s="で")],
      "'After …'. The verb before 後で is in た-form.", "Verb た-form / noun + の + 後で", ("授業の後で、図書館に行く。", "After class I'm going to the library."),
@@ -507,7 +512,7 @@ rule("yasui_nikui", "〜やすい / 〜にくい", "Easy / hard to do", "sentenc
      "Says how easy or hard it is to {base}.")
 rule("aspect_verb", "〜始める / 〜終わる / 〜続ける", "Start / finish / keep doing", "sentence_pattern", "N4",
      [VERB_REN, m(b=("始める", "はじめる", "出す", "だす", "終わる", "おわる", "続ける", "つづける"))],
-     "Compound verbs that mark the start, end, or continuation of an action.", "Verb ます-stem + 始める / 終わる / 続ける / 出す", ("雨が降り出した。", "It started raining."),
+     "Compound verbs that mark the start, end, or continuation of an action.", "Verb ます-stem + 始める / 終わる / 続ける / 出す", ("本を読み始めた。", "I started reading the book."),
      "Marks the stage of {base}: starting, finishing, or continuing.")
 rule("hoshii", "〜がほしい", "Want (a thing)", "sentence_pattern", "N5",
      [m(s="が"), m(b=("ほしい", "欲しい"), p="形容詞,自立")],
@@ -522,22 +527,17 @@ rule("vol_to_omou", "〜(よ)うと思う", "I'm thinking of doing", "sentence_p
      "Intention: 'I'm thinking of …', 'I'm going to …'.", "Volitional form + と思う", ("来年、留学しようと思う。", "I'm thinking of studying abroad next year."),
      "Shows the speaker's intention to {base}.", hides=("volitional", "to_omou", "to_quote"))
 rule("to_iu", "〜という", "Called; that says", "sentence_pattern", "N4",
-     [[m(s="という")], [m(s="と", p="助詞,格助詞,引用"), m(b=("いう", "言う"))]],
+     [[m(s="という")], [m(s="と", p="助詞,格助詞,引用"), m(b=("いう", "言う"), f="基本形")]],
      "'Called …' (naming) or 'the … that …' (content).", "Noun / clause + という + noun", ("田中という人から電話がありました。", "There was a call from someone called Tanaka."),
-     "Names or describes the content of the noun that follows.", hides=("to_quote",))
+     "Names or describes the content of the noun that follows.", hides=("to_quote",), after=m(p="名詞"))
 rule("to_quote", "と (quotation)", "Quotation particle", "particle", "N5",
      m(s="と", p="助詞,格助詞,引用"),
-     "Marks what was said, thought, or written.", "Quote / plain form + と + 言う / 思う / 書く", ("「行く」と言った。", "He said 'I'll go'."),
+     "Marks what was said, thought, or written.", "Quote / plain form + と + 言う / 思う / 書く", ("ドアに「押す」と書いてある。", "It says 'push' on the door."),
      "Marks what comes before as quoted speech or thought.")
 rule("kadouka", "〜かどうか", "Whether or not", "sentence_pattern", "N4",
      [m(s="か"), m(s="どう"), m(s="か")],
      "Embeds a yes/no question: 'whether (or not) …'.", "Plain form + かどうか", ("行くかどうか分からない。", "I don't know whether I'll go."),
-     "Turns what comes before into an embedded yes/no question.", hides=("ka_question",))
-rule("kata", "〜方", "Way of doing", "sentence_pattern", "N4",
-     [VERB_REN, m(s="方", p="名詞,接尾")],
-     "'How to …', 'the way of …'.", "Verb ます-stem + 方", ("漢字の読み方を教えてください。", "Please teach me how to read the kanji."),
-     "'The way to do {base}', i.e. how to do it.")
-
+     "Turns what comes before into an embedded yes/no question.", hides=("ka_question", "n5_q_ka"))
 # --- change ----------------------------------------------------------------------
 
 rule("ku_naru", "〜くなる / 〜になる", "Become", "sentence_pattern", "N5",
@@ -584,7 +584,7 @@ rule("wa_topic", "は", "Topic marker", "particle", "N5",
 rule("ga_subject", "が", "Subject marker", "particle", "N5",
      m(s="が", p="助詞,格助詞"),
      "Marks the grammatical subject, often new or specific information. Also marks the object of 好き, 分かる, ほしい, できる.",
-     "Noun + が", ("猫がいます。", "There is a cat."),
+     "Noun + が", ("雨が降っている。", "It's raining."),
      "Marks {prev} as the subject of the verb or adjective that follows.")
 rule("wo_object", "を", "Direct object marker", "particle", "N5",
      m(s="を", p="助詞,格助詞"),
@@ -614,7 +614,7 @@ rule("no_link", "の", "Possessive / linking の", "particle", "N5",
      "Makes {prev} describe the noun after it ('{prev}'s …').")
 rule("no_nominal", "の (nominaliser)", "Turns a clause into a noun", "nominalizer", "N4",
      m(s="の", p="名詞,非自立"),
-     "Turns the clause before it into a noun: '(the act of) …ing'.", "Plain form + の", ("本を読むのが好きです。", "I like reading books."),
+     "Turns the clause before it into a noun: '(the act of) …ing'.", "Plain form + の", ("彼が来たのを知らなかった。", "I didn't know that he'd come."),
      "Makes the clause before it into a noun.")
 rule("koto_nominal", "こと (nominaliser)", "Turns a verb into a noun", "nominalizer", "N4",
      m(b="こと", p="名詞,非自立"),
@@ -650,7 +650,7 @@ rule("shika", "しか〜ない", "Only (nothing but)", "particle", "N4",
      "With the negative, says there is nothing other than {prev}.")
 rule("demo_even", "でも", "Even; … or something", "particle", "N4",
      m(s="でも", p="助詞,副助詞"),
-     "'Even …', or a soft suggestion: '… or something'.", "Noun + でも", ("お茶でも飲みませんか。", "Shall we have some tea or something?"),
+     "'Even …', or a soft suggestion: '… or something'.", "Noun + でも", ("子供でもできる。", "Even a child can do it."),
      "Softens or extends the statement about {prev}.")
 rule("kurai", "くらい / ぐらい", "About, approximately", "particle", "N5",
      m(s=("くらい", "ぐらい"), p="助詞"),
@@ -665,7 +665,7 @@ rule("bakari", "ばかり", "Nothing but; just", "particle", "N4",
      "'Nothing but …'; after a た-form, 'just (did)'.", "Noun + ばかり; た-form + ばかり", ("弟はゲームばかりしている。", "My brother does nothing but play games."),
      "Stresses that it's only (or just now) {prev}.")
 rule("tte_quote", "って", "Casual quotation / topic", "particle", "N4",
-     m(s="って", p="助詞"),
+     [[m(s="って", p="助詞")], [m(s="だって", p="助詞")]],
      "Casual form of と (quotation) or という / は (topic).", "Plain form / noun + って", ("明日休みだって。", "I heard tomorrow's a day off."),
      "Marks what comes before as quoted, or as the topic, in casual speech.")
 rule("toka", "とか", "Things like", "particle", "N4",
@@ -690,9 +690,9 @@ rule("yone", "よね", "…, right? (checking)", "particle", "N4",
      "Checks that the listener agrees with something the speaker believes.", "Sentence + よね", ("明日は休みですよね。", "Tomorrow's a day off, right?"),
      "Checks that the listener agrees.", hides=("yo", "ne"))
 rule("kana", "かな", "I wonder", "particle", "N4",
-     m(s="かな", p="助詞,終助詞"),
+     [[m(s="かな", p="助詞,終助詞")], [m(s="か", p="助詞"), m(s="な", p="助詞,終助詞")]],
      "'I wonder …' (talking to oneself or softly asking).", "Plain form + かな", ("明日は晴れるかな。", "I wonder if it'll be sunny tomorrow."),
-     "Makes the sentence a gentle, self-directed question.")
+     "Makes the sentence a gentle, self-directed question.", hides=("ka_question", "na_final"))
 rule("na_final", "な", "Sentence-ending な", "particle", "N4",
      m(s="な", p="助詞,終助詞"),
      "After a plain verb: 'don't …!' (prohibition). Otherwise: a reflective 'I think / I feel …'.", "Sentence + な", ("触るな。", "Don't touch it!"),
@@ -751,7 +751,8 @@ def potential_origin(tok):
     base = tok.base
     if not tok.itype.startswith("一段") or len(base) < 2 or not base.endswith("る"):
         return None
-    if dictionary.lookup(base):
+    own = dictionary.lookup(base)
+    if own and "able" not in own and "can " not in own:
         return None                                  # a verb in its own right
     e_to_u = dict(zip("えけげせてねべめれ", "うくぐすつぬぶむる"))
     stem = base[:-2]
@@ -762,3 +763,17 @@ def potential_origin(tok):
             return origin
     return None
 
+
+
+# Building blocks: shown on their own, but folded into any bigger grammar point
+# that contains them (に inside にもかかわらず, the て of 〜ている ...).
+GENERIC = {
+    "wa_topic", "ga_subject", "wo_object", "ni_particle", "de_particle", "he_particle",
+    "to_and", "to_quote", "no_link", "no_nominal", "koto_nominal", "mo", "kara_from",
+    "kara_because", "made", "yori", "ya", "dake", "shika", "demo_even", "kurai", "nado",
+    "bakari", "tte_quote", "toka", "ka_question", "ne", "yo", "te_form",
+    "tara", "ba", "volitional", "adverb_ku",
+    "i_adj_noun", "na_adj", "da", "desu", "honorific_prefix", "to_conditional",
+}
+for _r in RULES:
+    _r.generic = _r.key in GENERIC

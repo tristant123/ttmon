@@ -76,7 +76,13 @@ def format_report(a):
         lines += [f"Translation: {a['translation']}", f"Literally:   {a['literal_translation']}"]
     else:
         lines += [f"Word by word: {a['literal_translation']}"]
-    lines += ["", a["structure"], "", "Grammar points", "--------------"]
+    lines += ["", a["structure"]]
+    if a.get("phrases"):
+        lines += ["", "Phrase by phrase", "----------------"]
+        for ph in a["phrases"]:
+            gps = ", ".join(a["grammar_points"][k]["pattern"] for k in ph["grammar"])
+            lines.append(f"  {ph['text']}  ({ph['role']})" + (f"  ← {gps}" if gps else ""))
+    lines += ["", "Grammar points", "--------------"]
     for n, gp in enumerate(a["grammar_points"], 1):
         lines += [
             f"{n}. {gp['pattern']}  [{gp['jlpt']}, {gp['category'].replace('_', ' ')}]  {gp['name']}",
@@ -85,6 +91,10 @@ def format_report(a):
             f"   here:        {gp['explanation']}",
             f"   formation:   {gp['formation']}",
             f"   example:     {gp['example']['japanese']}  ({gp['example']['english']})",
+        ]
+        if gp.get("lookup_url"):
+            lines.append(f"   more:        {gp['lookup_url']}")
+        lines += [
             "",
         ]
     lines += ["Words", "-----"]

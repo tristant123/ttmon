@@ -11,12 +11,13 @@ no internet connection needed, and nothing you type is sent anywhere.
 For each sentence you get:
 
 - the sentence with furigana, a romaji line, and a word-by-word gloss
-- a note on the register (plain, polite, keigo), the kind of sentence
-  (statement, question, invitation, request), how the clauses are joined,
-  and what is left unsaid
-- one card per grammar point: pattern, JLPT level, general meaning, what it
-  does here, how it is formed, and an example sentence. Click a card to
-  highlight its words in the sentence.
+- **phrase by phrase**: the sentence split into its phrases (雨が / 降っていたので /
+  傘を / 持って / 出かけました), what each one does (subject, object, reason
+  clause, main predicate …), and the grammar points inside it
+- one card per grammar point, from N5 to N1: pattern, JLPT level, meaning,
+  what it does in this sentence, how it is formed, an example sentence, and a
+  link to look it up on Bunpro. Click a card or a phrase to highlight it.
+- a note on the register (plain, polite, keigo) and the kind of sentence
 - a word list with readings, dictionary forms, parts of speech and meanings
 
 ## How it works
@@ -24,20 +25,47 @@ For each sentence you get:
 1. [Janome](https://github.com/mocobeta/janome), a Japanese morphological
    analyzer written in Python, splits the sentence into words and tells us
    each word's part of speech, conjugation form, dictionary form and reading.
-2. A catalog of about 130 grammar patterns (`grammar.py`) is matched against
-   those words. Each pattern carries its own explanation.
+2. **A grammar library of about 400 points**, organised by JLPT level the way
+   Bunpro's is, is matched against the whole sentence. Points are written as
+   patterns, the way textbooks write them:
+
+   ```
+   {V-te} いる                    Verb て-form + いる
+   {PLAIN|N} にもかかわらず         plain form or noun + にもかかわらず
+   たとえ … ても                    a pattern in two parts
+   ```
+
+   So 〜にもかかわらず is found as one grammar point, not as に + も + かかわる +
+   ず. Smaller pieces inside a bigger pattern are folded into it.
 3. Word meanings come from [JMdict](https://www.edrdg.org/jmdict/j_jmdict.html),
    the free Japanese–English dictionary, bundled as `data/jmdict.sqlite.gz`.
+
+The explanations are written for this app. Bunpro's own explanations are
+their copyrighted content, so each card links to a Bunpro search for the
+pattern instead of copying them.
+
+### How it is checked
+
+- Every grammar point must be found in its own example sentence (tested for
+  all ~410).
+- A second set of sentences, different from the examples, checks that the
+  patterns work in new sentences.
+- A set of look-alikes checks that nothing fires where it shouldn't: 駅の前に
+  ("in front of the station") is not 〜前に ("before"), 上がる is not 〜がる,
+  思い出す ("recall") is not 〜出す ("start to").
 
 ### Limits, compared with an AI model
 
 - **No full-sentence translation.** You get a word-by-word gloss instead.
-- **It only knows the patterns in its catalog.** Common N5–N3 grammar is
-  covered well; rarer N2/N1 patterns, idioms and slang may be missed.
-- **Explanations are templates**, not written for your exact sentence.
-- **The word splitter sometimes guesses wrong**, especially on casual or
-  unusual spellings (it reads 降りそう as 降りる "get off" rather than 降る
-  "fall", for example).
+- **It only knows the patterns in its library.** It covers the common grammar
+  from N5 to N1, but not every point in Bunpro's library, and not idioms or
+  slang.
+- **Explanations of what a point does "here" are partly templates.**
+- **The word splitter sometimes guesses wrong**, and then a pattern can be
+  missed. Examples: it reads 降りそう as 降りる "get off" rather than 降る
+  "fall", and 誰かいますか as containing 飼う "keep (a pet)".
+- Some patterns mean different things in different contexts (〜によって is
+  "by", "depending on" or "due to"); the card gives all the meanings.
 
 ## Running it
 
@@ -99,7 +127,10 @@ folder. The .exe does not include this engine.
 | File | What it does |
 |---|---|
 | `offline.py` | The free engine: tokenizes, matches grammar, builds the analysis |
-| `grammar.py` | The grammar pattern catalog |
+| `grammar.py` | Core grammar rules (particles, conjugations, te-form patterns …) |
+| `catalog/n5.py` … `catalog/n1.py` | The grammar library, one file per JLPT level |
+| `patterns.py` | The pattern language the library is written in |
+| `phrases.py` | Splits the sentence into phrases and gives each a role |
 | `dictionary.py` | Word meanings from the bundled JMdict file |
 | `kana.py` | Hiragana and romaji conversion |
 | `analyzer.py` | The optional Claude engine |

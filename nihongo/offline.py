@@ -12,7 +12,9 @@ from dataclasses import dataclass
 
 from . import dictionary
 from .analyzer import AnalysisError
+from . import catalog, phrases
 from .grammar import RULES, potential_origin
+from .patterns import describe_here, lookup_url, matched_text
 from .kana import has_japanese, to_hiragana, to_romaji
 from .schema import validate
 
@@ -191,7 +193,7 @@ def analyze_offline(sentence, effort=None):
 
     toks = tokenize(sentence)
     glosses = [gloss_for(t) for t in toks]
-    points = _find_grammar(toks, glosses)
+    points, glue, units = _find_grammar(toks, glosses, sentence)
 
     tokens = [{
         "surface": t.surface,
@@ -207,10 +209,11 @@ def analyze_offline(sentence, effort=None):
         "reading": "".join(t["reading"] for t in tokens),
         "romaji": _sentence_romaji(toks),
         "translation": "",
-        "literal_translation": _literal(toks, glosses),
+        "literal_translation": _literal(toks, glosses, units),
         "structure": _structure(toks, points),
         "tokens": tokens,
         "grammar_points": points,
+        "phrases": phrases.analyse(toks, points, glue),
         "engine": "offline",
         "attribution": dictionary.ATTRIBUTION,
     }
@@ -222,22 +225,62 @@ def _short_gloss(g):
     return g if len(g) <= 60 else _short(g)
 
 
-def _find_grammar(toks, glosses):
-    found = []                                           # (start, end, rule)
+@dataclass
+class _Found:
+    key: str
+    core: list          # the grammar itself
+    full: list          # plus the verb / adjective it attaches to
+    obj: object         # a grammar.Rule or a patterns.Entry
+
+    @property
+    def generic(self):
+        return getattr(self.obj, "generic", False)
+
+
+def _find_grammar(toks, glosses, text):
+    found = []
     for r in RULES:
         for start, end in r.find(toks):
-            found.append((*_widen(toks, start, end), r))
+            start, end = _widen(toks, start, end)
+            span = list(range(start, end))
+            found.append(_Found(r.key, span, span, r))
+    for entry in catalog.REGISTRY:
+        for core, full in entry.find(toks, text):
+            found.append(_Found(entry.key, core, full, entry))
 
-    def inside(a, b):
-        return b[0] <= a[0] and a[1] <= b[1]
+    def hidden(f):
+        core = set(f.core)
+        for g in found:
+            if g is f:
+                continue
+            if f.key in g.obj.hides and (core & set(g.core) or core <= set(g.full)):
+                return True                  # explicitly folded into g
+            if f.generic and not g.generic and core <= set(g.full):
+                return True                  # a building block of g
+        return False
+
     kept = []
     for f in found:
-        hidden = any(f[2].key in g[2].hides and inside(f, g) and f is not g for g in found)
-        dup = any(k[2].key == f[2].key and k[0] < f[1] and f[0] < k[1] for k in kept)
-        if not hidden and not dup:
-            kept.append(f)
-    kept.sort(key=lambda f: (f[0], -(f[1] - f[0])))
-    return [_describe(toks, glosses, s, e, r) for s, e, r in kept]
+        if hidden(f):
+            continue
+        if any(k.key == f.key and set(k.core) & set(f.core) for k in kept):
+            continue
+        kept.append(f)
+    kept.sort(key=lambda f: (min(f.full), -len(f.full)))
+    # Inside a fixed expression from the library, words stay in one phrase.
+    glue = {i for f in kept if not hasattr(f.obj, "seqs")
+            for a, b in zip(f.core, f.core[1:]) if b == a + 1 for i in (b,)}
+    # Fixed expressions read as one unit in the word-by-word gloss.
+    units = {}
+    for f in kept:
+        if hasattr(f.obj, "seqs") or len(f.core) < 2 or any(b != a + 1 for a, b in zip(f.core, f.core[1:])):
+            continue
+        if any(i in units for i in f.core):
+            continue
+        g = f.obj.gloss or f.obj.name.lower()
+        for n, i in enumerate(f.core):
+            units[i] = f"[{g}]" if n == 0 else ""
+    return [_describe(toks, glosses, f) for f in kept], glue, units
 
 
 def _widen(toks, start, end):
@@ -257,18 +300,32 @@ def _widen(toks, start, end):
             and last.iform.startswith("連用") and toks[end].surface in ("て", "で", "た", "だ")
             and toks[end].pos.startswith(("助詞,接続助詞", "助動詞"))):
         end += 1
+    # くれなかっ + た, ませ + ん: finish a dangling auxiliary
+    while (end < len(toks) and toks[end - 1].pos.startswith("助動詞")
+           and toks[end - 1].iform.startswith(("連用タ", "未然"))
+           and toks[end].pos.startswith("助動詞") and toks[end].base in ("た", "ん")):
+        end += 1
     return start, end
 
 
-def _describe(toks, glosses, start, end, r):
-    ctx = _context(toks, glosses, start, end)
-    here = r.here(ctx) if callable(r.here) else r.here.format_map(_Blank(ctx))
+def _describe(toks, glosses, f):
+    r = f.obj
+    if not hasattr(r, "seqs"):                      # a catalog entry
+        here = describe_here(r, toks, f.core, f.full)
+        text = matched_text(toks, f.full)
+    else:
+        start, end = f.full[0], f.full[-1] + 1
+        ctx = _context(toks, glosses, start, end)
+        here = r.here(ctx) if callable(r.here) else r.here.format_map(_Blank(ctx))
+        text = "".join(t.surface for t in toks[start:end])
     return {
         "pattern": r.pattern, "name": r.name, "category": r.category, "jlpt": r.jlpt,
-        "matched_text": "".join(t.surface for t in toks[start:end]),
-        "token_indices": list(range(start, end)),
+        "matched_text": text,
+        "token_indices": f.full,
         "meaning": r.meaning, "explanation": here, "formation": r.formation,
         "example": {"japanese": r.example[0], "english": r.example[1]},
+        "key": f.key,
+        "lookup_url": lookup_url(r.pattern),
     }
 
 
@@ -363,9 +420,14 @@ def _sentence_romaji(toks):
     return re.sub(r"(^|[.!?]\s+)([a-z])", lambda mt: mt.group(1) + mt.group(2).upper(), out)
 
 
-def _literal(toks, glosses):
+def _literal(toks, glosses, units=None):
+    units = units or {}
     words = []
-    for t, g in zip(toks, glosses):
+    for i, (t, g) in enumerate(zip(toks, glosses)):
+        if i in units:
+            if units[i]:
+                words.append(units[i])
+            continue
         if t.major == "記号":
             if words:
                 words[-1] += {"、": ",", "。": ".", "？": "?", "！": "!"}.get(t.surface, "")

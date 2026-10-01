@@ -174,7 +174,7 @@ class ServerTests(unittest.TestCase):
             status, data = self.post(url, {"sentence": "猫が好きです。"})
             self.assertEqual(status, 200)
             self.assertEqual(data["engine"], "offline")
-            self.assertIn("が", [p["pattern"] for p in data["grammar_points"]])
+            self.assertIn("〜が好き / 嫌い / 上手 / 下手", [p["pattern"] for p in data["grammar_points"]])
             status, data = self.post(url, {"sentence": "hello"})
             self.assertEqual(status, 422)
 
@@ -321,3 +321,103 @@ class KanaTests(unittest.TestCase):
         for kana, romaji in cases.items():
             with self.subTest(kana=kana):
                 self.assertEqual(to_romaji(kana), romaji)
+
+
+class LibraryTests(unittest.TestCase):
+    """The grammar library: every point is found in its own example, in new
+    sentences, and not in look-alikes."""
+
+    def test_every_grammar_point_detects_its_own_example(self):
+        from nihongo import catalog
+        from nihongo.grammar import RULES
+        items = [(e.key, e.example[0]) for e in catalog.REGISTRY] + [(r.key, r.example[0]) for r in RULES]
+        self.assertGreater(len(items), 400)
+        for key, example in items:
+            with self.subTest(key=key):
+                keys = [p["key"] for p in analyze_offline(example)["grammar_points"]]
+                self.assertIn(key, keys)
+
+    def test_every_level_is_covered(self):
+        from nihongo import catalog
+        levels = {e.jlpt for e in catalog.REGISTRY}
+        self.assertEqual(levels, {"N5", "N4", "N3", "N2", "N1"})
+
+    NEW_SENTENCES = {
+        "駅まで歩いて行くしかない。": "n3_shika_nai",
+        "彼女に会うたびに、緊張してしまう。": "n3_tabi_ni",
+        "知らないくせに、偉そうなことを言うな。": "n3_kuse_ni",
+        "ニュースによると、地震があったらしい。": "n3_ni_yoru_to",
+        "約束したから、行かないわけにはいかない。": "n3_wake_ni_wa_ikanai",
+        "説明書のとおりに組み立てた。": "n3_toori",
+        "考えれば考えるほど分からなくなる。": "n4_ba_hodo",
+        "来年から日本で働くことになった。": "n4_koto_ni_naru",
+        "電話しようとしたら、電池が切れた。": "n4_you_to_suru",
+        "どこにも行かなかった。": "n5_q_mo_nai",
+        "反対意見にもかかわらず、計画は進められた。": "n2_nimo_kakawarazu",
+        "雨が降ったので、中止せざるを得なかった。": "n2_zaru_wo_enai",
+        "やってみないことには、分からない。": "n2_nai_koto_ni_wa",
+        "金持ちが幸せだとは限らない。": "n2_to_wa_kagiranai",
+        "社長ともなると、責任が重い。": "n1_tomo_naru_to",
+        "駅に着くや否や、電車が出発した。": "n1_ya_ina_ya",
+    }
+
+    def test_detects_grammar_in_new_sentences(self):
+        for sentence, key in self.NEW_SENTENCES.items():
+            with self.subTest(sentence=sentence):
+                keys = [p["key"] for p in analyze_offline(sentence)["grammar_points"]]
+                self.assertIn(key, keys)
+
+    LOOKALIKES = {
+        "駅の前にある新しいカフェに行った。": "mae_ni",         # in front of, not before
+        "猫は机の上で寝ている。": "n2_ue_de",                  # on the desk
+        "どちらか一つを選んでください。": "n5_ka_or",           # どちらか, not "A or B"
+        "物価が上がった。": "n4_garu",                         # 上がる is not 上 + がる
+        "昔のことを思い出した。": "n4_compound_aspect",          # 思い出す is "recall"
+        "趣味は写真を撮ることです。": "n2_koto_da",             # not advice
+        "夕方に帰ります。": "n4_kata",                          # 夕方 is not a way of doing
+        "この服はよく似合う。": "n3_au",                        # 似合う is not "each other"
+    }
+
+    def test_no_false_detections_on_lookalikes(self):
+        for sentence, key in self.LOOKALIKES.items():
+            with self.subTest(sentence=sentence):
+                keys = [p["key"] for p in analyze_offline(sentence)["grammar_points"]]
+                self.assertNotIn(key, keys)
+
+    def test_building_blocks_fold_into_bigger_points(self):
+        a = analyze_offline("雨にもかかわらず、たくさんの人が集まった。")
+        patterns = [p["pattern"] for p in a["grammar_points"]]
+        self.assertIn("〜にもかかわらず", patterns)
+        self.assertNotIn("に", patterns)          # part of にもかかわらず
+        self.assertIn("[despite]", a["literal_translation"])
+
+    def test_every_point_links_to_bunpro(self):
+        for p in analyze_offline("彼は忙しいにもかかわらず手伝ってくれる。")["grammar_points"]:
+            self.assertIn("bunpro", p["lookup_url"])
+
+
+class PhraseTests(unittest.TestCase):
+    def test_sentence_splits_into_phrases_with_roles(self):
+        a = analyze_offline("雨が降っていたので、傘を持って出かけました。")
+        got = [(ph["text"], ph["role"]) for ph in a["phrases"]]
+        self.assertEqual(got, [
+            ("雨が", "Subject"),
+            ("降っていたので、", "Because, so (clause)"),
+            ("傘を", "Object"),
+            ("持って", "Linked action (て-form)"),
+            ("出かけました。", "Main predicate"),
+        ])
+
+    def test_fixed_expression_stays_in_one_phrase(self):
+        texts = [ph["text"] for ph in analyze_offline("彼は忙しいにもかかわらず、手伝ってくれる。")["phrases"]]
+        self.assertIn("忙しいにもかかわらず、", texts)
+
+    def test_phrases_cover_every_word_once(self):
+        a = analyze_offline("先週買った本をもう読み終わりましたか。")
+        covered = [i for ph in a["phrases"] for i in ph["token_indices"]]
+        self.assertEqual(covered, list(range(len(a["tokens"]))))
+
+    def test_phrase_lists_its_grammar(self):
+        a = analyze_offline("毎日走ることにしました。")
+        ph = [p for p in a["phrases"] if "こと" in p["text"]][0]
+        self.assertIn("〜ことにする", [a["grammar_points"][k]["pattern"] for k in ph["grammar"]])

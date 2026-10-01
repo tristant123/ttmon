@@ -57,6 +57,7 @@ jobs:
           if ($names -notcontains "Ongoing action / resulting state") { throw "〜ている not found" }
           if ($a.romaji -ne "Ame ga futte ita node, kasa o motte dekakemashita.") { throw "romaji wrong: $($a.romaji)" }
           if (-not ($a.tokens | Where-Object { $_.gloss -like "*umbrella*" })) { throw "dictionary lookup failed" }
+          if ($a.phrases.Count -ne 5) { throw "expected 5 phrases, got $($a.phrases.Count)" }
           "exe OK: $($a.grammar_points.Count) grammar points"
 
       - uses: actions/upload-artifact@v4
