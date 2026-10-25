@@ -16,5 +16,6 @@ const stStart = html.lastIndexOf('<style', html.indexOf('</style>'));
 const style = html.slice(stStart, stEnd);
 const body = html.slice(html.lastIndexOf('<body>') + 6, html.lastIndexOf('</body>')).trim();
 const out = process.argv[2];
-if (out) writeFileSync(out, `${title}\n${style}\n${body}\n${script}\n`);
+// a bundled library has literal U+FFFD inside JS template literals; the escape is equivalent there
+if (out) writeFileSync(out, `${title}\n${style}\n${body}\n${script.replace(/\uFFFD/g, '\\uFFFD')}\n`);
 console.log(`release/PL-300-Sandbox.html: ${(html.length / 1e6).toFixed(2)} MB${out ? `; artifact page: ${out}` : ''}`);
