@@ -159,4 +159,32 @@ export function PrivacyLevels({ d }: { d: DialogT }) {
   </Dialog>;
 }
 
-export const SOURCE_DIALOGS = { dataSources: DataSources, changeSource: ChangeSource, editPermissions: EditPermissions, credentials: Credentials, privacyLevels: PrivacyLevels };
+
+
+/** Table › Incremental refresh and real-time data: Power BI checks for RangeStart / RangeEnd first. */
+export function IncrementalRefresh({ d }: { d: DialogT }) {
+  const s = store;
+  const t = s.project.model.tables.find(x => x.name === d.table)!;
+  const q = s.project.queries.find(x => x.name === d.table);
+  const params = Object.fromEntries(s.project.queries.filter(x => /IsParameterQuery\s*=\s*true/.test(x.code)).map(x => [x.name, /Type\s*=\s*"([^"]+)"/.exec(x.code)?.[1] ?? '']));
+  const problems: string[] = [];
+  if (!('RangeStart' in params) || !('RangeEnd' in params)) problems.push('Create two parameters named RangeStart and RangeEnd (case-sensitive) in Power Query › Manage Parameters.');
+  else if (!/DateTime/i.test(params.RangeStart) || !/DateTime/i.test(params.RangeEnd)) problems.push('RangeStart and RangeEnd must be of type Date/Time (not Date).');
+  if (q && !(/RangeStart/.test(q.code) && /RangeEnd/.test(q.code))) problems.push(`Filter ${t.name} with them, for example Table.SelectRows(Source, each [OrderDate] >= RangeStart and [OrderDate] < RangeEnd). Use >= on one side and < on the other so no row is loaded twice.`);
+  const cur = (t as any).incremental ?? { store: 3, storeUnit: 'Years', refresh: 10, refreshUnit: 'Days', realtime: false, complete: false, detect: '' };
+  const [pol, setPol] = useState(cur);
+  const [on, setOn] = useState(!!(t as any).incremental);
+  const dateCols = t.columns.filter(c => c.dataType === 'date' || c.dataType === 'datetime').map(c => c.name);
+  return <Dialog title="Incremental refresh and real-time data" sub={t.name} width={620} footer={<><button className="btn primary" disabled={on && problems.length > 0} onClick={() => { s.change(p => { const tt = p.model.tables.find(x => x.name === t.name)!; (tt as any).incremental = on ? pol : undefined; }); close(); if (on) s.toast('Incremental refresh policy saved. It takes effect after you publish: the service creates the partitions on the first refresh.'); }}>Apply</button><button className="btn" onClick={close}>Cancel</button></>}>
+    {problems.length > 0 && <div className="warnbox"><b>Before you can set up incremental refresh:</b><ol style={{ margin: '4px 0 0 18px' }}>{problems.map((p, i) => <li key={i}>{p}</li>)}</ol></div>}
+    <label className="row"><input type="checkbox" checked={on} onChange={e => setOn(e.target.checked)} />Incrementally refresh this table</label>
+    <div className="row"><span>Archive data starting</span><input className="tx" type="number" style={{ width: 70 }} value={pol.store} onChange={e => setPol({ ...pol, store: +e.target.value })} /><select className="tx" style={{ width: 110 }} value={pol.storeUnit} onChange={e => setPol({ ...pol, storeUnit: e.target.value })}><option>Days</option><option>Months</option><option>Quarters</option><option>Years</option></select><span>before refresh date</span></div>
+    <div className="row"><span>Incrementally refresh data starting</span><input className="tx" type="number" style={{ width: 70 }} value={pol.refresh} onChange={e => setPol({ ...pol, refresh: +e.target.value })} /><select className="tx" style={{ width: 110 }} value={pol.refreshUnit} onChange={e => setPol({ ...pol, refreshUnit: e.target.value })}><option>Days</option><option>Months</option><option>Quarters</option><option>Years</option></select><span>before refresh date</span></div>
+    <label className="row"><input type="checkbox" checked={pol.realtime} onChange={e => setPol({ ...pol, realtime: e.target.checked })} />Get the latest data in real time with DirectQuery (Premium only) — adds a DirectQuery partition (hybrid table)</label>
+    <label className="row"><input type="checkbox" checked={pol.complete} onChange={e => setPol({ ...pol, complete: e.target.checked })} />Only refresh complete days</label>
+    <div className="row"><label className="row"><input type="checkbox" checked={!!pol.detect} onChange={e => setPol({ ...pol, detect: e.target.checked ? dateCols[0] ?? '' : '' })} />Detect data changes</label>{pol.detect !== '' && <select className="tx" style={{ width: 180 }} value={pol.detect} onChange={e => setPol({ ...pol, detect: e.target.value })}>{dateCols.map(c => <option key={c}>{c}</option>)}</select>}</div>
+    <div className="tiny">Desktop loads only the RangeStart–RangeEnd window. After publishing, the service partitions the table and refreshes only recent partitions, which is faster and more reliable. The filter should fold to the source. Once published with a policy, the .pbix can't be downloaded from the service.</div>
+  </Dialog>;
+}
+
+export const SOURCE_DIALOGS = { dataSources: DataSources, changeSource: ChangeSource, editPermissions: EditPermissions, credentials: Credentials, privacyLevels: PrivacyLevels, incremental: IncrementalRefresh };

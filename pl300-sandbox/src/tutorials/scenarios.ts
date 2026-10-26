@@ -4,6 +4,8 @@ import { Project, Visual, Relationship, Measure } from '../model/types';
 import { sampleFiles } from '../data/sample';
 import { clearQueryCache } from '../ui/report/vhelpers';
 import { ROOT_FOLDER } from '../m/sources';
+import { refreshModel, recalc } from '../model/refresh';
+import { MEngine } from '../m/engine';
 
 export const F = (name: string) => `${ROOT_FOLDER}\\${name}`;
 
@@ -33,6 +35,32 @@ export interface Scenario {
 }
 
 import { directSources, paramValues } from '../m/privacy';
+
+/** Build a project (with its data) from a scenario without loading it into Desktop; used to seed the service. */
+export function scenarioProject(name: string, sc: Scenario): Project {
+  const p = emptyProject();
+  p.name = name;
+  p.settings.autoDateTime = sc.autoDateTime ?? true;
+  p.settings.autodetectRelationships = false;
+  p.queries = sc.queries.map(q => ({ id: uid('q'), name: q.name, code: q.code, load: q.load ?? true, refresh: true, group: q.group, storageMode: q.storageMode }));
+  p.dataSources = {}; const params = paramValues(p.queries); for (const q of p.queries) for (const src of directSources(q.code, params)) p.dataSources[src.key] = { privacy: 'Organizational' };
+  refreshModel(p, new MEngine(p.queries));
+  const m = p.model;
+  for (const ct of sc.calcTables ?? []) m.tables.push({ name: ct.name, columns: [], rows: [], expression: ct.expression, dateColumn: ct.dateColumn });
+  for (const cc of sc.calcColumns ?? []) { const t = m.tables.find(x => x.name === cc.table); if (t) { t.columns.push({ name: cc.name, dataType: 'any', expression: cc.expression, summarizeBy: 'None' }); t.rows.forEach(r => r.push(null)); } }
+  m.measures.push(...((sc.measures ?? []) as Measure[]));
+  m.relationships.push(...(sc.relationships ?? []).map(r => ({ ...r, id: uid('rel') })));
+  m.roles.push(...(sc.roles ?? []));
+  if (sc.model) Object.assign(m, sc.model);
+  recalc(m);
+  for (const sb of sc.sortBy ?? []) { const c = m.tables.find(t => t.name === sb.table)?.columns.find(x => x.name === sb.column); if (c) c.sortByColumn = sb.by; }
+  for (const f of sc.formats ?? []) { const c = m.tables.find(t => t.name === f.table)?.columns.find(x => x.name === f.column); if (c) c.formatString = f.format; }
+  for (const h of sc.hide ?? []) { const c = m.tables.find(t => t.name === h.table)?.columns.find(x => x.name === h.column); if (c) c.hidden = true; }
+  const mk = (v: Partial<Visual>): Visual => ({ id: uid('v'), type: 'clusteredColumn', x: 20, y: 20, w: 400, h: 260, wells: {}, filters: [], format: {}, ...v });
+  if (sc.pages) p.report.pages = sc.pages.map(pg => ({ id: uid('pg'), name: pg.name, visuals: pg.visuals.map(mk), filters: [] }));
+  else if (sc.visuals) p.report.pages[0].visuals = sc.visuals.map(mk);
+  return p;
+}
 
 /** Build a fresh project from a scenario and load it. */
 
@@ -163,10 +191,7 @@ export function starScenario(extra: Partial<Scenario> = {}): Scenario {
   };
 }
 
-/** Sample data › "Load a ready-made star schema". */
-export function quickModel() {
-  void loadScenario('Contoso Sales', starScenario({
-    pages: [{ name: 'Overview', visuals: [
+export const OVERVIEW_PAGES: Scenario['pages'] = [{ name: 'Overview', visuals: [
       { type: 'card', x: 20, y: 16, w: 230, h: 110, wells: { values: [{ table: 'Sales', measure: 'Total Sales' }] } },
       { type: 'card', x: 262, y: 16, w: 230, h: 110, wells: { values: [{ table: 'Sales', measure: 'Profit' }] } },
       { type: 'card', x: 504, y: 16, w: 230, h: 110, wells: { values: [{ table: 'Sales', measure: 'Margin %' }] } },
@@ -177,8 +202,11 @@ export function quickModel() {
       { type: 'matrix', x: 20, y: 432, w: 620, h: 270, wells: { rows: [{ table: 'Product', column: 'Category' }, { table: 'Product', column: 'Subcategory' }], cols: [{ table: 'Date', column: 'Year' }], values: [{ table: 'Sales', measure: 'Total Sales' }] } },
       { type: 'donut', x: 652, y: 432, w: 324, h: 270, wells: { axis: [{ table: 'Customer', column: 'Segment' }], values: [{ table: 'Sales', measure: 'Total Sales' }] } },
       { type: 'table', x: 990, y: 280, w: 270, h: 422, wells: { columns: [{ table: 'Store', column: 'StoreName' }, { table: 'Sales', measure: 'Total Sales' }, { table: 'Sales', measure: 'Margin %' }] } },
-    ] }],
-  }));
+    ] }];
+
+/** Sample data › "Load a ready-made star schema". */
+export function quickModel() {
+  void loadScenario('Contoso Sales', starScenario({ pages: OVERVIEW_PAGES }));
 }
 
 // small inline tables, so tutorials don't depend on files

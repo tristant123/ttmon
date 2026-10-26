@@ -55,7 +55,13 @@ export function valueNode(m: Model, f: FieldRef): DNode {
 }
 
 export function formatFor(m: Model, f: FieldRef): string | undefined {
-  if (f.calcExpr !== undefined) return f.calcFormat;
+  if (f.calcExpr !== undefined) {
+    if (f.calcFormat) return f.calcFormat;
+    // default: the format of the measure it refers to (not for ratios)
+    if (/DIVIDE|\//i.test(f.calcExpr)) return undefined;
+    const ref = /\[([^\]]+)\]/.exec(f.calcExpr)?.[1];
+    return ref ? m.measures.find(x => x.name === ref)?.formatString : undefined;
+  }
   if (f.measure) return measureMeta(m, f)?.formatString;
   if (f.datePart) return undefined;
   const c = colMeta(m, f);

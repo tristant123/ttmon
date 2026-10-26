@@ -235,6 +235,7 @@ export function Ribbon() {
       {view !== 'report' && <RBtn icon="newtable" label="New table" onClick={() => startNewTable()} />}
       {view === 'model' && <RBtn icon="calcgroup" label="Calculation group" onClick={newCalculationGroup} disabled={!hasData} />}
     </Group>
+    {view === 'report' && <Group label="Copilot"><RBtn icon="chat" label="Copilot" on={!!s.ui.copilot} onClick={() => s.setUI({ copilot: !s.ui.copilot })} /></Group>}
     <Group label="Sensitivity">
       <RBtn icon="label" label={s.project.report.sensitivity ?? 'Sensitivity'} menu onClick={e => menuBelow(e.currentTarget, [
         ...LABELS.map(l => ({ label: l.name, checked: s.project.report.sensitivity === l.name, onClick: () => {

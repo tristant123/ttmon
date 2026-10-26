@@ -240,6 +240,8 @@ export function commitFormula(): string | null {
     try { s.dax.scalarOf(def.expr); } catch (e) { s.setUI({ formula: null, field: { table: fm.table, measure: def.name } }); clearQueryCache(); s.toast(`Measure saved, but it returns an error: ${(e as Error).message}`, 'error'); return null; }
     s.setUI({ formula: null, field: { table: fm.table, measure: def.name } });
   } else if (fm.kind === 'column') {
+    const live = (s.project as any).liveConnection;
+    if (live && (!live.composite || (model.tables.find(t => t.name === fm.table) as any)?.remote)) return live.composite ? 'Calculated columns can\'t be added to tables from the remote semantic model. Add them to your local tables, or ask the model owner.' : 'Calculated columns aren\'t available in a live connection. Select "Make changes to this model" to create a composite model, or create a measure instead.';
     if (model.tables.find(t => t.name === fm.table)?.storageMode === 'DirectLake') return `Calculated columns aren't supported on Direct Lake tables. Add the column to the Delta table in the lakehouse, or create a measure instead.`;
     if (nameTaken(def.name)) return `The name '${def.name}' is already used in table '${fm.table}'.`;
     s.change(p => {
@@ -253,6 +255,8 @@ export function commitFormula(): string | null {
     if ((c as any)?.error) { s.setUI({ field: { table: fm.table, column: def.name } }); return (c as any).error; }
     s.setUI({ formula: null, field: { table: fm.table, column: def.name } });
   } else {
+    const live = (s.project as any).liveConnection;
+    if (live && !live.composite) return 'Calculated tables aren\'t available in a live connection. Select "Make changes to this model" first.';
     if (model.tables.some(t => t.name.toLowerCase() === def.name.toLowerCase() && t.name !== fm.editing)) return `A table named '${def.name}' already exists.`;
     s.change(p => {
       const ex = fm.editing ? p.model.tables.find(t => t.name === fm.editing) : undefined;
@@ -342,6 +346,8 @@ export function appendRenameStep(code: string, oldName: string, newName: string)
 
 export function openPowerQuery(select?: string) {
   const s = store;
+  const live = (s.project as any).liveConnection;
+  if (live && !live.composite) { s.toast(`This report is connected live to the semantic model "${live.name}", so Power Query isn't available. Select "Make changes to this model" in the status bar to add your own data (a composite model).`, 'error'); return; }
   if (select && s.project.model.tables.find(t => t.name === select)?.storageMode === 'DirectLake') { s.toast(`${select} is a Direct Lake table. Direct Lake tables can't be transformed in Power Query; change the data in the lakehouse instead.`, 'error'); return; }
   const queries = JSON.parse(JSON.stringify(s.project.queries));
   s.setUI({ pq: { queries, selected: select ?? queries[0]?.name ?? null, step: null, selectedCols: [], dirty: false, profile: { quality: true, distribution: false, profile: false, whole: false }, formulaBar: true, showSettings: true, ribbon: 'Home' } });
@@ -401,4 +407,13 @@ export function switchToImport(focus?: string) {
     s.toast(`All tables are now in Import mode${focus ? `; ${focus} can use any Power Query step` : ''}. Apply your changes to load the data.`);
   };
   s.openDialog({ type: 'confirm', title: 'Switch all tables to Import mode', text: 'Switching to Import mode is an irreversible operation. You won\'t be able to switch back to DirectQuery. Do you want to continue?', ok: 'Switch', onOk: run });
+}
+
+/** Status bar › Make changes to this model: turn a live connection into a composite model (DirectQuery to the semantic model). */
+export function makeChangesToModel() {
+  const s = store; const live = (s.project as any).liveConnection; if (!live) return;
+  s.openDialog({ type: 'confirm', title: 'Make changes to this model', text: `Power BI will switch the live connection to "${live.name}" to a DirectQuery connection, so you can add data from other sources, calculated columns on your own tables and relationships (a composite model). The remote model's tables stay in DirectQuery mode and keep the owner's RLS and permissions. You need Build permission on it, and the workspace admin must allow DirectQuery connections to Power BI semantic models.`, ok: 'Add a local model', onOk: () => {
+    s.change(p => { (p as any).liveConnection = { ...live, composite: true }; for (const t of p.model.tables) if ((t as any).remote) t.storageMode = 'DirectQuery'; });
+    clearQueryCache(); s.toast('This is now a composite model. Use Get data to add your own tables; the semantic model\'s tables show as DirectQuery.');
+  } });
 }

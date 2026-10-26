@@ -49,6 +49,9 @@ export interface RefreshResult { errors: { table: string; message: string }[]; l
 /** Re-run all load-enabled queries and rebuild the model's tables. */
 export function refreshModel(project: Project, m: MEngine, only?: string[]): RefreshResult {
   const model = project.model;
+  const live = (project as any).liveConnection as { composite?: boolean } | undefined;
+  // a live connection has no queries: the data comes from the published semantic model
+  if (live && !live.composite) return { errors: recalc(model), loaded: [] };
   const errors: RefreshResult['errors'] = [];
   const loaded: string[] = [];
   const keep: ModelTable[] = [];
@@ -109,7 +112,7 @@ export function refreshModel(project: Project, m: MEngine, only?: string[]): Ref
     loaded.push(q.name);
   }
   // calculated tables survive refresh
-  for (const t of model.tables) if ((t.expression || t.calculationGroup) && !keep.some(k => k.name === t.name)) keep.push(t);
+  for (const t of model.tables) if ((t.expression || t.calculationGroup || (t as any).remote) && !keep.some(k => k.name === t.name)) keep.push(t);
   model.tables = keep;
   // drop relationships to vanished columns
   model.relationships = model.relationships.filter(r => colExists(model, r.fromTable, r.fromColumn) && colExists(model, r.toTable, r.toColumn));

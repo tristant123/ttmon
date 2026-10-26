@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { switchToImport } from './ui/actions';
+import { switchToImport, makeChangesToModel } from './ui/actions';
 import { pageRefreshTick } from './ui/report/vhelpers';
 import { MobileLayoutEditor } from './ui/report/MobileLayout';
+import { ServiceApp } from './service/Service';
+import { me as svcMe } from './service/model';
+import { AssistantPanel } from './ui/Assistant';
+import { CopilotPane } from './ui/Copilot';
 import { useStore, store } from './store';
 import { I } from './ui/icons';
 import { MenuHost } from './ui/common';
@@ -39,8 +43,10 @@ function TitleBar() {
       const hit = cmds.find(([k]) => q.includes(k));
       if (hit) hit[1](); else s.toast('Try "new measure", "relationships", "transform data", "tutorials" or "DAX query".');
     }} /></div>
+    <button className="iconbtn" title="Ask how to practice an exam question" onClick={() => s.setUI({ assistant: !s.ui.assistant })}><I n="chat" s={16} /><span className="qat-extra" style={{ fontSize: 12 }}>Ask</span></button>
     <button className="iconbtn" title="PL-300 tutorials" onClick={() => s.setUI({ showTutorials: true })}><I n="grad" s={16} /><span className="qat-extra" style={{ fontSize: 12 }}>Tutorials</span></button>
-    <div className="who" title="Signed in as the sandbox user">PL</div>
+    <button className="iconbtn svc-switch" title="Open the (simulated) Power BI service: workspaces, sharing, apps, refresh, gateways" onClick={() => s.setUI({ app: 'service' })}><I n="cloud" s={16} /><span className="qat-extra" style={{ fontSize: 12 }}>Power BI service</span></button>
+    <div className="who" title={`Signed in as ${svcMe().name} (${svcMe().upn})`}>{svcMe().name.split(' ').map(x => x[0]).join('')}</div>
   </div>;
 }
 
@@ -64,7 +70,9 @@ function StatusBar() {
     {s.ui.viewAs && <span style={{ background: '#fff4ce', padding: '0 8px', borderRadius: 3, color: '#252423' }}>Now viewing as: {s.ui.viewAs.roles.join(', ')}{s.ui.viewAs.user ? ` (${s.ui.viewAs.user})` : ''} · <button className="iconbtn" style={{ height: 18 }} onClick={() => { s.ui.viewAs = null; s.rebuildDax(); s.emit(); }}>Stop viewing</button></span>}
     {s.refreshErrors.length > 0 && <button className="iconbtn" style={{ height: 20, color: '#a4262c' }} onClick={() => s.openDialog({ type: 'loadErrors', errors: s.refreshErrors })}><I n="warning" s={13} /> {s.refreshErrors.length} issue{s.refreshErrors.length > 1 ? 's' : ''}</button>}
     <span className="grow" />
+    {(s.project as any).liveConnection && !(s.project as any).liveConnection.composite && <span>Connected live to the Power BI semantic model: {(s.project as any).liveConnection.name} in {(s.project as any).liveConnection.ws} · <button className="iconbtn" style={{ height: 20, textDecoration: 'underline' }} onClick={() => makeChangesToModel()}>Make changes to this model</button></span>}
     {(() => {
+      if ((s.project as any).liveConnection && !(s.project as any).liveConnection.composite) return null;
       const modes = new Set(s.project.model.tables.filter(x => !x.expression && !x.calculationGroup).map(x => x.storageMode ?? 'Import'));
       const label = modes.size > 1 ? 'Mixed' : [...modes][0] === 'DirectLake' ? 'Direct Lake' : [...modes][0] ?? 'Import';
       const dq = modes.has('DirectQuery') || modes.has('Dual');
@@ -105,6 +113,7 @@ function DesktopReportView() {
     {s.ui.panes.bookmarks && <BookmarksPane />}
     {s.ui.panes.selection && <SelectionPane />}
     {s.ui.panes.sync && <SyncSlicersPane />}
+    {s.ui.copilot && <CopilotPane />}
     {s.ui.panes.perf && <PerfPane />}
     {s.ui.panes.filters && s.ui.focus !== 'reading' && (!narrow || drawer === 'filters') && <FiltersPane />}
     {s.ui.focus !== 'reading' && (!narrow || drawer === 'viz') && <VizPane />}
@@ -138,7 +147,7 @@ export function App() {
       const typing = tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.tagName === 'SELECT' || tgt.isContentEditable);
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); saveProjectFile(); return; }
-      if (typing || store.ui.pq || store.ui.dialogs.length) return;
+      if (typing || store.ui.pq || store.ui.dialogs.length || store.ui.app === 'service') return;
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); store.undo(); }
       else if (mod && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); store.redo(); }
       else if (store.ui.view === 'report') {
@@ -156,6 +165,15 @@ export function App() {
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   }, []);
+  if (ready && s.ui.app === 'service') return <div className="app svc-root">
+    <ServiceApp />
+    {s.ui.showTutorials && <TutorialHome />}
+    {s.ui.tutorial && <TutorialPanel />}
+    {s.ui.assistant && <AssistantPanel />}
+    <DialogHost />
+    <MenuHost />
+    {s.ui.toast && <div className={`toast ${s.ui.toast.kind === 'error' ? 'error' : ''}`} role="status">{s.ui.toast.text}</div>}
+  </div>;
   if (!ready) return <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: '#f3f2f1' }}><div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14 }}><I n="logo" s={28} /> Loading Power BI sandbox…</div></div>;
   return <div className="app">
     <TitleBar />
@@ -174,6 +192,7 @@ export function App() {
     {s.ui.backstage && <Backstage />}
     {s.ui.tutorial && <TutorialPanel />}
     {s.ui.showTutorials && <TutorialHome />}
+    {s.ui.assistant && <AssistantPanel />}
     <DialogHost />
     <MenuHost />
     {s.ui.toast && <div className={`toast ${s.ui.toast.kind === 'error' ? 'error' : ''}`} role="status">{s.ui.toast.text}</div>}

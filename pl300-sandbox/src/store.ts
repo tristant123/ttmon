@@ -63,6 +63,7 @@ export interface UI {
   /** Which app is on screen: Power BI Desktop or the (simulated) Power BI service. */
   app?: 'desktop' | 'service';
   assistant?: boolean;
+  copilot?: boolean;
 }
 
 export function emptyProject(): Project {
@@ -111,6 +112,8 @@ export class Store {
   redoStack: string[] = [];
   listeners = new Set<() => void>();
   saveTimer: any = null;
+  /** While the Power BI service shows a report, the Desktop project is set aside here. */
+  session: { desktop: Project; undo: string[]; redo: string[]; pageId: string; itemId: string } | null = null;
   ui: UI = {
     view: 'report', pageId: this.project.report.pages[0].id, selected: [], ribbon: 'Home', pq: null, dialogs: [],
     tableViewTable: null, field: null, formula: null,
@@ -180,6 +183,7 @@ export class Store {
     if (!va || !va.roles.length) return;
     if (va.user) this.dax.userName = va.user;
     const map = new Map<string, Set<number>>();
+    if (va.roles.includes('__deny__')) { this.dax.rls = new Map(this.project.model.tables.map(t => [t.name, new Set<number>()])); return; }
     const roles = this.project.model.roles.filter(r => va.roles.includes(r.name));
     for (const role of roles) {
       for (const [t, expr] of Object.entries(role.filters)) {
@@ -237,8 +241,24 @@ export class Store {
   persistSoon() {
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
-      try { localStorage.setItem(LS_KEY, this.snapshot()); } catch { /* storage unavailable */ }
+      const p = this.session?.desktop ?? this.project;
+      try { localStorage.setItem(LS_KEY, JSON.stringify(stripRows(p), replacer)); } catch { /* storage unavailable */ }
     }, 400);
+  }
+  /** Show a service report: swap in its project (with data) and the viewer's RLS. */
+  enterSession(p: Project, itemId: string, viewAs: UI['viewAs'], pageId?: string) {
+    if (!this.session) this.session = { desktop: this.project, undo: this.undoStack, redo: this.redoStack, pageId: this.ui.pageId, itemId };
+    this.session.itemId = itemId;
+    this.project = p; this.undoStack = []; this.redoStack = [];
+    this.ui = { ...this.ui, pageId: pageId ?? p.report.pages.find(x => !x.hidden && !x.isTooltip)?.id ?? p.report.pages[0]?.id, selected: [], cross: null, focus: 'reading', drillthrough: null, viewAs, mobileLayout: false, formula: null, field: null };
+    this.rebuildDax(); this.emit();
+  }
+  exitSession() {
+    const ss = this.session; if (!ss) return;
+    this.session = null;
+    this.project = ss.desktop; this.undoStack = ss.undo; this.redoStack = ss.redo;
+    this.ui = { ...this.ui, pageId: ss.pageId, selected: [], cross: null, focus: null, drillthrough: null, viewAs: null };
+    this.rebuildDax(); this.emit();
   }
   async load(): Promise<boolean> {
     let saved: string | null = null;

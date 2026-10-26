@@ -9,6 +9,7 @@ import { GetDataDialog, EnterDataDialog, SampleDataDialog } from './GetData';
 import { RelationshipsDialog, EditRelationshipDialog, RolesDialog, ViewAsDialog, MarkDateDialog, QuickMeasureDialog, WhatIfDialog, GroupsDialog } from './ModelDialogs';
 import { PQ_DIALOGS } from '../pq/PQDialogs';
 import { SOURCE_DIALOGS } from './SourceDialogs';
+import { SERVICE_DIALOGS } from '../../service/Dialogs';
 import { ANALYZE_DIALOGS } from '../report/analyze';
 import { VisualCalcEditor } from '../report/VisualCalcEditor';
 import { summarize, visualContext, fmt, formatFor, isValueField, drillLevels } from '../../report/query';
@@ -173,8 +174,8 @@ function Options() {
 const DIALOGS: Record<string, (p: { d: DialogT }) => React.ReactElement | null> = {
   message: Message, confirm: Confirm, loadErrors: LoadErrors, welcome: Welcome, getData: GetDataDialog, enterData: EnterDataDialog, sampleData: SampleDataDialog,
   relationships: RelationshipsDialog, editRelationship: EditRelationshipDialog, roles: RolesDialog, viewAs: ViewAsDialog, markDate: MarkDateDialog, quickMeasure: QuickMeasureDialog,
-  whatIf: WhatIfDialog, groups: GroupsDialog, showAsTable: ShowAsTable, publish: Publish, about: About, shortcuts: Shortcuts, editParams: EditParams, fieldParam: FieldParam, options: Options,
-  ...PQ_DIALOGS, ...SOURCE_DIALOGS, ...ANALYZE_DIALOGS, visualCalc: VisualCalcEditor, exportData: ExportData,
+  whatIf: WhatIfDialog, groups: GroupsDialog, showAsTable: ShowAsTable, about: About, shortcuts: Shortcuts, editParams: EditParams, fieldParam: FieldParam, options: Options,
+  ...PQ_DIALOGS, ...SOURCE_DIALOGS, ...ANALYZE_DIALOGS, ...SERVICE_DIALOGS, visualCalc: VisualCalcEditor, exportData: ExportData,
 };
 
 export function DialogHost() {

@@ -29,7 +29,7 @@ export function TableView() {
       <div className="tv">
         <FormulaBar />
         {!t ? <div className="empty-canvas"><h2>No tables yet</h2><div>Load data with <b>Get data</b> or create a table with <b>New table</b>.</div></div> : <>
-          {(t.storageMode === 'DirectQuery' || t.storageMode === 'DirectLake') ? <div className="empty-canvas"><h2>This table uses {t.storageMode === 'DirectLake' ? 'Direct Lake' : 'DirectQuery'} and cannot be shown</h2><div>Its data stays in the {t.storageMode === 'DirectLake' ? 'lakehouse' : 'source'}, so Table view has nothing to display. Build a table visual in Report view, or run <code>EVALUATE TOPN(100, '{t.name}')</code> in DAX query view.</div></div> : <>
+          {(t.storageMode === 'DirectQuery' || t.storageMode === 'DirectLake' || ((s.project as any).liveConnection && (t as any).remote)) ? <div className="empty-canvas"><h2>This table uses {t.storageMode === 'DirectLake' ? 'Direct Lake' : 'DirectQuery'} and cannot be shown</h2><div>Its data stays in the {t.storageMode === 'DirectLake' ? 'lakehouse' : 'source'}, so Table view has nothing to display. Build a table visual in Report view, or run <code>EVALUATE TOPN(100, '{t.name}')</code> in DAX query view.</div></div> : <>
           {(t as any).error && <div className="errbox" style={{ margin: 8 }}>Calculated table error: {(t as any).error}</div>}
           {t.loadErrors ? <div className="warnbox" style={{ margin: 8 }}>{t.loadErrors} cell errors were loaded as blanks. Fix them in Power Query (Remove Errors / Replace Errors) to keep your numbers honest.</div> : null}
           <Grid rows={rows} cols={t.columns.map(c => ({

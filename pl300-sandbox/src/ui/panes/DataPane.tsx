@@ -65,6 +65,7 @@ export function DataPane({ width = 230, mode = 'report' }: { width?: number; mod
       { label: 'Edit query', icon: 'transform', disabled: !!t.expression, onClick: () => openPowerQuery(t.name) },
       ...(t.expression ? [{ label: 'Edit DAX formula', icon: 'edit', onClick: () => editTable(t.name) }] : []),
       { label: 'Mark as date table', icon: 'calendar', onClick: () => s.openDialog({ type: 'markDate', table: t.name }) },
+      { label: 'Incremental refresh', icon: 'pageRefresh', disabled: !!t.expression || !!t.calculationGroup, onClick: () => s.openDialog({ type: 'incremental', table: t.name }) },
       { label: 'Manage relationships', icon: 'relationship', onClick: () => s.openDialog({ type: 'relationships' }) },
       { sep: true },
       { label: 'Rename', icon: 'edit', onClick: () => setRename(JSON.stringify({ table: t.name })) },
