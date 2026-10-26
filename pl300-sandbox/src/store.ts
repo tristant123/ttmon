@@ -62,7 +62,6 @@ export interface UI {
   mobileLayout?: boolean;
   /** Which app is on screen: Power BI Desktop or the (simulated) Power BI service. */
   app?: 'desktop' | 'service';
-  assistant?: boolean;
   copilot?: boolean;
 }
 

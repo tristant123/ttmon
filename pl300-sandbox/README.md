@@ -112,11 +112,6 @@ interactions, drill down/up/next level/expand, drill through with a Back button,
 bookmarks, selection pane, Analytics pane lines, themes, Performance analyzer, export
 data, show as a table and focus mode.
 
-**Ask how to practice this.** Paste any exam question into **Ask** (title bar). In the
-published artifact, Claude answers it, explains the distractors and writes step-by-step
-instructions for this app, with buttons to start the matching lab; offline, the panel matches
-the question to the labs and syllabus.
-
 **Tutorials.** 38 hands-on labs grouped by the exam's skill areas (Prepare, Model,
 Visualize and analyze, Manage and secure). Each loads its own sample data, checks your
 work live, and ends with exam-style questions and explanations. Examples: all six merge

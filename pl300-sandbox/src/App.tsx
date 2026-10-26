@@ -4,7 +4,6 @@ import { pageRefreshTick } from './ui/report/vhelpers';
 import { MobileLayoutEditor } from './ui/report/MobileLayout';
 import { ServiceApp } from './service/Service';
 import { me as svcMe } from './service/model';
-import { AssistantPanel } from './ui/Assistant';
 import { CopilotPane } from './ui/Copilot';
 import { useStore, store } from './store';
 import { I } from './ui/icons';
@@ -43,7 +42,6 @@ function TitleBar() {
       const hit = cmds.find(([k]) => q.includes(k));
       if (hit) hit[1](); else s.toast('Try "new measure", "relationships", "transform data", "tutorials" or "DAX query".');
     }} /></div>
-    <button className="iconbtn" title="Ask how to practice an exam question" onClick={() => s.setUI({ assistant: !s.ui.assistant })}><I n="chat" s={16} /><span className="qat-extra" style={{ fontSize: 12 }}>Ask</span></button>
     <button className="iconbtn" title="PL-300 tutorials" onClick={() => s.setUI({ showTutorials: true })}><I n="grad" s={16} /><span className="qat-extra" style={{ fontSize: 12 }}>Tutorials</span></button>
     <button className="iconbtn svc-switch" title="Open the (simulated) Power BI service: workspaces, sharing, apps, refresh, gateways" onClick={() => s.setUI({ app: 'service' })}><I n="cloud" s={16} /><span className="qat-extra" style={{ fontSize: 12 }}>Power BI service</span></button>
     <div className="who" title={`Signed in as ${svcMe().name} (${svcMe().upn})`}>{svcMe().name.split(' ').map(x => x[0]).join('')}</div>
@@ -169,7 +167,6 @@ export function App() {
     <ServiceApp />
     {s.ui.showTutorials && <TutorialHome />}
     {s.ui.tutorial && <TutorialPanel />}
-    {s.ui.assistant && <AssistantPanel />}
     <DialogHost />
     <MenuHost />
     {s.ui.toast && <div className={`toast ${s.ui.toast.kind === 'error' ? 'error' : ''}`} role="status">{s.ui.toast.text}</div>}
@@ -192,7 +189,6 @@ export function App() {
     {s.ui.backstage && <Backstage />}
     {s.ui.tutorial && <TutorialPanel />}
     {s.ui.showTutorials && <TutorialHome />}
-    {s.ui.assistant && <AssistantPanel />}
     <DialogHost />
     <MenuHost />
     {s.ui.toast && <div className={`toast ${s.ui.toast.kind === 'error' ? 'error' : ''}`} role="status">{s.ui.toast.text}</div>}
