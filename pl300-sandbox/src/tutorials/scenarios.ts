@@ -7,7 +7,7 @@ import { ROOT_FOLDER } from '../m/sources';
 
 export const F = (name: string) => `${ROOT_FOLDER}\\${name}`;
 
-export interface ScenarioQuery { name: string; code: string; load?: boolean; group?: string }
+export interface ScenarioQuery { name: string; code: string; load?: boolean; group?: string; storageMode?: 'Import' | 'DirectQuery' | 'DirectLake' }
 export interface Scenario {
   queries: ScenarioQuery[];
   measures?: Omit<Measure, 'table'> & { table: string }[] | Measure[];
@@ -25,9 +25,17 @@ export interface Scenario {
   openPQ?: string;
   view?: 'report' | 'table' | 'model' | 'dax';
   autoDateTime?: boolean;
+  /** Leave privacy levels unset (the privacy lab). */
+  privacyUnset?: boolean;
+  /** Extra model settings applied after load. */
+  model?: Partial<Project['model']>;
+  tableModes?: Record<string, 'Import' | 'DirectQuery' | 'Dual' | 'DirectLake'>;
 }
 
+import { directSources, paramValues } from '../m/privacy';
+
 /** Build a fresh project from a scenario and load it. */
+
 export async function loadScenario(name: string, sc: Scenario) {
   const s = store;
   if (sc.files !== false) await s.addFiles(sampleFiles());
@@ -35,7 +43,9 @@ export async function loadScenario(name: string, sc: Scenario) {
   p.name = name;
   p.settings.autoDateTime = sc.autoDateTime ?? true;
   p.settings.autodetectRelationships = !!sc.autodetect;
-  p.queries = sc.queries.map(q => ({ id: uid('q'), name: q.name, code: q.code, load: q.load ?? true, refresh: true, group: q.group }));
+  p.queries = sc.queries.map(q => ({ id: uid('q'), name: q.name, code: q.code, load: q.load ?? true, refresh: true, group: q.group, storageMode: q.storageMode }));
+  // labs start with their sample sources set to Organizational so combining them doesn't prompt (the privacy lab clears this)
+  if (!sc.privacyUnset) { p.dataSources = {}; const params = paramValues(p.queries); for (const q of p.queries) for (const src of directSources(q.code, params)) p.dataSources[src.key] = { privacy: 'Organizational' }; }
   s.loadProject(p);
   const m = s.project.model;
   for (const ct of sc.calcTables ?? []) m.tables.push({ name: ct.name, columns: [], rows: [], expression: ct.expression, dateColumn: ct.dateColumn });
@@ -43,6 +53,8 @@ export async function loadScenario(name: string, sc: Scenario) {
   m.measures.push(...((sc.measures ?? []) as Measure[]));
   m.relationships.push(...(sc.relationships ?? []).map(r => ({ ...r, id: uid('rel') })));
   m.roles.push(...(sc.roles ?? []));
+  if (sc.model) Object.assign(m, sc.model);
+  for (const [t, mode] of Object.entries(sc.tableModes ?? {})) { const tt = m.tables.find(x => x.name === t); if (tt) tt.storageMode = mode; }
   s.recalcModel();
   for (const sb of sc.sortBy ?? []) { const c = m.tables.find(t => t.name === sb.table)?.columns.find(x => x.name === sb.column); if (c) c.sortByColumn = sb.by; }
   for (const f of sc.formats ?? []) { const c = m.tables.find(t => t.name === f.table)?.columns.find(x => x.name === f.column); if (c) c.formatString = f.format; }

@@ -23,8 +23,8 @@ const resCache = new Map<string, { v?: any; e?: any; ms: number }>();
 export function invalidate() { engCache = null; resCache.clear(); }
 export function pqEngine(): MEngine {
   const qs = pq().queries;
-  const key = JSON.stringify(qs.map(q => [q.name, q.code])) + store.files.length;
-  if (!engCache || engCache.key !== key) { engCache = { key, eng: new MEngine(qs) }; resCache.clear(); }
+  const key = JSON.stringify(qs.map(q => [q.name, q.code])) + store.files.length + JSON.stringify(store.privacyConfig());
+  if (!engCache || engCache.key !== key) { engCache = { key, eng: new MEngine(qs, store.privacyConfig()) }; resCache.clear(); }
   return engCache.eng;
 }
 export function stepResult(name: string, step: number | null): { v?: any; e?: any; ms: number } {

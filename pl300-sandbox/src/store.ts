@@ -195,7 +195,8 @@ export class Store {
     this.dax.rls = map;
   }
 
-  queryEngine(queries = this.project.queries) { return new MEngine(queries); }
+  privacyConfig() { return { levels: this.project.dataSources ?? {}, ignore: !!this.project.settings.ignorePrivacy }; }
+  queryEngine(queries = this.project.queries) { return new MEngine(queries, this.privacyConfig()); }
 
   /** Refresh: run Power Query and reload every table. */
   refresh(opts: { autodetect?: boolean; only?: string[] } = {}) {

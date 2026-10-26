@@ -150,5 +150,7 @@ export interface Project {
   queries: Query[];
   model: Model;
   report: Report;
-  settings: { autoDateTime: boolean; autodetectRelationships: boolean };
+  settings: { autoDateTime: boolean; autodetectRelationships: boolean; ignorePrivacy?: boolean };
+  /** Data source settings: privacy level and credentials per source key (see m/privacy.ts). */
+  dataSources?: Record<string, import('../m/privacy').SourceSettings>;
 }

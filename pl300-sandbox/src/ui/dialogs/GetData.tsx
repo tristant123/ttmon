@@ -217,7 +217,13 @@ function SqlDialog({ fromPQ }: { fromPQ: boolean }) {
   const done = (qs: Q[], m: 'load' | 'transform') => { close(); finishQueries(qs.map(q => ({ ...q, storageMode: mode })), m, fromPQ); };
   if (nav) return <NavigatorShell title={`${server}: ${db}`} items={nav.rows.map(r => ({ id: String(r[0]), label: String(r[0]), icon: 'tableIcon' }))} sel={sel} setSel={setSel} done={done}
     build={() => sqlQueries(server, db, sel.map(id => { const r = nav.rows.find(x => x[0] === id)!; return { schema: String(r[2]), item: String(r[3]) }; }), taken)} preview={id => (nav.rows.find(r => r[0] === id)?.[1] as MTable) ?? null} />;
-  return <Dialog title="SQL Server database" width={520} footer={<><button className="btn primary" onClick={() => { const t = contosoDW(server, db); if (!t) setErr(`Couldn't connect to '${server}' / '${db}'. The sandbox has one server: localhost with database ContosoDW.`); else setNav(t); }}>OK</button><button className="btn" onClick={close}>Cancel</button></>}>
+  return <Dialog title="SQL Server database" width={520} footer={<><button className="btn primary" onClick={() => {
+      const t = contosoDW(server, db);
+      if (!t) { setErr(`Couldn't connect to '${server}' / '${db}'. The sandbox has one server: localhost with database ContosoDW.`); return; }
+      const key = `sql:${server.toLowerCase()};${db.toLowerCase()}`;
+      if (!store.project.dataSources?.[key]?.credential) store.openDialog({ type: 'credentials', key, label: `${server};${db}`, then: () => setNav(t) });
+      else setNav(t);
+    }}>OK</button><button className="btn" onClick={close}>Cancel</button></>}>
     <div className="field"><label htmlFor="sql-s">Server</label><input id="sql-s" className="tx" value={server} onChange={e => setServer(e.target.value)} /></div>
     <div className="field"><label htmlFor="sql-d">Database (optional)</label><input id="sql-d" className="tx" value={db} onChange={e => setDb(e.target.value)} /></div>
     <div className="field"><label>Data Connectivity mode</label><div className="radio-row"><label><input type="radio" checked={mode === 'Import'} onChange={() => setMode('Import')} />Import</label><label><input type="radio" checked={mode === 'DirectQuery'} onChange={() => setMode('DirectQuery')} />DirectQuery</label></div></div>

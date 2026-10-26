@@ -1,4 +1,5 @@
 // Evaluates a workbook of Power Query queries that may reference each other by name.
+import { checkFirewall, PrivacyConfig } from './privacy';
 import { Parser, Node, splitSteps } from './parser';
 import { Env, evaluate } from './eval';
 import { LIB } from './lib';
@@ -36,7 +37,7 @@ export class MEngine {
   evaluating = new Set<string>();
   global: Env;
 
-  constructor(public queries: Query[]) {
+  constructor(public queries: Query[], public privacy?: PrivacyConfig) {
     this.global = new Env(null, (name) => {
       if (name in LIB) return LIB[name];
       const q = this.queries.find(x => x.name === name);
@@ -54,6 +55,7 @@ export class MEngine {
     if (this.evaluating.has(name)) throw new MError('Expression.Error', `A cyclic reference was encountered during evaluation of query '${name}'.`);
     this.evaluating.add(name);
     try {
+      if (this.privacy) checkFirewall(q, this.queries, this.privacy);
       const v = evaluate(Parser.parse(q.code), new Env(this.global));
       this.cache.set(name, { v });
       return v;
@@ -67,6 +69,7 @@ export class MEngine {
   evaluateStep(name: string, stepIndex: number): any {
     const q = this.queries.find(x => x.name === name);
     if (!q) throw new MError('Expression.Error', `Query '${name}' not found.`);
+    if (this.privacy) checkFirewall(q, this.queries, this.privacy);
     const node = Parser.parse(q.code);
     if (node.k !== 'let') return this.evaluateQuery(name);
     const sp = splitSteps(q.code);

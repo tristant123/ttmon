@@ -162,10 +162,13 @@ function Preview() {
   const r = stepResult(q.name, idx < 0 ? null : idx);
   if (r.e) {
     const fe = friendlyError(r.e);
+    if (fe.reason === 'Privacy.Required') return <div className="pq-banner" style={{ margin: 12 }}><I n="warning" s={14} />Information is required about data privacy. <button className="btn sm" onClick={() => s.openDialog({ type: 'privacyLevels' })}>Continue</button></div>;
+    if (/Credentials are required/.test(fe.message)) return <div className="pq-banner" style={{ margin: 12 }}><I n="warning" s={14} />{fe.message} <button className="btn sm" onClick={() => { const det = (r.e as any).detail; s.openDialog({ type: 'credentials', key: det?.credentials, label: det?.label }); }}>Edit Credentials</button></div>;
     return <div className="pq-error">
       <h4><I n="warning" s={14} /> {fe.reason}: {fe.message}</h4>
       {fe.detail && <div className="det">Details:{'\n'}    {fe.detail}</div>}
       <div className="row" style={{ marginTop: 10 }}>
+        {fe.reason === 'Formula.Firewall' && <><button className="btn sm" onClick={() => s.openDialog({ type: 'dataSources' })}>Data source settings</button><button className="btn sm" onClick={() => s.openDialog({ type: 'privacyLevels' })}>Privacy levels</button></>}
         {/File|DataSource/.test(fe.reason) && <button className="btn sm" onClick={() => s.openDialog({ type: 'getData', pq: true })}>Upload file…</button>}
         <button className="btn sm" onClick={() => s.openDialog({ type: 'pq:advanced' })}>Go To Error (Advanced Editor)</button>
       </div>

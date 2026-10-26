@@ -6,6 +6,7 @@ import { I } from '../icons';
 import { GetDataDialog, EnterDataDialog, SampleDataDialog } from './GetData';
 import { RelationshipsDialog, EditRelationshipDialog, RolesDialog, ViewAsDialog, MarkDateDialog, QuickMeasureDialog, WhatIfDialog, GroupsDialog } from './ModelDialogs';
 import { PQ_DIALOGS } from '../pq/PQDialogs';
+import { SOURCE_DIALOGS } from './SourceDialogs';
 import { summarize, visualContext, fmt, formatFor, isValueField, drillLevels } from '../../report/query';
 import { openProjectFile } from '../../io/project';
 import { openPowerQuery, refreshAll } from '../actions';
@@ -22,7 +23,10 @@ function Confirm({ d }: { d: DialogT }) {
 }
 function LoadErrors({ d }: { d: DialogT }) {
   return <Dialog title="Load" sub="Some tables couldn't be loaded or calculated" width={640} footer={<><button className="btn" onClick={() => { close(); openPowerQuery(d.errors[0]?.table); }}>Open Power Query</button><button className="btn primary" onClick={close}>Close</button></>}>
-    {d.errors.map((e: any, i: number) => <div key={i} className="errbox"><b>{e.table}</b>{'\n'}{e.message}</div>)}
+    {d.errors.map((e: any, i: number) => <div key={i} className="errbox"><b>{e.table}</b>{'\n'}{e.message}
+      {/data privacy/.test(e.message) && <div style={{ marginTop: 6 }}><button className="btn sm" onClick={() => { close(); store.openDialog({ type: 'privacyLevels' }); }}>Continue (set privacy levels)</button></div>}
+      {/Formula\.Firewall/.test(e.message) && <div style={{ marginTop: 6 }}><button className="btn sm" onClick={() => { close(); store.openDialog({ type: 'dataSources' }); }}>Data source settings</button></div>}
+      {/Credentials are required/.test(e.message) && <div style={{ marginTop: 6 }}><button className="btn sm" onClick={() => { close(); store.openDialog({ type: 'dataSources' }); }}>Edit credentials</button></div>}</div>)}
     <div className="tiny">Missing files? Upload them with Get data (matching by file name), or use Data source settings to see which files each query needs.</div>
   </Dialog>;
 }
@@ -77,22 +81,6 @@ function Shortcuts() {
   </Dialog>;
 }
 
-function DataSources() {
-  const s = store;
-  const queries = s.ui.pq ? s.ui.pq.queries : s.project.queries;
-  const srcs = queries.flatMap(q => [...q.code.matchAll(/(File\.Contents|Folder\.Files|Folder\.Contents|Sql\.Database|Web\.Contents)\(\s*"([^"]+)"(?:\s*,\s*"([^"]+)")?/g)].map(m => ({ q: q.name, fn: m[1], path: m[2], db: m[3] })));
-  return <Dialog title="Data source settings" sub="Manage settings for data sources used in this file" width="min(760px, 95vw)" footer={<button className="btn primary" onClick={close}>Close</button>}>
-    <table className="grid-table vtable"><thead><tr><th>Source</th><th>Used by</th><th>Status</th></tr></thead><tbody>
-      {srcs.map((x, i) => { const ok = x.fn === 'File.Contents' ? !!findFile(x.path) : x.fn === 'Sql.Database' ? /localhost/i.test(x.path) : x.fn.startsWith('Folder') ? s.files.some(f => f.folder.toLowerCase().startsWith(x.path.toLowerCase().replace(/\\$/, ''))) : false;
-        return <tr key={i}><td>{x.fn === 'Sql.Database' ? `${x.path};${x.db}` : x.path}</td><td>{x.q}</td><td style={{ color: ok ? '#107c10' : '#a4262c' }}>{ok ? 'Available' : 'Not found — upload it via Get data'}</td></tr>; })}
-      {!srcs.length && <tr><td colSpan={3} className="subtle">No file or database sources yet.</td></tr>}
-    </tbody></table>
-    <div className="section-h">Files stored in the sandbox</div>
-    <div className="list" style={{ maxHeight: 200 }}>{s.files.map(f => <div key={f.folder + f.name} className="it"><span style={{ flex: 1 }}>{f.folder}\{f.name}</span><span className="tiny">{(f.bytes.length / 1024).toFixed(1)} KB</span><button className="btn sm" onClick={() => { s.files = s.files.filter(x => x !== f); void s.persistFiles(); s.emit(); }}>Remove</button></div>)}</div>
-    <div className="tiny">Change source: edit the path in the query's Source step (Power Query › Advanced Editor), or use a text parameter for the folder path, which is a common exam scenario.</div>
-  </Dialog>;
-}
-
 function EditParams() {
   const s = store;
   const params = s.project.queries.filter(q => paramInfo(q.code));
@@ -119,14 +107,18 @@ function Options() {
   return <Dialog title="Options" width={560} footer={<button className="btn primary" onClick={close}>OK</button>}>
     <label className="row"><input type="checkbox" checked={s.project.settings.autoDateTime} onChange={e => s.change(p => { p.settings.autoDateTime = e.target.checked; })} />Auto date/time for new files</label>
     <label className="row"><input type="checkbox" checked={s.project.settings.autodetectRelationships} onChange={e => s.change(p => { p.settings.autodetectRelationships = e.target.checked; })} />Autodetect new relationships after data is loaded</label>
+    <div className="section-h">Privacy (current file)</div>
+    <label className="row"><input type="radio" checked={!s.project.settings.ignorePrivacy} onChange={() => s.change(p => { p.settings.ignorePrivacy = false; })} />Combine data according to your Privacy Level settings for each source</label>
+    <label className="row"><input type="radio" checked={!!s.project.settings.ignorePrivacy} onChange={() => s.change(p => { p.settings.ignorePrivacy = true; })} />Ignore the Privacy levels and potentially improve performance</label>
+    <div className="tiny">Ignoring privacy levels can expose sensitive or confidential data to an unauthorized person, because Power Query may send data from one source to another when it folds a combination.</div>
   </Dialog>;
 }
 
 const DIALOGS: Record<string, (p: { d: DialogT }) => React.ReactElement | null> = {
   message: Message, confirm: Confirm, loadErrors: LoadErrors, welcome: Welcome, getData: GetDataDialog, enterData: EnterDataDialog, sampleData: SampleDataDialog,
   relationships: RelationshipsDialog, editRelationship: EditRelationshipDialog, roles: RolesDialog, viewAs: ViewAsDialog, markDate: MarkDateDialog, quickMeasure: QuickMeasureDialog,
-  whatIf: WhatIfDialog, groups: GroupsDialog, showAsTable: ShowAsTable, publish: Publish, about: About, shortcuts: Shortcuts, dataSources: DataSources, editParams: EditParams, fieldParam: FieldParam, options: Options,
-  ...PQ_DIALOGS,
+  whatIf: WhatIfDialog, groups: GroupsDialog, showAsTable: ShowAsTable, publish: Publish, about: About, shortcuts: Shortcuts, editParams: EditParams, fieldParam: FieldParam, options: Options,
+  ...PQ_DIALOGS, ...SOURCE_DIALOGS,
 };
 
 export function DialogHost() {
