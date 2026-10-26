@@ -5,11 +5,27 @@ import { EChart } from './EChart';
 import { store } from '../../store';
 import { Visual, Page, FieldRef } from '../../model/types';
 import { summarize, drillLevels, sortRows, defaultSort, fmt, formatFor, fieldLabel, valueNode, QResult } from '../../report/query';
-import { useQuery, colors, pathFilters, pointClick, isSelectedPoint } from './vhelpers';
+import { useQuery, colors, pathFilters, pointClick, isSelectedPoint, hoverTooltip, tooltipPageFor } from './vhelpers';
 import { autoUnits } from '../../core/format';
 import { keyOf, compareValues } from '../../core/values';
 import { isHorizontal } from '../../report/visuals';
 import { dataPointMenu } from './menus';
+import { forecast, anomalies } from '../../report/analytics';
+
+/** The next axis label after the last one (years, yyyy-mm, months, quarters, numbers). */
+function nextLabel(last: string, prev?: string): string {
+  let m: RegExpMatchArray | null;
+  if ((m = last.match(/^(\d{4})-(\d{2})$/))) { const y = +m[1], mo = +m[2]; return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`; }
+  if (/^\d+$/.test(last) && prev !== undefined && /^\d+$/.test(prev)) return String(+last + (+last - +prev));
+  if (/^\d+$/.test(last)) return String(+last + 1);
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const short = months.map(x => x.slice(0, 3));
+  const i = months.indexOf(last), j = short.indexOf(last);
+  if (i >= 0) return months[(i + 1) % 12];
+  if (j >= 0) return short[(j + 1) % 12];
+  if ((m = last.match(/^Qtr (\d)$/))) return `Qtr ${(+m[1]) % 4 + 1}`;
+  return `${last} +1`;
+}
 
 const axisLabel = { color: '#605e5c', fontSize: 11, fontFamily: 'Segoe UI, sans-serif' };
 const splitLine = { lineStyle: { color: '#e9e9e9' } };
@@ -62,7 +78,7 @@ function buildSeries(v: Visual, res: QResult, hlRes: QResult | null, groups: Fie
     for (const r of res.rows) { const i = idx.get(catKey(r)); if (i !== undefined) data[i] = r[ng + lg + values.length + j]; }
     series.push({ name: fieldLabel(f), field: f, data, line: true });
   });
-  return { cats, series, groups, legend };
+  return { cats, series: series.filter(x => !x.field.hiddenInVisual), groups, legend };
 }
 
 function analyticsLines(v: Visual) {
@@ -96,7 +112,17 @@ export function CartesianChart({ v, page }: { v: Visual; page: Page }) {
     const vals = [...values, ...lineValues];
     const res = summarize(s, groups, vals, vc, { extraFilters: pf });
     const hl = vc.highlight ? summarize(s, groups, vals, vc, { extraFilters: [...pf, ...vc.highlight] }) : null;
-    return buildSeries(v, res, hl, lv.shown, legend, values, lineValues);
+    const built = buildSeries(v, res, hl, lv.shown, legend, values, lineValues);
+    // error bars from upper/lower bound measures
+    const eb = v.format?.analytics?.errorBars;
+    let bounds: { upper: (number | null)[]; lower: (number | null)[] } | null = null;
+    if (eb?.on && eb.mode !== 'percent' && (eb.upper || eb.lower) && !legend) {
+      const fs = [eb.upper, eb.lower].filter(Boolean).map((mname: string) => ({ table: m.measures.find(x => x.name === mname)?.table ?? '', measure: mname }));
+      const br = summarize(s, lv.shown, fs, vc, { extraFilters: pf });
+      const at = new Map(br.rows.map(r => [r.slice(0, lv.shown.length).map(keyOf).join('|'), r.slice(lv.shown.length)]));
+      bounds = { upper: built.cats.map(c => (eb.upper ? at.get(c.key)?.[0] ?? null : null)), lower: built.cats.map(c => (eb.lower ? at.get(c.key)?.[eb.upper ? 1 : 0] ?? null : null)) };
+    }
+    return { ...built, bounds };
   });
   const option = useMemo(() => {
     if (!q.data) return null;
@@ -140,13 +166,54 @@ export function CartesianChart({ v, page }: { v: Visual; page: Page }) {
         series.push({ name: ser.name, type: 'bar', stack, data: dataOf(ser.data), itemStyle: { color }, label, barMaxWidth: 60, barGap: '8%', markLine: si === 0 ? { symbol: 'none', data: analyticsLines(v).map(l => horiz ? { ...l, xAxis: l.yAxis, yAxis: undefined } : l) } : undefined });
       }
     });
+    const an = f.analytics ?? {};
+    const catLabels = b.cats.map(c => c.label);
+    const main = b.series[0];
+    // error bars: upper/lower bound measures, or ± a percentage of the value
+    if (an.errorBars?.on && main && !b.legend) {
+      const up = an.errorBars.mode === 'percent' ? main.data.map(y => (y === null ? null : Number(y) * (1 + (an.errorBars.pct ?? 10) / 100))) : b.bounds?.upper ?? [];
+      const lo = an.errorBars.mode === 'percent' ? main.data.map(y => (y === null ? null : Number(y) * (1 - (an.errorBars.pct ?? 10) / 100))) : b.bounds?.lower ?? [];
+      series.push({ name: 'Error bars', type: 'custom', z: 10, tooltip: { formatter: (p: any) => `Upper bound: <b>${autoUnits(p.value[1])}</b><br/>Lower bound: <b>${autoUnits(p.value[2])}</b>` },
+        data: catLabels.map((_c, i) => [i, up[i] ?? main.data[i], lo[i] ?? main.data[i]]).filter(d => d[1] !== null || d[2] !== null),
+        renderItem: (_p: any, api: any) => {
+          const i = api.value(0); const hi = api.coord(horiz ? [api.value(1), i] : [i, api.value(1)]); const lw = api.coord(horiz ? [api.value(2), i] : [i, api.value(2)]);
+          const w = 6; const st = { stroke: an.errorBars.color ?? '#252423', lineWidth: 1.5 };
+          return { type: 'group', children: horiz
+            ? [{ type: 'line', shape: { x1: hi[0], y1: hi[1], x2: lw[0], y2: lw[1] }, style: st }, { type: 'line', shape: { x1: hi[0], y1: hi[1] - w, x2: hi[0], y2: hi[1] + w }, style: st }, { type: 'line', shape: { x1: lw[0], y1: lw[1] - w, x2: lw[0], y2: lw[1] + w }, style: st }]
+            : [{ type: 'line', shape: { x1: hi[0], y1: hi[1], x2: lw[0], y2: lw[1] }, style: st }, { type: 'line', shape: { x1: hi[0] - w, y1: hi[1], x2: hi[0] + w, y2: hi[1] }, style: st }, { type: 'line', shape: { x1: lw[0] - w, y1: lw[1], x2: lw[0] + w, y2: lw[1] }, style: st }] };
+        } });
+    }
+    // anomaly detection (line charts)
+    if (an.anomalies?.on && isLine && main && !b.legend) {
+      const det = anomalies(main.data.map(x => (x === null ? null : Number(x))), an.anomalies.sensitivity ?? 70);
+      series.push({ name: 'Expected range', type: 'line', data: det.ranges.map(r => r.low), lineStyle: { opacity: 0 }, stack: 'band', symbol: 'none', tooltip: { show: false } });
+      series.push({ name: 'Expected range ', type: 'line', data: det.ranges.map(r => r.high - r.low), lineStyle: { opacity: 0 }, areaStyle: { color: '#118dff', opacity: 0.12 }, stack: 'band', symbol: 'none', tooltip: { show: false } });
+      series.push({ name: 'Anomaly', type: 'scatter', symbolSize: 11, itemStyle: { color: an.anomalies.color ?? '#d64554', borderColor: '#fff', borderWidth: 1.5 }, z: 12,
+        data: catLabels.map((_c, i) => { const a = det.anomalies.find(x => x.i === i); return a ? main.data[i] : null; }),
+        tooltip: { formatter: (p: any) => { const a = det.anomalies.find(x => x.i === p.dataIndex)!; return `<b>Anomaly</b> at ${catLabels[p.dataIndex]}<br/>Value: <b>${autoUnits(Number(main.data[p.dataIndex]))}</b><br/>Expected range: ${autoUnits(a.low)} – ${autoUnits(a.high)}<br/><i>Right-click › Analyze to explain it</i>`; } } });
+    }
+    // forecast (line charts with a single series)
+    let xLabels = catLabels;
+    if (an.forecast?.on && isLine && main && !b.legend && b.series.length === 1) {
+      const ignore = Math.max(0, an.forecast.ignoreLast ?? 0);
+      const ys = main.data.slice(0, main.data.length - ignore).map(x => Number(x) || 0);
+      const fc = forecast(ys, an.forecast.length ?? 6, { season: an.forecast.season || undefined, confidence: an.forecast.confidence ?? 0.95 });
+      const base = ys.length;
+      xLabels = [...catLabels]; for (let h = 0; h < fc.point.length; h++) if (base + h >= xLabels.length) xLabels.push(nextLabel(xLabels[xLabels.length - 1], xLabels[xLabels.length - 2]));
+      const pad = (arr: number[]) => [...new Array(base - 1).fill(null), ys[base - 1], ...arr];
+      series.push({ name: 'Forecast lower', type: 'line', data: pad(fc.lower), lineStyle: { opacity: 0 }, stack: 'fc', symbol: 'none', tooltip: { show: false } });
+      series.push({ name: 'Confidence interval', type: 'line', data: [...new Array(base - 1).fill(null), 0, ...fc.upper.map((u, i) => u - fc.lower[i])], lineStyle: { opacity: 0 }, areaStyle: { color: '#605e5c', opacity: 0.15 }, stack: 'fc', symbol: 'none', tooltip: { show: false } });
+      series.push({ name: 'Forecast', type: 'line', data: pad(fc.point), lineStyle: { type: 'dashed', color: '#252423', width: 2 }, itemStyle: { color: '#252423' }, symbol: 'none',
+        tooltip: { formatter: (p: any) => { const h = p.dataIndex - base; return h >= 0 && h < fc.point.length ? `<b>Forecast</b> ${xLabels[p.dataIndex]}<br/>${autoUnits(fc.point[h])}<br/>Upper bound: ${autoUnits(fc.upper[h])}<br/>Lower bound: ${autoUnits(fc.lower[h])}${fc.season ? `<br/>Seasonality: ${fc.season} points` : ''}` : ''; } } });
+      (cat as any).data = xLabels;
+    }
     const showLegend = f.legend !== false && (b.series.filter(x => !x.name.endsWith(' ')).length > 1 || !!b.legend);
     return {
       animation: false, color: pal,
       grid: { left: horiz ? 130 : 56, right: val2 ? 56 : 18, top: showLegend ? 34 : 14, bottom: (b.cats.length > 14 && !horiz ? 64 : 40), containLabel: false },
       legend: showLegend ? { show: true, top: 4, left: 8, type: 'scroll', icon: 'circle', itemWidth: 9, itemHeight: 9, textStyle: { fontSize: 11, color: '#605e5c' }, data: b.series.filter(x => !x.name.endsWith(' ')).map(x => x.name), formatter: (n: string) => n } : { show: false },
       tooltip: {
-        trigger: 'item', confine: true, textStyle: { fontSize: 12 },
+        show: v.format?.tooltip?.type !== 'off' && !tooltipPageFor(v), trigger: 'item', confine: true, textStyle: { fontSize: 12 },
         formatter: (p: any) => {
           const c = b.cats[p.dataIndex]; const ser = b.series.find(x => x.name === p.seriesName) ?? b.series[0];
           const raw = ser?.data[p.dataIndex];
@@ -172,7 +239,8 @@ export function CartesianChart({ v, page }: { v: Visual; page: Page }) {
       const ser = b.series.find(x => x.name === p.seriesName.trimEnd());
       pointClick(page, v, 'axis', c.vals, lv.shown, b.legend && ser ? { field: b.legend, value: ser.legendVal } : undefined, e);
     }}
-    onContext={(p, e) => { if (!p) return; const b = q.data!; const c = b.cats[p.dataIndex]; if (!c) return; const ser = b.series.find(x => x.name === p.seriesName.trimEnd()); dataPointMenu(e, page, v, [...lv.shown.map((g, i) => ({ field: g, value: c.vals[i] })), ...(b.legend && ser ? [{ field: b.legend, value: ser.legendVal }] : [])]); }} />;
+    onContext={(p, e) => { if (!p) return; const b = q.data!; const c = b.cats[p.dataIndex]; if (!c) return; const ser = b.series.find(x => x.name === p.seriesName.trimEnd()); dataPointMenu(e, page, v, [...lv.shown.map((g, i) => ({ field: g, value: c.vals[i] })), ...(b.legend && ser ? [{ field: b.legend, value: ser.legendVal }] : [])]); }}
+    onHover={(p, e) => hoverTooltip(v, page, p, e, () => { const b = q.data!; const c = b.cats[p.dataIndex]; const ser = b.series.find(x => x.name === p.seriesName?.trimEnd()); return c ? [...lv.shown.map((g, i) => ({ field: g, value: c.vals[i] })), ...(b.legend && ser ? [{ field: b.legend, value: ser.legendVal }] : [])] : []; })} />;
 }
 
 export function PieChart({ v, page }: { v: Visual; page: Page }) {
@@ -221,7 +289,8 @@ export function PieChart({ v, page }: { v: Visual; page: Page }) {
   if (!q.data?.res.rows.length) return <NoData />;
   return <EChart option={option}
     onClick={(p, e) => { if (!p) { if (s.ui.cross?.visualId === v.id) s.setUI({ cross: null }); return; } const r = p.data.raw; pointClick(page, v, 'axis', r.slice(0, lv.shown.length), lv.shown, undefined, e); }}
-    onContext={(p, e) => { if (!p) return; const r = p.data.raw; dataPointMenu(e, page, v, lv.shown.map((g, i) => ({ field: g, value: r[i] }))); }} />;
+    onContext={(p, e) => { if (!p) return; const r = p.data.raw; dataPointMenu(e, page, v, lv.shown.map((g, i) => ({ field: g, value: r[i] }))); }}
+    onHover={(p, e) => hoverTooltip(v, page, p?.data?.raw ? p : null, e, () => lv.shown.map((g, i) => ({ field: g, value: p.data.raw[i] })))} />;
 }
 
 export function Waterfall({ v, page }: { v: Visual; page: Page }) {
@@ -284,7 +353,9 @@ export function Scatter({ v, page }: { v: Visual; page: Page }) {
   if (!x || !y) return <NoData msg="Add fields to X-axis and Y-axis." />;
   if (q.error) return <VisError msg={q.error} />;
   if (!option) return null;
-  return <EChart option={option} onClick={(p, e) => { if (!p) { if (s.ui.cross?.visualId === v.id) s.setUI({ cross: null }); return; } if (det.length) pointClick(page, v, 'details', p.data.raw.slice(0, det.length), det, undefined, e); }} />;
+  return <EChart option={option} onClick={(p, e) => { if (!p) { if (s.ui.cross?.visualId === v.id) s.setUI({ cross: null }); return; } if (det.length) pointClick(page, v, 'details', p.data.raw.slice(0, det.length), det, undefined, e); }}
+    onContext={(p, e) => { if (!p?.data?.raw) return; dataPointMenu(e, page, v, det.map((g, i) => ({ field: g, value: p.data.raw[i] }))); }}
+    onHover={(p, e) => hoverTooltip(v, page, p?.data?.raw ? p : null, e, () => det.map((g, i) => ({ field: g, value: p.data.raw[i] })))} />;
 }
 
 export function Gauge({ v, page }: { v: Visual; page: Page }) {

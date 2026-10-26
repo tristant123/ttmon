@@ -1,12 +1,16 @@
 // Renders the dialog stack, plus the smaller dialogs.
-import React, { useState } from 'react';
-import { useStore, store, Dialog as DialogT } from '../../store';
+import React, { useMemo, useState } from 'react';
+import { exportRows } from '../report/Canvas';
+import { download as downloadFile } from '../common';
+import { useStore, store, uid, Dialog as DialogT } from '../../store';
 import { Dialog } from '../common';
 import { I } from '../icons';
 import { GetDataDialog, EnterDataDialog, SampleDataDialog } from './GetData';
 import { RelationshipsDialog, EditRelationshipDialog, RolesDialog, ViewAsDialog, MarkDateDialog, QuickMeasureDialog, WhatIfDialog, GroupsDialog } from './ModelDialogs';
 import { PQ_DIALOGS } from '../pq/PQDialogs';
 import { SOURCE_DIALOGS } from './SourceDialogs';
+import { ANALYZE_DIALOGS } from '../report/analyze';
+import { VisualCalcEditor } from '../report/VisualCalcEditor';
 import { summarize, visualContext, fmt, formatFor, isValueField, drillLevels } from '../../report/query';
 import { openProjectFile } from '../../io/project';
 import { openPowerQuery, refreshAll } from '../actions';
@@ -41,6 +45,26 @@ function Welcome() {
       <button className="bs-item" onClick={() => { close(); void openProjectFile(); }}><I n="open" s={30} /><div><b>Open a file</b><span className="subtle">.pbisandbox project, .pbit template or model.bim.</span></div></button>
     </div>
     <div className="tiny">The four views on the left are Report, Table, Model and DAX query, the same as Power BI Desktop. Transform data opens the Power Query Editor. Your work saves automatically in this browser.</div>
+  </Dialog>;
+}
+
+function ExportData({ d }: { d: DialogT }) {
+  const s = store;
+  const v = s.findVisual(d.visualId)!; const page = s.project.report.pages.find(p => p.id === d.pageId)!;
+  const setting = s.project.report.settings?.exportData ?? 'underlying';
+  const svc = d.service as { build?: boolean } | undefined;
+  const allowUnderlying = setting === 'underlying' && (svc?.build ?? true);
+  const [kind, setKind] = useState<'summarized' | 'layout' | 'underlying'>('summarized');
+  const data = useMemo(() => { try { return exportRows(v, page, kind); } catch (e) { return { cols: [], rows: [], error: (e as Error).message }; } }, [kind]);
+  if (setting === 'none') return <Dialog title="Export data" width={460} footer={<button className="btn primary" onClick={close}>OK</button>}><div className="warnbox">The report author turned off exporting data for this report (File › Options and settings › Options › Report settings › Export data).</div></Dialog>;
+  const csv = () => { const esc = (x: string) => (/[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x); return [data.cols.map(esc).join(','), ...data.rows.map(r => r.map(esc).join(','))].join('\r\n'); };
+  return <Dialog title="Export data" sub="Which data do you want to export?" width="min(760px, 95vw)" footer={<><button className="btn primary" onClick={() => { downloadFile(`${v.format?.title || v.title || 'data'}.csv`, csv(), 'text/csv'); }}>Export</button><button className="btn" onClick={() => { void navigator.clipboard?.writeText(csv().replace(/,/g, '\t')).then(() => s.toast('Copied to the clipboard; paste into Excel.')).catch(() => s.toast('Clipboard not available', 'error')); }}>Copy</button><button className="btn" onClick={close}>Cancel</button></>}>
+    <label className="row"><input type="radio" checked={kind === 'summarized'} onChange={() => setKind('summarized')} /><div><b>Summarized data</b><div className="tiny">The data used for the visual, as aggregated values (.csv or .xlsx). Up to 30,000 rows to .csv, 150,000 to .xlsx.</div></div></label>
+    <label className="row"><input type="radio" checked={kind === 'layout'} onChange={() => setKind('layout')} /><div><b>Data with current layout</b><div className="tiny">The data as it looks in the visual, including its layout, exported to .xlsx (in the service).</div></div></label>
+    <label className="row" style={{ opacity: allowUnderlying ? 1 : 0.5 }}><input type="radio" disabled={!allowUnderlying} checked={kind === 'underlying'} onChange={() => setKind('underlying')} /><div><b>Underlying data</b><div className="tiny">{allowUnderlying ? 'The detail rows behind the visual, without aggregation.' : setting !== 'underlying' ? 'Turned off: the report allows summarized data only.' : 'Needs Build permission on the semantic model.'}</div></div></label>
+    {s.project.report.sensitivity && <div className="info tiny">The sensitivity label <b>{s.project.report.sensitivity}</b> is applied to the exported file.</div>}
+    {'error' in data && data.error ? <div className="errbox">{data.error}</div> : <div style={{ overflow: 'auto', maxHeight: 240 }}><table className="grid-table vtable"><thead><tr>{data.cols.map((c, i) => <th key={i}>{c}</th>)}</tr></thead><tbody>{data.rows.slice(0, 50).map((r, i) => <tr key={i}>{r.map((x, j) => <td key={j}>{x}</td>)}</tr>)}</tbody></table></div>}
+    <div className="tiny">{data.rows.length.toLocaleString()} rows. Export uses the visual's filters; RLS and the export settings apply in the service.</div>
   </Dialog>;
 }
 
@@ -96,9 +120,34 @@ function EditParams() {
 }
 
 function FieldParam() {
-  return <Dialog title="Field parameters" width={520} footer={<button className="btn primary" onClick={close}>OK</button>}>
-    <div>Field parameters let report readers swap the measure or column a visual uses. Power BI builds them as a calculated table of <code>NAMEOF()</code> references with special visual support, which the sandbox doesn't emulate.</div>
-    <div className="tip"><b>Exam tip</b>To let users switch between measures in the sandbox, combine a disconnected table of measure names, a slicer on it, and a SWITCH(SELECTEDVALUE(…)) measure. The "Dynamic measure with SWITCH" tutorial walks through it.</div>
+  const s = store; const m = s.project.model;
+  const [name, setName] = useState(() => { let n = 'Parameter', i = 2; while (m.tables.some(t => t.name === n)) n = `Parameter ${i++}`; return n; });
+  const [fields, setFields] = useState<{ label: string; ref: string }[]>([]);
+  const [slicer, setSlicer] = useState(true);
+  const all = [...m.measures.map(x => ({ label: x.name, ref: `'${x.table.replace(/'/g, "''")}'[${x.name}]`, group: x.table, measure: true })), ...m.tables.filter(t => !t.fieldParameter && !t.calculationGroup).flatMap(t => t.columns.filter(c => !c.hidden).map(c => ({ label: c.name, ref: `'${t.name.replace(/'/g, "''")}'[${c.name}]`, group: t.name, measure: false })))];
+  const ok = () => {
+    const q = /\s/.test(name) ? `'${name}'` : name;
+    const expr = `SELECTCOLUMNS({\n${fields.map((f, i) => `    ("${f.label.replace(/"/g, '""')}", NAMEOF(${f.ref}), ${i})`).join(',\n')}\n}, "${name}", [Value1], "${name} Fields", [Value2], "${name} Order", [Value3])`;
+    s.change(p => { p.model.tables.push({ name, columns: [], rows: [], expression: expr, fieldParameter: true }); }, { recalc: true });
+    s.change(p => { const t = p.model.tables.find(x => x.name === name)!; for (const c of t.columns) { if (c.name.endsWith(' Fields') || c.name.endsWith(' Order')) c.hidden = true; if (c.name === name) c.sortByColumn = `${name} Order`; } }, { noUndo: true });
+    if (slicer) { const page = s.page(); s.change(p => { p.report.pages.find(x => x.id === page.id)!.visuals.push({ id: uid('v'), type: 'slicer', x: 20, y: 20, w: 220, h: 200, wells: { field: [{ table: name, column: name }] }, filters: [], format: { singleSelect: false }, slicer: { values: [] } }); }); }
+    void q; close();
+    s.toast(`Created the field parameter ${name}. Add its ${name} column to a visual's axis or values; the slicer chooses which fields the visual shows.`);
+  };
+  return <Dialog title="Parameters" sub="Add parameters to visuals and DAX expressions so people can use slicers to adjust the inputs and see different results." width={720} footer={<><button className="btn primary" disabled={!fields.length || !name.trim()} onClick={ok}>Create</button><button className="btn" onClick={close}>Cancel</button></>}>
+    <div className="field"><label>What will your variable adjust?</label><select className="tx" value="fields" onChange={e => { if (e.target.value === 'numeric') { close(); s.openDialog({ type: 'whatIf' }); } }}><option value="fields">Fields</option><option value="numeric">Numeric range</option></select></div>
+    <div className="field"><label>Name</label><input className="tx" value={name} onChange={e => setName(e.target.value)} /></div>
+    <div className="row" style={{ alignItems: 'stretch', flexWrap: 'nowrap', gap: 12 }}>
+      <div style={{ flex: 1 }}><div className="section-h" style={{ marginTop: 0 }}>Fields (in order)</div>
+        <div className="list" style={{ minHeight: 160, maxHeight: 260 }}>{fields.map((f, i) => <div key={f.ref} className="it"><span style={{ flex: 1 }}>{f.label}</span>
+          <button className="iconbtn" disabled={i === 0} onClick={() => { const n = [...fields]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; setFields(n); }} aria-label="Move up">↑</button>
+          <button className="iconbtn" onClick={() => setFields(fields.filter(x => x !== f))} aria-label="Remove"><I n="close" s={11} /></button></div>)}
+          {!fields.length && <div className="subtle" style={{ padding: 8 }}>Pick measures or columns on the right.</div>}</div></div>
+      <div style={{ width: 280 }}><div className="section-h" style={{ marginTop: 0 }}>Add fields</div>
+        <div className="list" style={{ maxHeight: 260 }}>{all.filter(x => !fields.some(f => f.ref === x.ref)).map(x => <div key={x.ref} className="it" onClick={() => setFields([...fields, { label: x.label, ref: x.ref }])}><I n={x.measure ? 'fieldCalc' : 'fieldText'} s={14} /><span style={{ flex: 1 }}>{x.label}</span><span className="tiny">{x.group}</span></div>)}</div></div>
+    </div>
+    <label className="row"><input type="checkbox" checked={slicer} onChange={e => setSlicer(e.target.checked)} />Add slicer to this page</label>
+    <div className="tiny">Power BI builds a calculated table of NAMEOF() references. Use its column in a visual's axis or values; selecting items in the slicer swaps the fields the visual shows.</div>
   </Dialog>;
 }
 
@@ -107,6 +156,13 @@ function Options() {
   return <Dialog title="Options" width={560} footer={<button className="btn primary" onClick={close}>OK</button>}>
     <label className="row"><input type="checkbox" checked={s.project.settings.autoDateTime} onChange={e => s.change(p => { p.settings.autoDateTime = e.target.checked; })} />Auto date/time for new files</label>
     <label className="row"><input type="checkbox" checked={s.project.settings.autodetectRelationships} onChange={e => s.change(p => { p.settings.autodetectRelationships = e.target.checked; })} />Autodetect new relationships after data is loaded</label>
+    <div className="section-h">Report settings (current file)</div>
+    <label className="row"><input type="checkbox" checked={!!s.project.report.settings?.personalize} onChange={e => s.change(p => { p.report.settings = { ...(p.report.settings ?? {}), personalize: e.target.checked }; })} />Personalize visuals: allow report readers to change visuals (type, fields, summarization) in the service</label>
+    <div className="field"><label>Export data</label><select className="tx" value={s.project.report.settings?.exportData ?? 'underlying'} onChange={e => s.change(p => { p.report.settings = { ...(p.report.settings ?? {}), exportData: e.target.value as any }; })}>
+      <option value="underlying">Allow end users to export summarized and underlying data from the service</option>
+      <option value="summarized">Allow end users to export summarized data from the service</option>
+      <option value="none">Don't allow end users to export any data from the service</option></select></div>
+    <label className="row"><input type="checkbox" checked={!!s.project.report.settings?.persistentFilters} onChange={e => s.change(p => { p.report.settings = { ...(p.report.settings ?? {}), persistentFilters: e.target.checked }; })} />Don't allow end users to save filters on this file in the service (persistent filters off)</label>
     <div className="section-h">Privacy (current file)</div>
     <label className="row"><input type="radio" checked={!s.project.settings.ignorePrivacy} onChange={() => s.change(p => { p.settings.ignorePrivacy = false; })} />Combine data according to your Privacy Level settings for each source</label>
     <label className="row"><input type="radio" checked={!!s.project.settings.ignorePrivacy} onChange={() => s.change(p => { p.settings.ignorePrivacy = true; })} />Ignore the Privacy levels and potentially improve performance</label>
@@ -118,7 +174,7 @@ const DIALOGS: Record<string, (p: { d: DialogT }) => React.ReactElement | null> 
   message: Message, confirm: Confirm, loadErrors: LoadErrors, welcome: Welcome, getData: GetDataDialog, enterData: EnterDataDialog, sampleData: SampleDataDialog,
   relationships: RelationshipsDialog, editRelationship: EditRelationshipDialog, roles: RolesDialog, viewAs: ViewAsDialog, markDate: MarkDateDialog, quickMeasure: QuickMeasureDialog,
   whatIf: WhatIfDialog, groups: GroupsDialog, showAsTable: ShowAsTable, publish: Publish, about: About, shortcuts: Shortcuts, editParams: EditParams, fieldParam: FieldParam, options: Options,
-  ...PQ_DIALOGS, ...SOURCE_DIALOGS,
+  ...PQ_DIALOGS, ...SOURCE_DIALOGS, ...ANALYZE_DIALOGS, visualCalc: VisualCalcEditor, exportData: ExportData,
 };
 
 export function DialogHost() {

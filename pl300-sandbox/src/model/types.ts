@@ -29,6 +29,8 @@ export interface ModelTable {
   storageMode?: StorageMode;
   loadErrors?: number;
   calculationGroup?: { precedence: number; items: CalcItem[] };
+  /** Field parameter table (Modeling › New parameter › Fields). */
+  fieldParameter?: boolean;
   /** Name of the data source the table comes from (for DirectQuery / Direct Lake behaviour). */
   source?: string;
 }
@@ -87,6 +89,12 @@ export interface FieldRef {
   alias?: string;                // "Rename for this visual"
   showAs?: 'none' | 'pctGrandTotal' | 'pctColumnTotal' | 'pctRowTotal' | 'pctParent';
   showItemsNoData?: boolean;
+  /** A visual calculation (lives in the visual): its name, DAX over the visual matrix, and format. */
+  visualCalc?: string;
+  calcExpr?: string;
+  calcFormat?: string;
+  /** Hidden on the visual (still usable by visual calculations). */
+  hiddenInVisual?: boolean;
 }
 
 export type FilterSpec =
@@ -112,6 +120,13 @@ export interface Visual {
   slicer?: { values: any[]; range?: [any, any]; search?: string };
   text?: string;                  // text box / button text
   action?: { type: 'bookmark' | 'page' | 'back' | 'drillthrough'; target?: string };
+  /** Sync slicers: slicers with the same group share their selection (unless syncOff). */
+  syncGroup?: string;
+  syncOff?: boolean;
+  /** Visual calculations (stored in the visual, not the model). */
+  visualCalcs?: { name: string; expression: string; format?: string; hidden?: boolean }[];
+  altText?: string;
+  tabOrder?: number;
 }
 
 export interface Page {
@@ -124,7 +139,14 @@ export interface Page {
   isTooltip?: boolean;
   interactions?: Record<string, 'filter' | 'highlight' | 'none'>;  // `${sourceId}>${targetId}`
   background?: string;
-  size?: '16:9' | '4:3' | 'Letter' | 'Tooltip';
+  size?: '16:9' | '4:3' | 'Letter' | 'Tooltip' | 'Custom';
+  width?: number; height?: number;
+  /** Fields that make this tooltip page appear automatically (Tooltip fields well). */
+  tooltipFields?: FieldRef[];
+  /** Automatic page refresh (DirectQuery). */
+  refresh?: { on: boolean; type: 'fixed' | 'change'; seconds: number; measure?: string };
+  /** Mobile layout: positions of visuals on the phone canvas. */
+  mobile?: Record<string, { x: number; y: number; w: number; h: number }>;
 }
 
 export interface Bookmark {
@@ -140,6 +162,10 @@ export interface Report {
   reportFilters: FilterSpec[];
   bookmarks: Bookmark[];
   theme: string;
+  /** File › Options › Report settings. */
+  settings?: { personalize?: boolean; exportData?: 'none' | 'summarized' | 'underlying'; visualHeaders?: boolean; persistentFilters?: boolean };
+  /** Microsoft Purview sensitivity label applied in Desktop. */
+  sensitivity?: string;
 }
 
 export interface StoredFileMeta { name: string; folder: string; size: number; modified: number }

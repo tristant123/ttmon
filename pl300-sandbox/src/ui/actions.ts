@@ -123,6 +123,11 @@ export function pasteVisuals() {
     for (const v of clip) { const n = { ...JSON.parse(JSON.stringify(v)), id: uid('v') }; if (page.visuals.some(x => x.x === n.x && x.y === n.y)) { n.x += 20; n.y += 20; } page.visuals.push(n); ids.push(n.id); }
   });
   s.setUI({ selected: ids });
+  // pasting a slicer onto another page: Power BI offers to sync it with the original
+  const pairs = clip.map((v, i) => ({ orig: v, copy: ids[i] })).filter(x => x.orig.type === 'slicer' && !s.page().visuals.some(y => y.id === x.orig.id) && s.findVisual(x.orig.id));
+  if (pairs.length) s.openDialog({ type: 'confirm', title: 'Sync visuals', text: 'Do you want to sync the slicer you pasted with the one you copied? Synced slicers share their selection across pages (see View › Sync slicers).', ok: 'Sync', onOk: () => {
+    s.change(p => { for (const pr of pairs) { const g = pr.orig.syncGroup ?? `${pr.orig.wells.field?.[0]?.column ?? 'Slicer'} ${Math.random().toString(36).slice(2, 6)}`; for (const pg of p.report.pages) for (const x of pg.visuals) if (x.id === pr.orig.id || x.id === pr.copy) { x.syncGroup = g; x.syncOff = false; } } });
+  } });
 }
 export function deleteSelected() {
   const s = store; const ids = s.ui.selected; if (!ids.length) return;

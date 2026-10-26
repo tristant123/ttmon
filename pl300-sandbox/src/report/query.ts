@@ -6,6 +6,7 @@ import { FieldRef, FilterSpec, Visual, Page, Model, ColumnMeta, Measure } from '
 import { compareValues, keyOf, isNumericType, MONTHS } from '../core/values';
 import { formatValue } from '../core/format';
 import { vdef, isBarLike } from './visuals';
+import { Lattice } from './visualcalc';
 import type { Store } from '../store';
 
 export function colMeta(m: Model, f: FieldRef): ColumnMeta | undefined {
@@ -16,7 +17,7 @@ export function measureMeta(m: Model, f: FieldRef): Measure | undefined {
   return f.measure ? m.measures.find(x => x.name === f.measure) : undefined;
 }
 export function isValueField(m: Model, f: FieldRef) {
-  if (f.measure) return true;
+  if (f.measure || f.calcExpr !== undefined) return true;
   if (f.agg && f.agg !== 'None') return true;
   return false;
 }
@@ -35,13 +36,14 @@ const AGG_LABEL: Record<string, string> = {
 };
 export function fieldLabel(f: FieldRef): string {
   if (f.alias) return f.alias;
+  if (f.visualCalc) return f.visualCalc;
   if (f.measure) return f.measure;
   if (f.datePart) return f.datePart;
   if (f.hierarchy) return f.hierarchy;
   if (f.agg && f.agg !== 'None') return `${AGG_LABEL[f.agg] ?? f.agg} ${f.column}`;
   return f.column ?? '';
 }
-export const fieldKey = (f: FieldRef) => `${f.table}|${f.column ?? ''}|${f.measure ?? ''}|${f.datePart ?? ''}|${f.agg ?? ''}`;
+export const fieldKey = (f: FieldRef) => `${f.table}|${f.column ?? ''}|${f.measure ?? ''}|${f.datePart ?? ''}|${f.agg ?? ''}${f.visualCalc ? '|vc:' + f.visualCalc : ''}`;
 
 /** The DAX expression for a value field (explicit or implicit measure). */
 export function valueNode(m: Model, f: FieldRef): DNode {
@@ -53,6 +55,7 @@ export function valueNode(m: Model, f: FieldRef): DNode {
 }
 
 export function formatFor(m: Model, f: FieldRef): string | undefined {
+  if (f.calcExpr !== undefined) return f.calcFormat;
   if (f.measure) return measureMeta(m, f)?.formatString;
   if (f.datePart) return undefined;
   const c = colMeta(m, f);
@@ -217,6 +220,8 @@ export function visualContext(store: Store, page: Page, v: Visual): VisualContex
     if (f) ctx = { ...ctx, filters: eng.applyFilter(ctx.filters, f, true), cache: new Map() };
   };
   for (const s of [...store.project.report.reportFilters, ...page.filters]) add(specToFilter(eng, s, ctx, store), s);
+  // report page tooltip: the hovered data point
+  for (const d of (page as any).pointFilters ?? []) add(valuesFilter(eng, d.field, [d.value]));
   // drillthrough
   if (page.drillthrough?.length && store.ui.drillthrough) for (const d of store.ui.drillthrough.filters) add(valuesFilter(eng, d.field, [d.value]));
   // slicers on the page
@@ -257,7 +262,11 @@ export function visualContext(store: Store, page: Page, v: Visual): VisualContex
 export interface QResult { cols: { field: FieldRef; label: string; isValue: boolean; format?: string }[]; rows: any[][]; error?: string }
 
 /** Group by `groups` and evaluate `values`; post-filters from measure filters are applied. */
-export function summarize(store: Store, groups: FieldRef[], values: FieldRef[], vc: VisualContext, opts: { keepBlanks?: boolean; extraFilters?: Filter[] } = {}): QResult {
+export interface LatticeSpec { rows: FieldRef[]; cols: FieldRef[]; rowLevels: number[]; colLevels: number[] }
+const latticeCache = new WeakMap<object, Map<any, Lattice>>();
+
+export function summarize(store: Store, groups: FieldRef[], values: FieldRef[], vc: VisualContext, opts: { keepBlanks?: boolean; extraFilters?: Filter[]; lattice?: LatticeSpec } = {}): QResult {
+  if (values.some(f => f.calcExpr !== undefined)) return summarizeWithCalcs(store, groups, values, vc, opts);
   const eng = store.dax; const m = store.project.model;
   let ctx = vc.ctx;
   if (opts.extraFilters?.length) { let fs = ctx.filters; for (const f of opts.extraFilters) fs = eng.applyFilter(fs, f, true); ctx = { ...ctx, filters: fs, cache: new Map() }; }
@@ -280,6 +289,37 @@ export function summarize(store: Store, groups: FieldRef[], values: FieldRef[], 
     }));
     rows = rows.map(r => r.slice(0, off));
   }
+  return {
+    cols: [...groups.map(g => ({ field: g, label: fieldLabel(g), isValue: false, format: formatFor(m, g) })), ...values.map(f => ({ field: f, label: fieldLabel(f), isValue: true, format: formatFor(m, f) }))],
+    rows,
+  };
+}
+
+/** Values that include visual calculations: evaluate the model values per lattice level, then the calculations. */
+function summarizeWithCalcs(store: Store, groups: FieldRef[], values: FieldRef[], vc: VisualContext, opts: { keepBlanks?: boolean; extraFilters?: Filter[]; lattice?: LatticeSpec }): QResult {
+  const m = store.project.model;
+  const base = values.filter(f => f.calcExpr === undefined);
+  const calcs = values.filter(f => f.calcExpr !== undefined);
+  const spec = opts.lattice ?? { rows: groups, cols: [], rowLevels: [0, groups.length], colLevels: [0] };
+  const same = (a: FieldRef, b: FieldRef) => fieldKey(a) === fieldKey(b) && (a.hierarchy ?? '') === (b.hierarchy ?? '');
+  let byFilters = latticeCache.get(vc);
+  if (!byFilters) { byFilters = new Map(); latticeCache.set(vc, byFilters); }
+  const ck = opts.extraFilters ?? null;
+  const lkey = JSON.stringify([spec.rows.map(fieldKey), spec.cols.map(fieldKey), values.map(f => [fieldKey(f), f.calcExpr])]);
+  let perSpec = byFilters.get(ck) as any as Map<string, Lattice> | undefined;
+  if (!perSpec) { perSpec = new Map(); byFilters.set(ck, perSpec as any); }
+  let lat = perSpec.get(lkey);
+  if (!lat) {
+    lat = new Lattice(store.dax, spec.rows, spec.cols, spec.rowLevels, spec.colLevels,
+      gs => { const r = summarize(store, gs, base, vc, { keepBlanks: opts.keepBlanks, extraFilters: opts.extraFilters }); return { names: base.map(fieldLabel), rows: sortRows(store, r.rows, gs) }; },
+      fieldLabel, calcs.map(c => ({ name: c.visualCalc ?? 'Calculation', expr: c.calcExpr! })));
+    perSpec.set(lkey, lat);
+  }
+  const kr = groups.filter(g => spec.rows.some(x => same(x, g))).length, kc = groups.filter(g => spec.cols.some(x => same(x, g))).length;
+  const lv = lat.level(kr, kc);
+  const ng = lv.groups.length;
+  const colOf = (f: FieldRef) => { const bi = base.indexOf(f); return bi >= 0 ? ng + bi : ng + base.length + calcs.indexOf(f); };
+  const rows = lv.rows.map(r => [...r.slice(0, ng), ...values.map(f => r[colOf(f)])]);
   return {
     cols: [...groups.map(g => ({ field: g, label: fieldLabel(g), isValue: false, format: formatFor(m, g) })), ...values.map(f => ({ field: f, label: fieldLabel(f), isValue: true, format: formatFor(m, f) }))],
     rows,
@@ -348,7 +388,36 @@ export function dynamicFormat(store: Store, f: FieldRef, pairs: { field: FieldRe
 
 export function evalCard(store: Store, page: Page, v: Visual, f: FieldRef): any {
   const vc = visualContext(store, page, v);
+  if (f.calcExpr !== undefined) return summarize(store, [], [...(v.wells.values ?? []).filter(x => x.calcExpr === undefined), f], vc).rows[0]?.slice(-1)[0] ?? null;
   return store.dax.scalar(valueNode(store.project.model, f), vc.ctx);
 }
 
 export { truthy, vdef };
+
+/** Field parameters: replace a parameter's column in the wells with the fields selected in its slicer. */
+export function expandFieldParams(store: Store, page: Page, v: Visual): Visual {
+  const m = store.project.model;
+  const params = m.tables.filter(t => t.fieldParameter);
+  if (v.type === 'slicer' || !params.length || !Object.values(v.wells).some(fs => fs.some(f => params.some(t => t.name === f.table)))) return v;
+  let ctx: Ctx;
+  try { ctx = visualContext(store, { ...page, visuals: page.visuals.filter(x => x.id !== v.id) }, v).ctx; } catch { return v; }
+  const wells: Record<string, FieldRef[]> = {};
+  for (const [k, fs] of Object.entries(v.wells)) {
+    wells[k] = fs.flatMap(f => {
+      const t = params.find(x => x.name === f.table);
+      if (!t || f.column !== t.columns[0]?.name) return [f];
+      const fi = t.columns.findIndex(c => / Fields$/.test(c.name)), oi = t.columns.findIndex(c => / Order$/.test(c.name));
+      const rows = store.dax.visible(t.name, ctx).map(i => t.rows[i]).sort((a, b) => compareValues(a[oi], b[oi]));
+      return rows.map(r => {
+        const mm = /^'?(.*?)'?\[(.*)\]$/.exec(String(r[fi])); if (!mm) return null;
+        const table = mm[1].replace(/''/g, "'"), name = mm[2];
+        const meas = m.measures.find(x => x.name === name);
+        if (meas) return { table: meas.table, measure: name } as FieldRef;
+        const col = colMeta(m, { table, column: name });
+        const isVal = vdef(v.type).wells.find(w => w.key === k)?.kind === 'value';
+        return { table, column: name, agg: isVal && col ? defaultAgg(m, { table, column: name }) : undefined } as FieldRef;
+      }).filter(Boolean) as FieldRef[];
+    });
+  }
+  return { ...v, wells };
+}

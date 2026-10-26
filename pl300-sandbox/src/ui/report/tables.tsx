@@ -64,6 +64,7 @@ export function TableVisual({ v, page }: { v: Visual; page: Page }) {
   return <div style={{ overflow: 'auto', position: 'absolute', inset: 0, fontSize: fontSize(v) }}>
     <table className="grid-table vtable">
       <thead><tr>{cols.map((f, i) => {
+        if (f.hiddenInVisual) return null;
         const num = isValueField(m, f) || isNumericType(colMeta(m, f)?.dataType ?? 'text');
         return <th key={i} className={num ? 'num' : ''} onClick={() => s.updateVisual(v.id, x => { x.sort = { by: fieldKey(f), desc: x.sort?.by === fieldKey(f) ? !x.sort.desc : num }; }, false)}>
           {fieldLabel(f)}{sortIdx === i ? (v.sort!.desc ? ' ▾' : ' ▴') : ''}</th>;
@@ -76,6 +77,7 @@ export function TableVisual({ v, page }: { v: Visual; page: Page }) {
           return <tr key={ri} className={dim ? 'dim' : ''} onClick={e => groups.length && pointClick(page, v, 'columns', gv, groups, undefined, e.nativeEvent)}
             onContextMenu={e => { e.preventDefault(); dataPointMenu(e.nativeEvent, page, v, groups.map((g, i) => ({ field: g, value: gv[i] }))); }}>
             {cols.map((f, ci) => {
+              if (f.hiddenInVisual) return null;
               const val = r[body.map[ci]];
               const isV = isValueField(m, f);
               const num = typeof val === 'number';
@@ -89,6 +91,7 @@ export function TableVisual({ v, page }: { v: Visual; page: Page }) {
           </tr>;
         })}
         {q.data.total && <tr className="total">{cols.map((f, ci) => {
+          if (f.hiddenInVisual) return null;
           const vi = values.indexOf(f);
           return <td key={ci} className={vi >= 0 ? 'num' : ''}>{ci === 0 && vi < 0 ? 'Total' : vi >= 0 ? fmt(q.data!.total![vi], formatFor(m, f), f) : ''}</td>;
         })}</tr>}
@@ -113,14 +116,16 @@ export function MatrixVisual({ v, page }: { v: Visual; page: Page }) {
     const start = v.drill?.expandAll ? 0 : rl.level;
     const levels = rowLevels.slice(start);
     const depthMax = Math.min(levels.length, Math.max(expandedLevel - start + 1, 1) + (expandedKeys.size ? levels.length : 0));
+    // the visual matrix, for visual calculations (rows hierarchy × column hierarchy)
+    const lattice = { rows: levels, cols: colFields, rowLevels: levels.map((_x, i) => i + 1).concat(0).sort((a, b) => a - b), colLevels: colFields.map((_x, i) => i + 1).concat(0).sort((a, b) => a - b) };
     const per: { rows: any[][] }[] = [];
     for (let d = 0; d < Math.max(1, depthMax); d++) {
       if (!levels.length) break;
-      per.push({ rows: summarize(s, [...levels.slice(0, d + 1), ...colFields], values, vc, { extraFilters: pf }).rows });
+      per.push({ rows: summarize(s, [...levels.slice(0, d + 1), ...colFields], values, vc, { extraFilters: pf, lattice }).rows });
     }
-    const rowTotals = levels.length ? Array.from({ length: Math.max(1, depthMax) }, (_x, d) => summarize(s, levels.slice(0, d + 1), values, vc, { extraFilters: pf }).rows) : [];
-    const colTotals = colFields.length ? summarize(s, colFields, values, vc, { extraFilters: pf }).rows : [];
-    const grand = summarize(s, [], values, vc, { extraFilters: pf }).rows[0] ?? values.map(() => null);
+    const rowTotals = levels.length ? Array.from({ length: Math.max(1, depthMax) }, (_x, d) => summarize(s, levels.slice(0, d + 1), values, vc, { extraFilters: pf, lattice }).rows) : [];
+    const colTotals = colFields.length ? summarize(s, colFields, values, vc, { extraFilters: pf, lattice }).rows : [];
+    const grand = summarize(s, [], values, vc, { extraFilters: pf, lattice }).rows[0] ?? values.map(() => null);
     const colKeys: any[][] = []; const seen = new Set<string>();
     for (const r of sortRows(s, colTotals, colFields)) { const k = r.slice(0, colFields.length).map(keyOf).join('|'); if (!seen.has(k)) { seen.add(k); colKeys.push(r.slice(0, colFields.length)); } }
     // build tree
@@ -152,7 +157,7 @@ export function MatrixVisual({ v, page }: { v: Visual; page: Page }) {
   const stats = allNums.map(xs => ({ min: Math.min(...xs), max: Math.max(...xs) }));
   const toggle = (key: string) => s.updateVisual(v.id, x => { const e = new Set<string>(x.format?.expanded ?? []); if (e.has(key)) e.delete(key); else e.add(key); x.format = { ...(x.format ?? {}), expanded: [...e] }; }, false);
   const vcx = safeCtx(page, v);
-  const valueCells = (cells: any[] | undefined, key: string, pairs: { field: FieldRef; value: any }[] = []) => values.map((f, j) => <td key={key + j} className="num" style={cfStyle(v, f, cells?.[j], stats[j])}>{fmt(cells?.[j], dynamicFormat(s, f, pairs, vcx) || formatFor(m, f), f)}</td>);
+  const valueCells = (cells: any[] | undefined, key: string, pairs: { field: FieldRef; value: any }[] = []) => values.map((f, j) => f.hiddenInVisual ? null : <td key={key + j} className="num" style={cfStyle(v, f, cells?.[j], stats[j])}>{fmt(cells?.[j], dynamicFormat(s, f, pairs, vcx) || formatFor(m, f), f)}</td>);
   const rowsOut: React.ReactNode[] = [];
   const startLevel = v.drill?.expandAll ? 0 : rl.level;
   const walk = (n: MNode) => {
@@ -176,17 +181,17 @@ export function MatrixVisual({ v, page }: { v: Visual; page: Page }) {
   return <div style={{ overflow: 'auto', position: 'absolute', inset: 0, fontSize: fontSize(v) }}>
     <table className="grid-table vtable">
       <thead>
-        {colFields.length > 0 && <tr><th />{d.colKeys.map(ck => <th key={colKeyStr(ck)} colSpan={values.length || 1} style={{ textAlign: 'center', borderBottom: '1px solid #e1dfdd' }}>{ck.map((x, i) => fmt(x, formatFor(m, colFields[i]), colFields[i])).join(' ') || '(Blank)'}</th>)}{showColTotals && <th colSpan={values.length || 1} style={{ textAlign: 'center' }}>Total</th>}</tr>}
+        {colFields.length > 0 && <tr><th />{d.colKeys.map(ck => <th key={colKeyStr(ck)} colSpan={values.filter(f => !f.hiddenInVisual).length || 1} style={{ textAlign: 'center', borderBottom: '1px solid #e1dfdd' }}>{ck.map((x, i) => fmt(x, formatFor(m, colFields[i]), colFields[i])).join(' ') || '(Blank)'}</th>)}{showColTotals && <th colSpan={values.filter(f => !f.hiddenInVisual).length || 1} style={{ textAlign: 'center' }}>Total</th>}</tr>}
         <tr><th>{d.levels.map(l => fieldLabel(l)).slice(0, 1).join('')}{d.levels.length > 1 ? '' : ''}</th>
-          {(colFields.length ? d.colKeys : [[]]).map((ck, i) => values.map((f, j) => <th key={i + '-' + j} className="num">{fieldLabel(f)}</th>))}
-          {showColTotals && values.map((f, j) => <th key={'t' + j} className="num">{fieldLabel(f)}</th>)}
+          {(colFields.length ? d.colKeys : [[]]).map((ck, i) => values.map((f, j) => f.hiddenInVisual ? null : <th key={i + '-' + j} className="num">{fieldLabel(f)}</th>))}
+          {showColTotals && values.map((f, j) => f.hiddenInVisual ? null : <th key={'t' + j} className="num">{fieldLabel(f)}</th>)}
         </tr>
       </thead>
       <tbody>
         {rowsOut}
         {showRowTotals && d.roots.length > 0 && <tr className="total"><td>Total</td>
-          {colFields.length ? d.colKeys.map(ck => values.map((f, j) => <td key={colKeyStr(ck) + j} className="num">{fmt(d.colTotalMap.get(colKeyStr(ck))?.[j], dynamicFormat(s, f, ck.map((x, i) => ({ field: colFields[i], value: x })), vcx) || formatFor(m, f), f)}</td>)) : null}
-          {(!colFields.length || showColTotals) && values.map((f, j) => <td key={'g' + j} className="num">{fmt(d.grand[j], dynamicFormat(s, f, [], vcx) || formatFor(m, f), f)}</td>)}
+          {colFields.length ? d.colKeys.map(ck => values.map((f, j) => f.hiddenInVisual ? null : <td key={colKeyStr(ck) + j} className="num">{fmt(d.colTotalMap.get(colKeyStr(ck))?.[j], dynamicFormat(s, f, ck.map((x, i) => ({ field: colFields[i], value: x })), vcx) || formatFor(m, f), f)}</td>)) : null}
+          {(!colFields.length || showColTotals) && values.map((f, j) => f.hiddenInVisual ? null : <td key={'g' + j} className="num">{fmt(d.grand[j], dynamicFormat(s, f, [], vcx) || formatFor(m, f), f)}</td>)}
         </tr>}
         {!d.roots.length && values.length > 0 && <tr className="total"><td>Total</td>{d.colKeys.map(ck => values.map((f, j) => <td key={colKeyStr(ck) + j} className="num">{fmt(d.colTotalMap.get(colKeyStr(ck))?.[j], formatFor(m, f), f)}</td>))}{values.map((f, j) => <td key={'g' + j} className="num">{fmt(d.grand[j], formatFor(m, f), f)}</td>)}</tr>}
       </tbody>

@@ -59,6 +59,10 @@ export interface UI {
   editInteractions: boolean;
   clipboard: Visual[] | null;
   painter: Record<string, any> | null;
+  mobileLayout?: boolean;
+  /** Which app is on screen: Power BI Desktop or the (simulated) Power BI service. */
+  app?: 'desktop' | 'service';
+  assistant?: boolean;
 }
 
 export function emptyProject(): Project {

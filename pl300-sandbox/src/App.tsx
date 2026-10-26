@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { switchToImport } from './ui/actions';
+import { pageRefreshTick } from './ui/report/vhelpers';
+import { MobileLayoutEditor } from './ui/report/MobileLayout';
 import { useStore, store } from './store';
 import { I } from './ui/icons';
 import { MenuHost } from './ui/common';
 import { Ribbon } from './ui/Ribbon';
-import { Canvas, PageTabs } from './ui/report/Canvas';
+import { Canvas, PageTabs, TooltipLayer } from './ui/report/Canvas';
 import { DataPane } from './ui/panes/DataPane';
 import { VizPane } from './ui/panes/VizPane';
 import { FiltersPane } from './ui/panes/FiltersPane';
-import { BookmarksPane, SelectionPane, PerfPane } from './ui/panes/OtherPanes';
+import { BookmarksPane, SelectionPane, PerfPane, SyncSlicersPane } from './ui/panes/OtherPanes';
 import { FormulaBar } from './ui/FormulaBar';
 import { TableView } from './ui/views/TableView';
 import { ModelView } from './ui/views/ModelView';
@@ -29,7 +31,7 @@ function TitleBar() {
       <button className="iconbtn" title="Undo (Ctrl+Z)" disabled={!s.undoStack.length} onClick={() => s.undo()}><I n="undo" s={15} /></button>
       <button className="iconbtn" title="Redo (Ctrl+Y)" disabled={!s.redoStack.length} onClick={() => s.redo()}><I n="redo" s={15} /></button>
     </div>
-    <div className="name">{s.project.name} - Power BI Desktop <span className="tiny">· PL-300 Sandbox</span></div>
+    <div className="name">{s.project.name}{s.project.report.sensitivity && <span className="sens">{s.project.report.sensitivity}</span>} - Power BI Desktop <span className="tiny">· PL-300 Sandbox</span></div>
     <div className="search"><I n="search" s={13} /><input placeholder="Search" aria-label="Search commands" onKeyDown={e => {
       if (e.key !== 'Enter') return;
       const q = (e.target as HTMLInputElement).value.toLowerCase();
@@ -84,11 +86,25 @@ function useNarrow() {
 
 function ReportView() {
   const s = useStore();
+  if (s.ui.mobileLayout) return <MobileLayoutEditor />;
+  return <DesktopReportView />;
+}
+
+function DesktopReportView() {
+  const s = useStore();
+  const page = s.page();
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  useEffect(() => {
+    if (!page.refresh?.on) return;
+    const h = setInterval(() => { if (pageRefreshTick(store.page())) setLastRefresh(new Date()); }, Math.max(1, page.refresh.seconds) * 1000);
+    return () => clearInterval(h);
+  }, [page.id, page.refresh?.on, page.refresh?.seconds, page.refresh?.type, page.refresh?.measure]);
   const narrow = useNarrow();
   const [drawer, setDrawer] = useState<string | null>(null);
   const panes = <>
     {s.ui.panes.bookmarks && <BookmarksPane />}
     {s.ui.panes.selection && <SelectionPane />}
+    {s.ui.panes.sync && <SyncSlicersPane />}
     {s.ui.panes.perf && <PerfPane />}
     {s.ui.panes.filters && s.ui.focus !== 'reading' && (!narrow || drawer === 'filters') && <FiltersPane />}
     {s.ui.focus !== 'reading' && (!narrow || drawer === 'viz') && <VizPane />}
@@ -102,6 +118,8 @@ function ReportView() {
         {[['filters', 'Filters'], ['viz', 'Visualizations'], ['data', 'Data']].map(([k, l]) => <button key={k} className={`btn sm ${drawer === k ? 'primary' : ''}`} onClick={() => setDrawer(drawer === k ? null : k)}>{l}</button>)}
       </div>}
       <Canvas />
+      <TooltipLayer />
+      {page.refresh?.on && <div className="tiny" style={{ position: 'absolute', right: 12, bottom: 44, background: '#fff', border: '1px solid var(--line)', borderRadius: 3, padding: '2px 8px' }}>Page refresh every {page.refresh.seconds}s{page.refresh.type === 'change' ? ` (change detection on ${page.refresh.measure || '…'})` : ''}{lastRefresh ? ` · last ${lastRefresh.toLocaleTimeString()}` : ''}</div>}
       <PageTabs />
     </div>
     {narrow ? (drawer || s.ui.panes.bookmarks || s.ui.panes.selection || s.ui.panes.perf) && <div className="panes-narrow">{panes}</div> : panes}

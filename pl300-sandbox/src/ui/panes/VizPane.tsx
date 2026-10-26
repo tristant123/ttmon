@@ -39,6 +39,9 @@ function Well({ v, wellKey, label, kind }: { v: Visual; wellKey: string; label: 
     }
     if (kind === 'group') items.push({ sep: true }, { label: 'Show items with no data', checked: !!f.showItemsNoData, onClick: () => update(l => { l[i] = { ...l[i], showItemsNoData: !l[i].showItemsNoData }; }) });
     if (kind !== 'group' && (f.measure || f.agg)) items.push({ sep: true }, { label: 'New quick measure', icon: 'quickmeasure', onClick: () => s.openDialog({ type: 'quickMeasure', table: f.table, field: f }) });
+    if (f.visualCalc) items.push({ sep: true }, { label: 'Edit calculation', icon: 'visualCalc', onClick: () => s.openDialog({ type: 'visualCalc', visualId: v.id, edit: f.visualCalc }) });
+    if (kind !== 'group' || v.type === 'table') items.push({ label: 'New visual calculation', icon: 'visualCalc', onClick: () => s.openDialog({ type: 'visualCalc', visualId: v.id }) });
+    items.push({ label: f.hiddenInVisual ? 'Show on the visual' : 'Hide on the visual', icon: f.hiddenInVisual ? 'eye' : 'eyeOff', onClick: () => update(l => { l[i] = { ...l[i], hiddenInVisual: !l[i].hiddenInVisual }; }) });
     menuBelow(el, items);
   };
   return <div className="well">
@@ -82,7 +85,15 @@ function PageBuild() {
       {!page.drillthrough?.length && <div className="ph">Add drill-through fields here</div>}
       {page.drillthrough?.map((f, i) => <div key={i} className="pill"><span className="nm">{f.column}</span><button className="iconbtn" style={{ height: 18 }} onClick={() => s.change(p => { const pg = p.report.pages.find(x => x.id === page.id)!; pg.drillthrough = pg.drillthrough!.filter((_x, j) => j !== i); })}><I n="close" s={11} /></button></div>)}
     </div>
-    <div className="frow inline" style={{ marginTop: 10 }}><label>Use as tooltip page</label><Toggle on={!!page.isTooltip} onChange={b => s.change(p => { p.report.pages.find(x => x.id === page.id)!.isTooltip = b; })} /></div>
+    {page.isTooltip && <>
+      <div className="section-h" style={{ marginTop: 10 }}>Tooltip</div>
+      <div className="tiny" style={{ marginBottom: 6 }}>Visuals that use these fields show this page as their tooltip automatically (Tooltips type Auto).</div>
+      <div className="well-drop" onDragOver={e => { if (e.dataTransfer.types.includes('application/x-field')) e.preventDefault(); }}
+        onDrop={e => { const raw = e.dataTransfer.getData('application/x-field'); if (!raw) return; const f = JSON.parse(raw) as FieldRef; s.change(p => { const pg = p.report.pages.find(x => x.id === page.id)!; pg.tooltipFields = [...(pg.tooltipFields ?? []), { table: f.table, column: f.column, measure: f.measure }]; }); }}>
+        {!page.tooltipFields?.length && <div className="ph">Add tooltip fields here</div>}
+        {page.tooltipFields?.map((f, i) => <div key={i} className="pill"><span className="nm">{f.column ?? f.measure}</span><button className="iconbtn" style={{ height: 18 }} onClick={() => s.change(p => { const pg = p.report.pages.find(x => x.id === page.id)!; pg.tooltipFields = pg.tooltipFields!.filter((_x, j) => j !== i); })}><I n="close" s={11} /></button></div>)}
+      </div>
+    </>}
   </div>;
 }
 
@@ -192,6 +203,11 @@ function FormatPane({ v }: { v: Visual }) {
       <F label="Bold" inline>{tog('titleBold', false)}</F>
       <F label="Horizontal alignment"><select className="tx" value={f.titleAlign ?? 'left'} onChange={e => set({ titleAlign: e.target.value })}><option>left</option><option>center</option><option>right</option></select></F>
     </Collapsible>
+    {vdef(v.type).chart && <Collapsible title="Tooltips" right={<Toggle on={f.tooltip?.type !== 'off'} onChange={b => set({ tooltip: { ...(f.tooltip ?? {}), type: b ? 'auto' : 'off' } })} />}>
+      <F label="Type"><select className="tx" value={f.tooltip?.type ?? 'auto'} onChange={e => set({ tooltip: { ...(f.tooltip ?? {}), type: e.target.value } })}><option value="auto">Auto</option><option value="page">Report page</option><option value="default">Default</option></select></F>
+      {f.tooltip?.type === 'page' && <F label="Page"><select className="tx" value={f.tooltip?.pageId ?? ''} onChange={e => set({ tooltip: { ...(f.tooltip ?? {}), type: 'page', pageId: e.target.value } })}><option value="">Choose a page</option>{s.project.report.pages.filter(p => p.isTooltip).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></F>}
+      {!s.project.report.pages.some(p => p.isTooltip) && <div className="tiny">No tooltip pages yet. Add a page, set Page information › Allow use as tooltip, and set Canvas settings › Type to Tooltip.</div>}
+    </Collapsible>}
     <Collapsible title="Effects">
       <F label="Background" inline>{tog('background', true)}</F>
       <F label="Background color"><input type="color" className="color-swatch" value={f.bgColor ?? '#ffffff'} onChange={e => set({ bgColor: e.target.value })} /></F>
@@ -210,12 +226,29 @@ function FormatPane({ v }: { v: Visual }) {
 
 function PageFormat() {
   const s = store; const page = s.page();
+  const setRefresh = (patch: Partial<NonNullable<typeof page.refresh>>) => {
+    if (patch.on && !s.project.model.tables.some(t => t.storageMode === 'DirectQuery' || t.storageMode === 'Dual')) { s.toast('Automatic page refresh needs a DirectQuery data source.', 'error'); return; }
+    s.change(p => { const pg = p.report.pages.find(x => x.id === page.id)!; pg.refresh = { on: false, type: 'fixed', seconds: 30, ...(pg.refresh ?? {}), ...patch }; });
+  };
   return <div>
     <Collapsible title="Canvas background" open>
       <F label="Color"><input type="color" className="color-swatch" value={page.background ?? '#ffffff'} onChange={e => s.change(p => { p.report.pages.find(x => x.id === page.id)!.background = e.target.value; })} /></F>
     </Collapsible>
     <Collapsible title="Page information" open>
       <F label="Name"><input className="tx" value={page.name} onChange={e => s.change(p => { p.report.pages.find(x => x.id === page.id)!.name = e.target.value; }, { noUndo: true })} /></F>
+      <F label="Allow use as tooltip" inline><Toggle on={!!page.isTooltip} onChange={b => s.change(p => { p.report.pages.find(x => x.id === page.id)!.isTooltip = b; })} /></F>
+    </Collapsible>
+    <Collapsible title="Canvas settings" open>
+      <F label="Type"><select className="tx" value={page.size ?? '16:9'} onChange={e => s.change(p => { p.report.pages.find(x => x.id === page.id)!.size = e.target.value as any; })}>
+        <option value="16:9">16:9</option><option value="4:3">4:3</option><option value="Letter">Letter</option><option value="Tooltip">Tooltip</option><option value="Custom">Custom</option></select></F>
+      {page.size === 'Custom' && <div className="row"><F label="Width (px)"><input className="tx" type="number" value={page.width ?? 1280} onChange={e => s.change(p => { p.report.pages.find(x => x.id === page.id)!.width = Math.max(100, +e.target.value); })} /></F><F label="Height (px)"><input className="tx" type="number" value={page.height ?? 720} onChange={e => s.change(p => { p.report.pages.find(x => x.id === page.id)!.height = Math.max(100, +e.target.value); })} /></F></div>}
+    </Collapsible>
+    <Collapsible title="Page refresh" right={<Toggle on={!!page.refresh?.on} onChange={b => setRefresh({ on: b })} />}>
+      {!s.project.model.tables.some(t => t.storageMode === 'DirectQuery' || t.storageMode === 'Dual') && <div className="warnbox tiny">Automatic page refresh is only available for DirectQuery sources. Connect with DirectQuery (Get data › SQL Server › DirectQuery) to use it.</div>}
+      <F label="Refresh type"><select className="tx" value={page.refresh?.type ?? 'fixed'} onChange={e => setRefresh({ type: e.target.value as any })}><option value="fixed">Auto page refresh</option><option value="change">Change detection</option></select></F>
+      {(page.refresh?.type ?? 'fixed') === 'change' && <F label="Measure"><select className="tx" value={page.refresh?.measure ?? ''} onChange={e => setRefresh({ measure: e.target.value })}><option value="">Choose a measure</option>{s.project.model.measures.map(x => <option key={x.name}>{x.name}</option>)}</select></F>}
+      <F label="Refresh this page every (seconds)"><input className="tx" type="number" min={1} value={page.refresh?.seconds ?? 30} onChange={e => setRefresh({ seconds: Math.max(1, +e.target.value) })} /></F>
+      <div className="tiny">In the service, the interval can't be shorter than the minimum your admin sets (30 minutes on shared capacity by default), and change detection needs Premium or Fabric capacity.</div>
     </Collapsible>
     <Collapsible title="Theme" open>
       <select className="tx" value={s.project.report.theme} onChange={e => s.change(p => { p.report.theme = e.target.value; })}>{Object.keys(THEMES).map(t => <option key={t}>{t}</option>)}</select>
@@ -236,6 +269,27 @@ function Analytics({ v }: { v: Visual }) {
     </Collapsible>
     {(['average', 'min', 'max', 'median'] as const).map(k => <Collapsible key={k} title={`${k[0].toUpperCase() + k.slice(1)} line`} right={<Toggle on={!!a[k]} onChange={b => set({ [k]: b })} />}><F label="Show" inline><Toggle on={!!a[k]} onChange={b => set({ [k]: b })} /></F></Collapsible>)}
     {(v.type === 'line' || v.type === 'area' || v.type === 'scatter') && <Collapsible title="Trend line" right={<Toggle on={!!a.trend} onChange={b => set({ trend: b })} />}><F label="Show" inline><Toggle on={!!a.trend} onChange={b => set({ trend: b })} /></F></Collapsible>}
+    {v.type !== 'scatter' && <Collapsible title="Error bars" right={<Toggle on={!!a.errorBars?.on} onChange={b => set({ errorBars: { ...(a.errorBars ?? {}), on: b } })} />}>
+      <F label="Type"><select className="tx" value={a.errorBars?.mode ?? 'field'} onChange={e => set({ errorBars: { ...(a.errorBars ?? {}), on: true, mode: e.target.value } })}><option value="field">By field (upper / lower bound)</option><option value="percent">Percentage</option></select></F>
+      {(a.errorBars?.mode ?? 'field') === 'field' ? <>
+        <F label="Upper bound"><select className="tx" value={a.errorBars?.upper ?? ''} onChange={e => set({ errorBars: { ...(a.errorBars ?? {}), on: true, upper: e.target.value || undefined } })}><option value="">(none)</option>{s.project.model.measures.map(x => <option key={x.name}>{x.name}</option>)}</select></F>
+        <F label="Lower bound"><select className="tx" value={a.errorBars?.lower ?? ''} onChange={e => set({ errorBars: { ...(a.errorBars ?? {}), on: true, lower: e.target.value || undefined } })}><option value="">(none)</option>{s.project.model.measures.map(x => <option key={x.name}>{x.name}</option>)}</select></F>
+      </> : <F label="Percent (±)"><input className="tx" type="number" value={a.errorBars?.pct ?? 10} onChange={e => set({ errorBars: { ...(a.errorBars ?? {}), on: true, pct: +e.target.value } })} /></F>}
+      <div className="tiny">Error bars show a range (for example a confidence interval or min/max) around each value. Bound fields are measures.</div>
+    </Collapsible>}
+    {v.type === 'line' && <Collapsible title="Forecast" right={<Toggle on={!!a.forecast?.on} onChange={b => set({ forecast: { ...(a.forecast ?? {}), on: b } })} />}>
+      <F label="Units"><span className="tiny">Points (axis categories)</span></F>
+      <F label="Forecast length"><input className="tx" type="number" min={1} value={a.forecast?.length ?? 6} onChange={e => set({ forecast: { ...(a.forecast ?? {}), on: true, length: Math.max(1, +e.target.value) } })} /></F>
+      <F label="Ignore the last"><input className="tx" type="number" min={0} value={a.forecast?.ignoreLast ?? 0} onChange={e => set({ forecast: { ...(a.forecast ?? {}), on: true, ignoreLast: Math.max(0, +e.target.value) } })} /></F>
+      <F label="Seasonality"><input className="tx" type="number" min={0} placeholder="Auto" value={a.forecast?.season || ''} onChange={e => set({ forecast: { ...(a.forecast ?? {}), on: true, season: +e.target.value || 0 } })} /></F>
+      <F label="Confidence interval"><select className="tx" value={a.forecast?.confidence ?? 0.95} onChange={e => set({ forecast: { ...(a.forecast ?? {}), on: true, confidence: +e.target.value } })}>{[0.75, 0.8, 0.85, 0.9, 0.95, 0.99].map(x => <option key={x} value={x}>{Math.round(x * 100)}%</option>)}</select></F>
+      <div className="tiny">Forecast needs a line chart with one value, no legend and a time-based axis. "Ignore the last" leaves out incomplete recent points.</div>
+    </Collapsible>}
+    {v.type === 'line' && <Collapsible title="Find anomalies" right={<Toggle on={!!a.anomalies?.on} onChange={b => set({ anomalies: { ...(a.anomalies ?? {}), on: b } })} />}>
+      <F label="Sensitivity"><input type="range" min={0} max={100} value={a.anomalies?.sensitivity ?? 70} onChange={e => set({ anomalies: { ...(a.anomalies ?? {}), on: true, sensitivity: +e.target.value } })} /> <span className="tiny">{a.anomalies?.sensitivity ?? 70}%</span></F>
+      <div className="tiny">Higher sensitivity flags more points. Anomalies need a line chart with a time axis and one value. Hover an anomaly to see the expected range.</div>
+    </Collapsible>}
+    {v.type === 'scatter' && <div className="tiny" style={{ padding: 8 }}>Clustering: select the visual's More options (…) › <b>Automatically find clusters</b>.</div>}
   </div>;
 }
 

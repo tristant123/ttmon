@@ -162,6 +162,13 @@ fn('EARLIEST', (e, a, c) => { if (c.rows.length < 2) derr('EARLIEST refers to an
 fn('USERELATIONSHIP', () => derr('USERELATIONSHIP can only be used as a filter argument of CALCULATE or CALCULATETABLE.'), 2);
 fn('CROSSFILTER', () => derr('CROSSFILTER can only be used as a filter argument of CALCULATE or CALCULATETABLE.'), 3);
 
+fn('NAMEOF', (e, a) => {
+  const n = a[0];
+  if (n.k !== 'col') return derr('NAMEOF expects a column or measure reference.');
+  if (n.table) { const t = e.table(n.table); return `'${t.name}'[${n.col}]`; }
+  const m = e.measure(n.col); if (!m) return derr(`NAMEOF: the measure [${n.col}] doesn't exist.`);
+  return `'${m.table}'[${m.name}]`;
+}, 1);
 // calculation group functions
 fn('SELECTEDMEASURE', (e, _a, c) => { if (!c.selMeasure) derr('SELECTEDMEASURE can only be used in a calculation item expression.'); return e.evalMeasure(c.selMeasure!, c); }, 0);
 fn('SELECTEDMEASURENAME', (_e, _a, c) => { if (!c.selMeasure) derr('SELECTEDMEASURENAME can only be used in a calculation item expression.'); return c.selMeasure!.name; }, 0);

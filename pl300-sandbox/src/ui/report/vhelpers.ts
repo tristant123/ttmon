@@ -8,7 +8,35 @@ import { themeColors } from './themes';
 const cache = new Map<string, { data?: any; error?: string; ms: number }>();
 
 export function pageStateKey(s: Store, page: Page) {
-  return JSON.stringify([s.project.report.reportFilters, page.filters, page.interactions, page.visuals.filter(v => v.type === 'slicer').map(v => [v.id, v.wells, v.slicer]), s.ui.drillthrough]);
+  return JSON.stringify([s.project.report.reportFilters, page.filters, page.interactions, page.visuals.filter(v => v.type === 'slicer').map(v => [v.id, v.wells, v.slicer]), s.ui.drillthrough, (page as any).pointFilters ?? null]);
+}
+
+// ---------- report page tooltips ----------
+export interface TipState { pageId: string; filters: { field: FieldRef; value: any }[]; x: number; y: number; base: Page }
+let tip: TipState | null = null;
+const tipListeners = new Set<() => void>();
+export const tooltipStore = {
+  get: () => tip,
+  set: (t: TipState | null) => { if (JSON.stringify(t && [t.pageId, t.filters, Math.round(t.x / 4), Math.round(t.y / 4)]) === JSON.stringify(tip && [tip.pageId, tip.filters, Math.round(tip.x / 4), Math.round(tip.y / 4)])) return; tip = t; tipListeners.forEach(f => f()); },
+  subscribe: (f: () => void) => { tipListeners.add(f); return () => { tipListeners.delete(f); }; },
+};
+/** The tooltip page a visual uses, if its Tooltips format is set to Report page (or Auto with a matching page). */
+export function tooltipPageFor(v: Visual): Page | undefined {
+  const t = v.format?.tooltip;
+  if (t?.type === 'off') return undefined;
+  const pages = store.project.report.pages.filter(p => p.isTooltip);
+  if (t?.type === 'page') return pages.find(p => p.id === t.pageId);
+  if (t?.type === 'default') return undefined;
+  // Auto: a tooltip page whose Tooltip fields include a field the visual uses
+  const used = Object.values(v.wells).flat();
+  return pages.find(p => (p as any).tooltipFields?.some((f: FieldRef) => used.some(u => u.table === f.table && u.column === f.column && u.measure === f.measure)));
+}
+/** Hover handler for charts: shows the tooltip page filtered to the hovered point. */
+export function hoverTooltip(v: Visual, page: Page, p: any, e: MouseEvent | undefined, point: () => { field: FieldRef; value: any }[]) {
+  const tp = tooltipPageFor(v);
+  if (!tp) return;
+  if (!p || !e) { tooltipStore.set(null); return; }
+  tooltipStore.set({ pageId: tp.id, filters: point(), x: e.clientX, y: e.clientY, base: page });
 }
 
 /** Memoised query evaluation for a visual. */
@@ -74,3 +102,21 @@ export function isSelectedPoint(v: Visual, groupVals: any[], legendVal?: any): b
 
 export function labelFor(f: FieldRef) { return fieldLabel(f); }
 export function isDateLike(f: FieldRef) { const c = colMeta(store.project.model, f); return !!c && (c.dataType === 'date' || c.dataType === 'datetime') && !f.datePart; }
+
+/** Automatic page refresh: DirectQuery sources get new rows (the sandbox simulates live data), then visuals re-query. */
+export function pageRefreshTick(page: Page): boolean {
+  const s = store; const r = page.refresh;
+  if (!r?.on) return false;
+  const dq = s.project.model.tables.filter(t => t.storageMode === 'DirectQuery' && t.rows.length > 1);
+  if (!dq.length) return false;
+  // the largest DirectQuery table plays the role of the live fact table
+  const fact = dq.sort((a, b) => b.rows.length - a.rows.length)[0];
+  const before = r.type === 'change' && r.measure ? s.dax.scalarOf(`[${r.measure}]`) : null;
+  const src = fact.rows[Math.floor(Math.random() * fact.rows.length)];
+  fact.rows.push(src.map((x, i) => (typeof x === 'number' && fact.columns[i].summarizeBy && fact.columns[i].summarizeBy !== 'None' ? Math.round(x * (0.5 + Math.random()) * 100) / 100 : x)));
+  s.rebuildDax();
+  if (r.type === 'change' && r.measure && s.dax.scalarOf(`[${r.measure}]`) === before) return false;
+  clearQueryCache();
+  s.emit();
+  return true;
+}

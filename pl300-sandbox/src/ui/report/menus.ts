@@ -11,6 +11,13 @@ export function dataPointMenu(e: MouseEvent, page: Page, v: Visual, point: { fie
   items.push({ label: 'Drill through', icon: 'chevronRight', disabled: !targets.length, items: targets.map(t => ({ label: t.name, onClick: () => {
     s.setUI({ drillthrough: { from: page.id, filters: point.filter(x => t.drillthrough!.some(d => d.table === x.field.table && d.column === x.field.column)) }, pageId: t.id, selected: [], cross: null });
   } })) });
+  if (['clusteredColumn', 'clusteredBar', 'stackedColumn', 'stackedBar', 'line', 'area', 'stackedArea', 'lineClusteredColumn', 'lineStackedColumn'].includes(v.type) && (v.wells.values?.length ?? 0) > 0) {
+    items.push({ label: 'Analyze', icon: 'analyze', items: [
+      { label: 'Explain the increase', onClick: () => void import('./analyze').then(a => a.openAnalyze(page, v, point, 'explain')) },
+      { label: 'Explain the decrease', onClick: () => void import('./analyze').then(a => a.openAnalyze(page, v, point, 'explain')) },
+      { label: 'Find where this distribution is different', onClick: () => void import('./analyze').then(a => a.openAnalyze(page, v, point, 'distribution')) },
+    ] });
+  }
   const first = point[0];
   if (first?.field.column) {
     const label = fmt(first.value, formatFor(s.project.model, first.field), first.field) || '(Blank)';

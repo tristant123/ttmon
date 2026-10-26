@@ -1,5 +1,6 @@
 // Report canvas: page, visual containers (move/resize/select), visual header, page tabs.
-import React, { useEffect, useRef, useState } from 'react';
+import { tooltipStore } from './vhelpers';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { store, useStore, uid } from '../../store';
 import { Visual, Page, FieldRef } from '../../model/types';
 import { CartesianChart, PieChart, Waterfall, Scatter, Gauge, NoData } from './charts';
@@ -10,13 +11,14 @@ import { TextBox, ButtonEl, Shape, ImageEl } from './elements';
 import { DecompositionTree, KeyInfluencers, QnA, Narrative } from './ai';
 import { I } from '../icons';
 import { menuAt, menuBelow, MenuItem, download } from '../common';
-import { drillLevels, fieldLabel, summarize, visualContext, fmt, formatFor, isValueField, interactionFor } from '../../report/query';
+import { drillLevels, fieldLabel, summarize, visualContext, fmt, formatFor, isValueField, interactionFor, expandFieldParams } from '../../report/query';
 import { vdef, VISUALS } from '../../report/visuals';
 import { addFieldToVisual, newVisualAt, pasteVisuals, copyVisuals, deleteSelected } from '../actions';
 
 const PAGE_W = 1280, PAGE_H = 720;
 
-export function VisualBody({ v, page }: { v: Visual; page: Page }) {
+export function VisualBody({ v: v0, page }: { v: Visual; page: Page }) {
+  const v = expandFieldParams(store, page, v0);
   switch (v.type) {
     case 'stackedBar': case 'stackedColumn': case 'clusteredBar': case 'clusteredColumn': case 'stackedBar100': case 'stackedColumn100':
     case 'line': case 'area': case 'stackedArea': case 'lineClusteredColumn': case 'lineStackedColumn': case 'ribbon':
@@ -49,13 +51,25 @@ export function VisualBody({ v, page }: { v: Visual; page: Page }) {
 const drillWell = (v: Visual) => (v.type === 'matrix' ? 'rows' : v.type === 'scatter' ? 'details' : 'axis');
 
 export function exportVisualData(v: Visual, page: Page) {
+  store.openDialog({ type: 'exportData', visualId: v.id, pageId: page.id });
+}
+
+/** Rows for Export data: summarized (as the visual shows them) or underlying (detail rows behind the visual). */
+export function exportRows(v: Visual, page: Page, kind: 'summarized' | 'layout' | 'underlying'): { cols: string[]; rows: string[][] } {
   const s = store; const m = s.project.model;
   const fields: FieldRef[] = Object.entries(v.wells).flatMap(([k, fs]) => (k === 'tooltips' ? [] : fs.flatMap(f => (k === drillWell(v) ? drillLevels(s, v, k).shown : [f]))));
   const groups = fields.filter(f => !isValueField(m, f)); const vals = fields.filter(f => isValueField(m, f));
-  const res = summarize(s, groups, vals, visualContext(s, page, v));
-  const esc = (x: string) => (/[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x);
-  const csv = [res.cols.map(c => esc(c.label)).join(','), ...res.rows.map(r => r.map((x, i) => esc(fmt(x, formatFor(m, res.cols[i].field), res.cols[i].field))).join(','))].join('\r\n');
-  download(`${v.title || vdef(v.type).name}.csv`, csv, 'text/csv');
+  const vc = visualContext(s, page, v);
+  if (kind !== 'underlying') {
+    const res = summarize(s, groups, vals, vc);
+    return { cols: res.cols.map(c => c.label), rows: res.rows.map(r => r.map((x, i) => fmt(x, formatFor(m, res.cols[i].field), res.cols[i].field))) };
+  }
+  // underlying: the fact table behind the first value, with its visible columns and the grouping columns from related tables
+  const home = vals.find(f => f.measure) ? m.measures.find(x => x.name === vals.find(f => f.measure)!.measure)?.table : vals[0]?.table ?? groups[0]?.table;
+  const t = m.tables.find(x => x.name === home); if (!t) return { cols: [], rows: [] };
+  const idx = s.dax.visible(t.name, vc.ctx);
+  const cols = t.columns.filter(c => !c.hidden);
+  return { cols: cols.map(c => c.name), rows: idx.slice(0, 30000).map(i => cols.map(c => fmt(t.rows[i][t.columns.indexOf(c)], c.formatString ?? (c.dataType === 'date' ? 'm/d/yyyy' : undefined)))) };
 }
 
 function VisualHeader({ v, page }: { v: Visual; page: Page }) {
@@ -81,6 +95,7 @@ function VisualHeader({ v, page }: { v: Visual; page: Page }) {
         { label: 'Sort ascending', checked: !!v.sort && !v.sort.desc, onClick: () => s.updateVisual(v.id, y => { y.sort = { by: y.sort?.by ?? 'value:0', desc: false }; }) },
       ] });
     }
+    if (v.type === 'scatter') items.push({ label: 'Automatically find clusters', icon: 'analyze', onClick: () => s.openDialog({ type: 'clusters', pageId: page.id, visualId: v.id }) });
     items.push({ label: 'Remove', icon: 'trash', onClick: () => { s.setUI({ selected: [v.id] }); deleteSelected(); } });
     menuAt(e, items);
   };
@@ -134,7 +149,8 @@ function Frame({ v, page, scale, editInteractions }: { v: Visual; page: Page; sc
       if (!moved) return;
       const ids = mode === 'move' && s.ui.selected.includes(v.id) ? s.ui.selected : [v.id];
       s.change(p => { for (const pg of p.report.pages) for (const x of pg.visuals) if (ids.includes(x.id)) {
-        x.x = Math.max(0, Math.min(PAGE_W - 20, snap(x.x + last.dx))); x.y = Math.max(0, Math.min(PAGE_H - 20, snap(x.y + last.dy)));
+        const dm = pageDims(page);
+        x.x = Math.max(0, Math.min(dm.w - 20, snap(x.x + last.dx))); x.y = Math.max(0, Math.min(dm.h - 20, snap(x.y + last.dy)));
         x.w = Math.max(40, snap(x.w + last.dw)); x.h = Math.max(30, snap(x.h + last.dh));
       } });
     };
@@ -161,7 +177,7 @@ function Frame({ v, page, scale, editInteractions }: { v: Visual; page: Page; sc
     onDragOver={e => { if (e.dataTransfer.types.includes('application/x-field')) { e.preventDefault(); setDropOver(true); } }}
     onDragLeave={() => setDropOver(false)}
     onDrop={e => { setDropOver(false); const raw = e.dataTransfer.getData('application/x-field'); if (!raw) return; e.preventDefault(); e.stopPropagation(); addFieldToVisual(v.id, JSON.parse(raw)); }}
-    onContextMenu={e => { if (e.defaultPrevented) return; menuAt(e, [{ label: 'Copy', icon: 'copy', shortcut: 'Ctrl+C', onClick: () => { s.setUI({ selected: [v.id] }); copyVisuals(); } }, { label: 'Duplicate', icon: 'copy', onClick: () => { s.setUI({ selected: [v.id] }); copyVisuals(); pasteVisuals(); } }, { label: 'Bring to front', onClick: () => s.updateVisual(v.id, x => { x.z = Math.max(0, ...page.visuals.map(y => y.z ?? 0)) + 1; }) }, { label: 'Send to back', onClick: () => s.updateVisual(v.id, x => { x.z = Math.min(0, ...page.visuals.map(y => y.z ?? 0)) - 1; }) }, { sep: true }, { label: v.hidden ? 'Show' : 'Hide', icon: v.hidden ? 'eye' : 'eyeOff', onClick: () => s.updateVisual(v.id, x => { x.hidden = !x.hidden; }) }, { label: 'Remove', icon: 'trash', shortcut: 'Del', onClick: () => { s.setUI({ selected: [v.id] }); deleteSelected(); } }]); }}>
+    onContextMenu={e => { if (e.defaultPrevented) return; menuAt(e, [{ label: 'Copy', icon: 'copy', shortcut: 'Ctrl+C', onClick: () => { s.setUI({ selected: [v.id] }); copyVisuals(); } }, { label: 'Duplicate', icon: 'copy', onClick: () => { s.setUI({ selected: [v.id] }); copyVisuals(); pasteVisuals(); } }, ...(vdef(v.type).chart || ['table', 'matrix', 'card', 'cardNew', 'kpi'].includes(v.type) ? [{ label: 'New visual calculation', icon: 'visualCalc', onClick: () => s.openDialog({ type: 'visualCalc', visualId: v.id }) }] : []), { label: 'Bring to front', onClick: () => s.updateVisual(v.id, x => { x.z = Math.max(0, ...page.visuals.map(y => y.z ?? 0)) + 1; }) }, { label: 'Send to back', onClick: () => s.updateVisual(v.id, x => { x.z = Math.min(0, ...page.visuals.map(y => y.z ?? 0)) - 1; }) }, { sep: true }, { label: v.hidden ? 'Show' : 'Hide', icon: v.hidden ? 'eye' : 'eyeOff', onClick: () => s.updateVisual(v.id, x => { x.hidden = !x.hidden; }) }, { label: 'Remove', icon: 'trash', shortcut: 'Del', onClick: () => { s.setUI({ selected: [v.id] }); deleteSelected(); } }]); }}>
     {s.ui.focus !== 'reading' && <VisualHeader v={v} page={page} />}
     {showTitle && <div className="vis-title" style={{ fontSize: v.format?.titleSize ?? 14, textAlign: v.format?.titleAlign ?? 'left', color: v.format?.titleColor, fontWeight: v.format?.titleBold ? 600 : undefined }}>{(v.format?.title ?? v.title) || autoTitle}{drillLabel}</div>}
     <div className="vis-body"><VisualBody v={v} page={page} /></div>
@@ -178,6 +194,39 @@ function Frame({ v, page, scale, editInteractions }: { v: Visual; page: Page; sc
   </div>;
 }
 
+/** Canvas size for a page (Format › Canvas settings). */
+export function pageDims(page: Page): { w: number; h: number } {
+  switch (page.size) {
+    case '4:3': return { w: 960, h: 720 };
+    case 'Letter': return { w: 816, h: 1056 };
+    case 'Tooltip': return { w: 320, h: 240 };
+    case 'Custom': return { w: page.width ?? 1280, h: page.height ?? 720 };
+    default: return { w: PAGE_W, h: PAGE_H };
+  }
+}
+
+/** Floating report-page tooltip for the hovered data point. */
+export function TooltipLayer() {
+  const t = useSyncExternalStore(tooltipStore.subscribe, tooltipStore.get);
+  const s = store;
+  if (!t) return null;
+  const tp = s.project.report.pages.find(p => p.id === t.pageId); if (!tp) return null;
+  const dims = pageDims(tp);
+  // the tooltip page sees the hovered point, plus the slicers of the page being viewed
+  const virtual: Page = { ...tp, visuals: [...tp.visuals, ...t.base.visuals.filter(v => v.type === 'slicer').map(v => ({ ...v, hidden: true }))], filters: [...t.base.filters, ...tp.filters] };
+  (virtual as any).pointFilters = t.filters;
+  const scale = Math.min(1, 360 / dims.w, 300 / dims.h);
+  const left = Math.min(window.innerWidth - dims.w * scale - 12, t.x + 14), top = Math.min(window.innerHeight - dims.h * scale - 12, t.y + 14);
+  return <div className="tip-page" style={{ left, top, width: dims.w * scale, height: dims.h * scale }}>
+    <div style={{ width: dims.w, height: dims.h, transform: `scale(${scale})`, transformOrigin: '0 0', position: 'relative', background: tp.background ?? '#fff' }}>
+      {tp.visuals.filter(v => !v.hidden).map(v => <div key={v.id} className="vis" style={{ left: v.x, top: v.y, width: v.w, height: v.h, background: v.format?.bgColor ?? 'transparent', border: 0 }}>
+        {(v.format?.titleOn ?? !['textbox', 'card', 'cardNew', 'shape', 'image'].includes(v.type)) && v.format?.title && <div className="vis-title">{v.format.title}</div>}
+        <div className="vis-body"><VisualBody v={v} page={virtual} /></div>
+      </div>)}
+    </div>
+  </div>;
+}
+
 export function Canvas() {
   const s = useStore();
   const page = s.page();
@@ -188,7 +237,8 @@ export function Canvas() {
     const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
     ro.observe(el); return () => ro.disconnect();
   }, []);
-  const fit = Math.max(0.2, Math.min((box.w - 48) / PAGE_W, (box.h - 48) / PAGE_H));
+  const { w: PW, h: PH } = pageDims(page);
+  const fit = Math.max(0.2, Math.min((box.w - 48) / PW, (box.h - 48) / PH, page.size === 'Tooltip' ? 2 : 10));
   const scale = s.ui.zoom ? s.ui.zoom / 100 : fit;
   const editI = s.ui.editInteractions && s.ui.selected.length === 1 ? s.ui.selected[0] : null;
   const focus = s.ui.focus && s.ui.focus !== 'reading' ? page.visuals.find(v => v.id === s.ui.focus) : null;
@@ -203,9 +253,9 @@ export function Canvas() {
   }
   const visuals = [...page.visuals].sort((a, b) => (a.z ?? 0) - (b.z ?? 0));
   return <div className="canvas-wrap" ref={wrap} onMouseDown={e => { if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('canvas-inner')) s.setUI({ selected: [], cross: null }); }}>
-    <div className="canvas-inner" style={{ width: PAGE_W * scale + 48, height: PAGE_H * scale + 48, padding: 24, boxSizing: 'border-box' }}>
-      <div style={{ width: PAGE_W * scale, height: PAGE_H * scale, position: 'relative' }}>
-        <div className={`page ${s.ui.gridlines ? 'grid' : ''}`} style={{ width: PAGE_W, height: PAGE_H, transform: `scale(${scale})`, background: page.background ?? '#fff' }}
+    <div className="canvas-inner" style={{ width: PW * scale + 48, height: PH * scale + 48, padding: 24, boxSizing: 'border-box' }}>
+      <div style={{ width: PW * scale, height: PH * scale, position: 'relative' }}>
+        <div className={`page ${s.ui.gridlines ? 'grid' : ''}`} style={{ width: PW, height: PH, transform: `scale(${scale})`, background: page.background ?? '#fff' }}
           onMouseDown={e => { if (e.target === e.currentTarget) s.setUI({ selected: [], cross: null }); }}
           onDragOver={e => { if (e.dataTransfer.types.includes('application/x-field')) e.preventDefault(); }}
           onDrop={e => {

@@ -10,7 +10,13 @@ import { datePartValue } from '../../dax/engine';
 import { I } from '../icons';
 
 function setSlicer(v: Visual, patch: Partial<NonNullable<Visual['slicer']>>) {
-  store.updateVisual(v.id, x => { x.slicer = { values: [], ...(x.slicer ?? {}), ...patch }; }, true);
+  const next = { values: [], ...(v.slicer ?? {}), ...patch };
+  store.change(p => {
+    for (const pg of p.report.pages) for (const x of pg.visuals) {
+      // synced slicers on other pages share the selection
+      if (x.id === v.id || (v.syncGroup && !v.syncOff && x.syncGroup === v.syncGroup && !x.syncOff)) x.slicer = JSON.parse(JSON.stringify(next));
+    }
+  });
   store.setUI({ cross: null });
 }
 

@@ -5,6 +5,8 @@ import { I } from './icons';
 import { menuBelow, MenuItem } from './common';
 import { addVisual, startNewMeasure, startNewColumn, startNewTable, openPowerQuery, refreshAll, newPage, copyVisuals, pasteVisuals, deleteSelected, newCalculationGroup, startCalcItem } from './actions';
 import { THEMES } from './report/themes';
+import { startVisualCalc } from './report/VisualCalcEditor';
+import { LABELS, labelRank } from '../model/labels';
 import { VISUALS } from '../report/visuals';
 import { drillLevels } from '../report/query';
 import { clearQueryCache } from './report/vhelpers';
@@ -228,9 +230,22 @@ export function Ribbon() {
     <Group label="Calculations">
       <RBtn icon="measure" label="New measure" onClick={() => startNewMeasure()} disabled={!hasData} />
       <RBtn icon="quickmeasure" label="Quick measure" onClick={() => s.openDialog({ type: 'quickMeasure' })} disabled={!hasData} />
+      {view === 'report' && <RBtn icon="visualCalc" label="New visual calculation" onClick={() => startVisualCalc()} disabled={!v} title="Select a visual first" />}
       {view !== 'report' && <RBtn icon="newcolumn" label="New column" onClick={() => startNewColumn()} disabled={!hasData} />}
       {view !== 'report' && <RBtn icon="newtable" label="New table" onClick={() => startNewTable()} />}
       {view === 'model' && <RBtn icon="calcgroup" label="Calculation group" onClick={newCalculationGroup} disabled={!hasData} />}
+    </Group>
+    <Group label="Sensitivity">
+      <RBtn icon="label" label={s.project.report.sensitivity ?? 'Sensitivity'} menu onClick={e => menuBelow(e.currentTarget, [
+        ...LABELS.map(l => ({ label: l.name, checked: s.project.report.sensitivity === l.name, onClick: () => {
+          const cur = labelRank(s.project.report.sensitivity), next = labelRank(l.name);
+          const apply = () => s.change(p => { p.report.sensitivity = l.name; });
+          if (cur > next) s.openDialog({ type: 'confirm', title: 'Change sensitivity label', text: `You're lowering the label from ${s.project.report.sensitivity} to ${l.name}. Your organization may ask you to justify a downgrade, and it's recorded in the audit log.`, ok: 'Change', onOk: apply });
+          else apply();
+        } })),
+        { sep: true },
+        { label: 'Remove label', disabled: !s.project.report.sensitivity, onClick: () => s.change(p => { p.report.sensitivity = undefined; }) },
+      ])} />
     </Group>
     <Group label="Share">
       <RBtn icon="publish" label="Publish" onClick={() => s.openDialog({ type: 'publish' })} />
@@ -279,7 +294,7 @@ export function Ribbon() {
       {Object.entries(THEMES).map(([n, t]) => <button key={n} title={n} onClick={() => { s.change(p => { p.report.theme = n; }); clearQueryCache(); }} style={{ width: 38, height: 30, border: s.project.report.theme === n ? '2px solid #252423' : '1px solid #c8c6c4', padding: 2, background: '#fff', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, borderRadius: 3 }}>{t.colors.slice(0, 4).map(c => <span key={c} style={{ background: c }} />)}</button>)}
     </div></Group>
     <Group label="Scale to fit"><RBtn icon="fitpage" label="Page view" menu onClick={e => menuBelow(e.currentTarget, [{ label: 'Fit to page', checked: s.ui.zoom === 0, onClick: () => s.setUI({ zoom: 0 }) }, { label: 'Actual size', checked: s.ui.zoom === 100, onClick: () => s.setUI({ zoom: 100 }) }, { label: '75%', checked: s.ui.zoom === 75, onClick: () => s.setUI({ zoom: 75 }) }, { label: '50%', checked: s.ui.zoom === 50, onClick: () => s.setUI({ zoom: 50 }) }])} /></Group>
-    <Group label="Mobile"><RBtn icon="mobile" label="Mobile layout" disabled title="Mobile layout isn't part of the sandbox" /></Group>
+    <Group label="Mobile"><RBtn icon="mobile" label="Mobile layout" on={!!s.ui.mobileLayout} onClick={() => s.setUI({ mobileLayout: !s.ui.mobileLayout, selected: [] })} /></Group>
     <Group label="Page options"><div className="rstack">
       <label className="rsmall"><input type="checkbox" checked={s.ui.gridlines} onChange={e => s.setUI({ gridlines: e.target.checked })} /> Gridlines</label>
       <label className="rsmall"><input type="checkbox" checked={s.ui.snap} onChange={e => s.setUI({ snap: e.target.checked })} /> Snap to grid</label>
@@ -290,7 +305,7 @@ export function Ribbon() {
       <RBtn icon="bookmark" label="Bookmarks" on={s.ui.panes.bookmarks} onClick={() => s.setUI({ panes: { ...s.ui.panes, bookmarks: !s.ui.panes.bookmarks } })} />
       <RBtn icon="selection" label="Selection" on={s.ui.panes.selection} onClick={() => s.setUI({ panes: { ...s.ui.panes, selection: !s.ui.panes.selection } })} />
       <RBtn icon="perf" label="Performance analyzer" on={s.ui.panes.perf} onClick={() => s.setUI({ panes: { ...s.ui.panes, perf: !s.ui.panes.perf } })} />
-      <RBtn icon="sync" label="Sync slicers" onClick={() => s.toast('Sync slicers: the sandbox applies each slicer to its own page. Copy a slicer to another page to filter it too.')} />
+      <RBtn icon="sync" label="Sync slicers" on={s.ui.panes.sync} onClick={() => s.setUI({ panes: { ...s.ui.panes, sync: !s.ui.panes.sync } })} />
     </Group>
   </>;
   if (tab === 'Optimize') body = <>
