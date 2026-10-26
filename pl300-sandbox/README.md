@@ -89,6 +89,20 @@ with USERELATIONSHIP, CALCULATE and filter context, time intelligence, RANKX/TOP
 many-to-many bridges, PATH hierarchies, filters at each level, interactions and drill
 through, bookmarks, AI visuals, what-if parameters, RLS, and service concepts.
 
+**Practice exam.** A timed mock exam (or a study mode that checks each answer) drawn from
+a bank of exam-format questions: single and multiple choice, Yes/No statement series,
+ordering, and drop-down "hot area" items, some with a scenario. Questions are weighted
+like the real exam across the four skill areas, and about half cover the Power BI
+service and features the sandbox can't run: workspace roles, apps, sharing and Build
+permission, gateways, scheduled and incremental refresh, alerts and subscriptions,
+endorsement, sensitivity labels, Direct Lake vs DirectQuery vs Import, privacy levels,
+calculation groups, visual calculations, Copilot, paginated reports, sync slicers,
+report-page tooltips, mobile layout, personalization and automatic page refresh. The
+results page scores out of 1,000 (700 to pass), breaks it down by skill area and links
+each question to a lab. A **Syllabus coverage** tab lists every skill in the
+April 20, 2026 outline and shows whether it has a lab, works in the sandbox, or is
+covered by questions only.
+
 ## Files
 
 | Open | Notes |
@@ -107,7 +121,7 @@ This is a learning tool, not a replacement for Power BI, and it isn't affiliated
 - Data sources that need a network connection (Web, OData, SharePoint, Oracle,
   Dataverse…) aren't available; download the data and import the file instead.
 - The Power BI service (workspaces, apps, gateways, scheduled refresh, sharing,
-  dashboards) isn't simulated; the last tutorial covers it as exam notes.
+  dashboards) isn't simulated; the practice exam and the last tutorial cover it.
 - Maps draw as bar charts (no map tiles offline). Column From Examples, R/Python
   scripts, custom visuals, field parameters and mobile layout aren't included.
 - DAX follows the documented semantics closely, but some edge cases differ from the

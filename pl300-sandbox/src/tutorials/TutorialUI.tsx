@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useStore, store } from '../store';
 import { I } from '../ui/icons';
 import { TUTORIALS, AREAS, Tutorial } from './content';
+import { PracticeExam, SyllabusCoverage } from './ExamUI';
 
 const KEY = 'pl300-sandbox-tutorials';
 function progress(): Record<string, { done?: boolean; quiz?: number }> { try { return JSON.parse(localStorage.getItem(KEY) ?? '{}'); } catch { return {}; } }
@@ -18,6 +19,7 @@ export function TutorialHome() {
   const s = useStore();
   const [area, setArea] = useState<string>('All');
   const [busy, setBusy] = useState<string | null>(null);
+  const [tab, setTab] = useState<'labs' | 'exam' | 'syllabus'>('labs');
   const prog = progress();
   const list = TUTORIALS.filter(t => area === 'All' || t.area === area);
   const done = TUTORIALS.filter(t => prog[t.id]?.done).length;
@@ -26,22 +28,29 @@ export function TutorialHome() {
       <div className="top">
         <div>
           <h2>PL-300 tutorials</h2>
-          <div className="subtle">Hands-on labs for each skill area of the Power BI Data Analyst exam. Each one loads its own sample data into a fresh report, checks your work as you go, and ends with exam-style questions. {done}/{TUTORIALS.length} completed.</div>
+          <div className="subtle">Hands-on labs for each skill area of the Power BI Data Analyst exam. Each one loads its own sample data into a fresh report, checks your work as you go, and ends with exam-style questions. {done}/{TUTORIALS.length} completed. The Practice exam tab adds a timed mock exam that also covers the Power BI service.</div>
         </div>
         <button className="iconbtn" onClick={() => s.setUI({ showTutorials: false })} aria-label="Close"><I n="close" s={16} /></button>
       </div>
-      <div className="areas">
-        {['All', ...AREAS].map(a => <button key={a} className={`chip ${area === a ? 'on' : ''}`} onClick={() => setArea(a)}>{a}{a !== 'All' && ` (${TUTORIALS.filter(t => t.area === a).length})`}</button>)}
+      <div className="tut-tabs" role="tablist">
+        {([['labs', 'Tutorials'], ['exam', 'Practice exam'], ['syllabus', 'Syllabus coverage']] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
       </div>
-      <div className="warnbox" style={{ margin: '0 24px 10px' }}>Starting a tutorial replaces the current report. Save it first (File › Save) if you want to keep it.</div>
-      <div className="tut-grid">
-        {list.map(t => <button key={t.id} className="tcard" disabled={!!busy} onClick={async () => { setBusy(t.id); await startTutorial(t); setBusy(null); }}>
-          <span className="area">{t.area}</span>
-          <h4>{t.title}</h4>
-          <p>{t.summary}</p>
-          <span className="meta">{prog[t.id]?.done && <><span className="done-dot" />Completed ·</>} {t.steps.length} steps · {t.quiz.length} questions · ~{t.minutes} min{busy === t.id ? ' · loading…' : ''}</span>
-        </button>)}
-      </div>
+      {tab === 'exam' && <div className="tut-scroll"><PracticeExam /></div>}
+      {tab === 'syllabus' && <div className="tut-scroll"><SyllabusCoverage /></div>}
+      {tab === 'labs' && <>
+        <div className="areas">
+          {['All', ...AREAS].map(a => <button key={a} className={`chip ${area === a ? 'on' : ''}`} onClick={() => setArea(a)}>{a}{a !== 'All' && ` (${TUTORIALS.filter(t => t.area === a).length})`}</button>)}
+        </div>
+        <div className="warnbox" style={{ margin: '0 24px 10px' }}>Starting a tutorial replaces the current report. Save it first (File › Save) if you want to keep it.</div>
+        <div className="tut-grid">
+          {list.map(t => <button key={t.id} className="tcard" disabled={!!busy} onClick={async () => { setBusy(t.id); await startTutorial(t); setBusy(null); }}>
+            <span className="area">{t.area}</span>
+            <h4>{t.title}</h4>
+            <p>{t.summary}</p>
+            <span className="meta">{prog[t.id]?.done && <><span className="done-dot" />Completed ·</>} {t.steps.length} steps · {t.quiz.length} questions · ~{t.minutes} min{busy === t.id ? ' · loading…' : ''}</span>
+          </button>)}
+        </div>
+      </>}
     </div>
   </div>;
 }
