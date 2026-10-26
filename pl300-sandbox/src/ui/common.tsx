@@ -124,13 +124,31 @@ export function Collapsible({ title, children, open: initial = false, right }: {
   </div>;
 }
 
+const SAVE_OK = /\.(gif|png|jpe?g|webp|mp4|webm|txt|json|md|docx|pptx|csv|pdf|xlsx|zip|html|svg)$/i;
+/** Save a generated file: through the Claude viewer's downloads capability when running as an artifact, else a download link. */
 export function download(name: string, data: Blob | string, type = 'application/octet-stream') {
+  const c = (window as any).claude;
+  if (c?.use) {
+    void c.use('downloads').then((dl: any) => {
+      if (!dl) return plainDownload(name, data, type);
+      // the viewer only saves known file types; project and model files are JSON underneath
+      const filename = SAVE_OK.test(name) ? name : `${name}.json`;
+      return dl.save({ filename, data }).then(() => store.toast(`Saved ${filename}${filename !== name ? ' (open it with File › Open as is)' : ''}.`)).catch((e: any) => {
+        if (e?.code === 'declined') return;
+        store.toast(e?.code === 'rate_limited' ? 'A save prompt is already open.' : `Couldn't save ${filename} here (${e?.code ?? 'unavailable'}). Use the downloadable app file instead.`, 'error');
+      });
+    }).catch(() => plainDownload(name, data, type));
+    return;
+  }
+  plainDownload(name, data, type);
+}
+function plainDownload(name: string, data: Blob | string, type: string) {
   const blob = typeof data === 'string' ? new Blob([data], { type }) : data;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-  store.toast(`Downloading ${name}. If nothing happens, your viewer blocks downloads — open the standalone app (dist/index.html) instead.`);
+  store.toast(`Downloading ${name}.`);
 }
 
 export async function copyText(t: string) {

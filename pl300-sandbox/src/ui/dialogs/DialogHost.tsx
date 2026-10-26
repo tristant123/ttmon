@@ -79,20 +79,6 @@ function ShowAsTable({ d }: { d: DialogT }) {
   </Dialog>;
 }
 
-function Publish() {
-  return <Dialog title="Publish to Power BI" width={560} footer={<button className="btn primary" onClick={close}>OK</button>}>
-    <div className="warnbox">The sandbox has no Power BI service to publish to.</div>
-    <div style={{ lineHeight: 1.6 }}>What the exam expects you to know about publishing:
-      <ul>
-        <li>Publish sends the report and its semantic model to a <b>workspace</b>. My workspace is personal; shared workspaces have roles: Admin, Member, Contributor, Viewer.</li>
-        <li>Import models need <b>scheduled refresh</b> (up to 8/day on Pro, 48/day on Premium); on-premises sources need an <b>on-premises data gateway</b>.</li>
-        <li>Distribute with an <b>app</b>, share individual items, or embed. Add people to RLS roles in the semantic model's <b>Security</b> settings.</li>
-        <li>Endorse content as <b>Promoted</b> or <b>Certified</b>; apply <b>sensitivity labels</b>; dashboards pin tiles from reports and support alerts on cards, KPIs and gauges.</li>
-      </ul>
-    </div>
-  </Dialog>;
-}
-
 function About() {
   return <Dialog title="About PL-300 Sandbox" width={520} footer={<button className="btn primary" onClick={close}>OK</button>}>
     <div style={{ lineHeight: 1.6 }}>A browser recreation of Power BI Desktop for practising the PL-300 exam. It includes an M (Power Query) engine with nearly 400 functions, a DAX engine with about 230 functions and real filter-context semantics, and the Report, Table, Model and DAX query views. It's an independent learning tool and isn't affiliated with Microsoft.</div>

@@ -5,6 +5,7 @@ import { MEngine } from '../m/engine';
 import { MTable } from '../core/values';
 import { loadScenario, starScenario, M, T, F, DATE_TABLE, STAR_MEASURES } from './scenarios';
 import { emptyCtx } from '../dax/engine';
+import { NEW_TUTORIALS } from './content2';
 
 export type Area = 'Prepare the data' | 'Model the data' | 'Visualize and analyze the data' | 'Manage and secure Power BI';
 export interface Step { title: string; html: string; check?: () => boolean; hint?: string }
@@ -474,5 +475,16 @@ export const TUTORIALS: Tutorial[] = [
 ];
 
 export const AREAS: Area[] = ['Prepare the data', 'Model the data', 'Visualize and analyze the data', 'Manage and secure Power BI'];
+
+// newer labs, placed with their skill area (the service notes stay last)
+{
+  const svcNotes = TUTORIALS.findIndex(t => t.id === 'service');
+  const notes = svcNotes >= 0 ? TUTORIALS.splice(svcNotes, 1) : [];
+  for (const t of NEW_TUTORIALS) {
+    let at = -1; TUTORIALS.forEach((x, i) => { if (x.area === t.area) at = i; });
+    TUTORIALS.splice(at + 1, 0, t);
+  }
+  TUTORIALS.push(...notes);
+}
 
 export { emptyCtx, dax, DATE_TABLE, loaded };

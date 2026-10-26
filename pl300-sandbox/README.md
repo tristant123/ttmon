@@ -30,6 +30,31 @@ View, Optimize, Help, plus contextual Format, Data/Drill, Table tools, Column to
 Measure tools), the view rail (Report, Table, Model, DAX query), the Filters /
 Visualizations / Data panes, page tabs and the status bar.
 
+**Power BI service (simulated).** Select **Power BI service** in the title bar. Publish from
+Desktop to workspaces, then work as different users (top right): Pat (Pro, Fabric admin),
+Alex (Pro), Brooke (Free), Chris (PPU) and Dana (Pro), in groups such as Sales Managers. The
+rules follow Power BI: workspace roles (Admin, Member, Contributor, Viewer) and license modes
+(Pro, PPU, Premium, Fabric F2/F64) decide who can open, edit, share and publish; sharing grants
+Read, Reshare and Build; apps have audiences and need updating to show changes; RLS applies to
+Viewers and Read users only, with role members (users or groups) and Test as role; scheduled
+refresh allows 8 a day on Pro and 48 on capacity, needs a gateway connection for on-premises
+sources (standard or personal mode) and turns itself off after four failures; dashboards hold
+pinned tiles with data alerts on card, KPI and gauge tiles; subscriptions and alerts arrive in an
+inbox; a clock (+1 h, +1 day) runs what's scheduled. Also: endorsement (Promoted, Certified by
+admin-approved people), Purview-style sensitivity labels with downstream inheritance, lineage
+and impact analysis, usage metrics, deployment pipelines with data source and parameter rules,
+paginated reports, Analyze in Excel, Publish to web versus secure and SharePoint embedding,
+personalized visuals, persistent filters, personal bookmarks, phone view and an Admin portal.
+
+**Data connections.** Import, DirectQuery, Dual and Direct Lake (a sandbox OneLake lakehouse),
+with Power BI's rules: DirectQuery accepts only Power Query steps that fold (each step shows a
+folding indicator, and View Native Query shows the SQL), Import can't become DirectQuery,
+composite models get limited relationships unless dimensions are Dual. Data source settings has
+Change Source, Edit Permissions, credentials and privacy levels, and Power Query raises the same
+"Information is required about data privacy" prompt and Formula.Firewall errors. Get data ›
+Power BI semantic models makes a live connection (needs Build), and "Make changes to this model"
+turns it into a composite model.
+
 **Get data.** Excel (.xlsx, .xlsm, .xls: sheets and named ranges, via the Navigator),
 Text/CSV/TSV/TXT (delimiter detection, preview), JSON (nested records), XML, Parquet,
 Folder (Combine & Transform with the Sample File / Transform File helpers), Enter data,
@@ -73,21 +98,36 @@ FORMAT. The DAX query view runs `DEFINE` / `EVALUATE` / `ORDER BY`.
 combo, ribbon, waterfall, funnel, scatter, pie, donut, treemap, gauge, card, multi-row
 card, KPI, slicer (list, dropdown, tile, between, hierarchy), table and matrix (totals,
 subtotals, stepped layout, conditional formatting), decomposition tree, key influencers,
-Q&A, narrative, text boxes, buttons, shapes and images. Also: field wells with
+Q&A, narrative, text boxes, buttons, shapes and images.
+Newer features: visual calculations (RUNNINGSUM, MOVINGAVERAGE, PREVIOUS, COLLAPSE, EXPAND… with
+templates and hidden fields), calculation groups with dynamic format strings, field parameters,
+report page tooltips and canvas types, the Sync slicers pane, mobile layout, automatic page
+refresh (DirectQuery), forecast, error bars and anomaly detection, Analyze › Explain the
+increase, scatter-chart clustering, export data options, sensitivity labels, incremental
+refresh policies, a Performance analyzer with Copy query, and a simulated Copilot pane (it needs
+a workspace on Fabric capacity). Also: field wells with
 summarization and "show items with no data", visual / page / report filters (basic,
 advanced, Top N, relative date, lock and hide), cross-filter and cross-highlight, edit
 interactions, drill down/up/next level/expand, drill through with a Back button,
 bookmarks, selection pane, Analytics pane lines, themes, Performance analyzer, export
 data, show as a table and focus mode.
 
-**Tutorials.** 27 hands-on labs grouped by the exam's skill areas (Prepare, Model,
+**Ask how to practice this.** Paste any exam question into **Ask** (title bar). In the
+published artifact, Claude answers it, explains the distractors and writes step-by-step
+instructions for this app, with buttons to start the matching lab; offline, the panel matches
+the question to the labs and syllabus.
+
+**Tutorials.** 38 hands-on labs grouped by the exam's skill areas (Prepare, Model,
 Visualize and analyze, Manage and secure). Each loads its own sample data, checks your
 work live, and ends with exam-style questions and explanations. Examples: all six merge
 join kinds, append with mismatched columns, combine files, unpivot, group by,
 parameters and functions, star schema and cardinality, date tables, role-playing dates
 with USERELATIONSHIP, CALCULATE and filter context, time intelligence, RANKX/TOPN,
 many-to-many bridges, PATH hierarchies, filters at each level, interactions and drill
-through, bookmarks, AI visuals, what-if parameters, RLS, and service concepts.
+through, bookmarks, AI visuals, what-if parameters, RLS, storage modes, privacy levels, shared
+semantic models, calculation groups, visual calculations, tooltips and sync slicers, analytics,
+mobile layout, and three service labs (roles, sharing and RLS; gateways, refresh, alerts and
+subscriptions; apps, endorsement, labels, lineage and pipelines).
 
 **Practice exam.** A timed mock exam (or a study mode that checks each answer) drawn from
 a bank of exam-format questions: single and multiple choice, Yes/No statement series,
@@ -120,10 +160,13 @@ This is a learning tool, not a replacement for Power BI, and it isn't affiliated
 
 - Data sources that need a network connection (Web, OData, SharePoint, Oracle,
   Dataverse…) aren't available; download the data and import the file instead.
-- The Power BI service (workspaces, apps, gateways, scheduled refresh, sharing,
-  dashboards) isn't simulated; the practice exam and the last tutorial cover it.
-- Maps draw as bar charts (no map tiles offline). Column From Examples, R/Python
-  scripts, custom visuals, field parameters and mobile layout aren't included.
+- The Power BI service is a local simulation: nothing is sent anywhere, the users are
+  fictional, and its state is kept in this browser. Copilot is simulated with rules over
+  your model, not a language model.
+- DirectQuery and Direct Lake tables still evaluate in memory (from the sandbox SQL Server and
+  lakehouse); the rules and messages are simulated, not real query performance.
+- Maps draw as bar charts (no map tiles offline). Column From Examples, R/Python scripts and
+  custom visuals aren't included.
 - DAX follows the documented semantics closely, but some edge cases differ from the
   real VertiPaq engine (for example, the blank row added for unmatched keys).
 - Everything runs in the browser, so very large files (hundreds of thousands of rows)
@@ -137,7 +180,8 @@ src/dax/        DAX parser, engine (filter/row context, relationships), function
 src/model/      model types, refresh pipeline, relationship autodetect
 src/report/     visual definitions and the query layer behind each visual
 src/ui/         the Power BI Desktop interface (ribbon, views, panes, Power Query Editor, dialogs)
-src/tutorials/  tutorial scenarios, content and UI
+src/service/    the simulated Power BI service (state and rules, pages, viewers, dialogs)
+src/tutorials/  tutorial scenarios, content and UI, practice exam
 src/data/       the generated Contoso sample files and the sandbox SQL database
 tests/          engine tests (vitest)
 ```

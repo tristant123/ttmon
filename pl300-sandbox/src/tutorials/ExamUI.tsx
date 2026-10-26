@@ -191,7 +191,7 @@ export function SyllabusCoverage() {
   const label = { lab: 'Tutorial lab', sandbox: 'In the sandbox', study: 'Questions only' } as const;
   const counts = { lab: 0, sandbox: 0, study: 0 }; SYLLABUS.forEach(r => counts[r.cov]++);
   return <div className="exam-setup">
-    <p>Each skill in the PL-300 outline (version of April 20, 2026), and where you can practice it. <b>Tutorial lab</b> has a guided exercise, <b>In the sandbox</b> works in the app without a dedicated lab, and <b>Questions only</b> needs the Power BI service, Fabric or a feature the sandbox doesn't run, so it's covered by practice-exam questions. {counts.lab} lab · {counts.sandbox} sandbox · {counts.study} questions only.</p>
+    <p>Each skill in the PL-300 outline (version of April 20, 2026), and where you can practice it. <b>Tutorial lab</b> has a guided exercise, <b>In the sandbox</b> works in the app without a dedicated lab, and <b>Questions only</b> isn't simulated, so it's covered by practice-exam questions. The simulated Power BI service (title bar › Power BI service) covers workspaces, sharing, apps, refresh, gateways, alerts and governance. {counts.lab} lab · {counts.sandbox} sandbox · {counts.study} questions only.</p>
     <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8, cursor: 'pointer' }}><input type="checkbox" checked={only} onChange={e => setOnly(e.target.checked)} />Show only skills the sandbox can't simulate</label>
     {AREAS.map(a => {
       const rows = SYLLABUS.filter(r => r.area === a && (!only || r.cov === 'study'));
