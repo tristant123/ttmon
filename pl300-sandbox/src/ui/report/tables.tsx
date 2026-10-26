@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { store } from '../../store';
 import { Visual, Page, FieldRef } from '../../model/types';
-import { summarize, sortRows, fmt, formatFor, fieldLabel, isValueField, drillLevels, fieldKey, valuesFilter, colMeta } from '../../report/query';
+import { summarize, sortRows, fmt, formatFor, fieldLabel, isValueField, drillLevels, fieldKey, valuesFilter, colMeta, dynamicFormat, visualContext } from '../../report/query';
 import { useQuery, pointClick, isSelectedPoint, pathFilters } from './vhelpers';
 import { VisError, NoData } from './charts';
 import { keyOf, compareValues, isNumericType } from '../../core/values';
@@ -31,6 +31,8 @@ function cfStyle(v: Visual, f: FieldRef, val: any, stats: { min: number; max: nu
 
 const fontSize = (v: Visual) => v.format?.fontSize ?? 12;
 
+const safeCtx = (page: Page, v: Visual) => { try { return visualContext(store, page, v).ctx; } catch { return undefined; } };
+
 export function TableVisual({ v, page }: { v: Visual; page: Page }) {
   const s = store; const m = s.project.model;
   const cols = v.wells.columns ?? [];
@@ -58,6 +60,7 @@ export function TableVisual({ v, page }: { v: Visual; page: Page }) {
   if (q.error) return <VisError msg={q.error} />;
   if (!q.data || !body) return null;
   const hlKeys = q.data.hl ? new Set(q.data.hl.rows.map(r => r.slice(0, groups.length).map(keyOf).join('|'))) : null;
+  const vcx = safeCtx(page, v);
   return <div style={{ overflow: 'auto', position: 'absolute', inset: 0, fontSize: fontSize(v) }}>
     <table className="grid-table vtable">
       <thead><tr>{cols.map((f, i) => {
@@ -80,7 +83,7 @@ export function TableVisual({ v, page }: { v: Visual; page: Page }) {
               const url = c?.dataCategory === 'Web URL' && typeof val === 'string';
               const img = c?.dataCategory === 'Image URL' && typeof val === 'string';
               return <td key={ci} className={num ? 'num' : ''} style={isV ? cfStyle(v, f, val, body.stats[values.indexOf(f)]) : undefined}>
-                {img ? <img src={val} alt="" style={{ height: 24 }} /> : url ? <a href={val} target="_blank" rel="noreferrer">{val}</a> : fmt(val, formatFor(m, f), f)}
+                {img ? <img src={val} alt="" style={{ height: 24 }} /> : url ? <a href={val} target="_blank" rel="noreferrer">{val}</a> : fmt(val, (isV && dynamicFormat(s, f, groups.map((g, i) => ({ field: g, value: gv[i] })), vcx)) || formatFor(m, f), f)}
               </td>;
             })}
           </tr>;
@@ -148,7 +151,8 @@ export function MatrixVisual({ v, page }: { v: Visual; page: Page }) {
   d.roots.forEach(collect);
   const stats = allNums.map(xs => ({ min: Math.min(...xs), max: Math.max(...xs) }));
   const toggle = (key: string) => s.updateVisual(v.id, x => { const e = new Set<string>(x.format?.expanded ?? []); if (e.has(key)) e.delete(key); else e.add(key); x.format = { ...(x.format ?? {}), expanded: [...e] }; }, false);
-  const valueCells = (cells: any[] | undefined, key: string) => values.map((f, j) => <td key={key + j} className="num" style={cfStyle(v, f, cells?.[j], stats[j])}>{fmt(cells?.[j], formatFor(m, f), f)}</td>);
+  const vcx = safeCtx(page, v);
+  const valueCells = (cells: any[] | undefined, key: string, pairs: { field: FieldRef; value: any }[] = []) => values.map((f, j) => <td key={key + j} className="num" style={cfStyle(v, f, cells?.[j], stats[j])}>{fmt(cells?.[j], dynamicFormat(s, f, pairs, vcx) || formatFor(m, f), f)}</td>);
   const rowsOut: React.ReactNode[] = [];
   const startLevel = v.drill?.expandAll ? 0 : rl.level;
   const walk = (n: MNode) => {
@@ -163,8 +167,8 @@ export function MatrixVisual({ v, page }: { v: Visual; page: Page }) {
         {canOpen && v.format?.plusMinus !== false ? <span className="exp" onClick={e => { e.stopPropagation(); toggle(n.key); }}>{open ? '−' : '+'}</span> : canOpen ? null : <span style={{ display: 'inline-block', width: v.format?.plusMinus !== false && d.levels.length > 1 ? 18 : 0 }} />}
         {fmt(n.vals[n.depth], formatFor(m, lvl), lvl) || '(Blank)'}
       </td>
-      {colFields.length ? d.colKeys.map(ck => valueCells(n.cells.get(colKeyStr(ck)), colKeyStr(ck))) : null}
-      {(!colFields.length || showColTotals) && valueCells(n.total, 'tot')}
+      {colFields.length ? d.colKeys.map(ck => valueCells(n.cells.get(colKeyStr(ck)), colKeyStr(ck), [...n.vals.slice(0, n.depth + 1).map((x, i) => ({ field: d.levels[i], value: x })), ...ck.map((x, i) => ({ field: colFields[i], value: x }))])) : null}
+      {(!colFields.length || showColTotals) && valueCells(n.total, 'tot', n.vals.slice(0, n.depth + 1).map((x, i) => ({ field: d.levels[i], value: x })))}
     </tr>);
     if (open) n.children.forEach(walk);
   };
@@ -181,8 +185,8 @@ export function MatrixVisual({ v, page }: { v: Visual; page: Page }) {
       <tbody>
         {rowsOut}
         {showRowTotals && d.roots.length > 0 && <tr className="total"><td>Total</td>
-          {colFields.length ? d.colKeys.map(ck => values.map((f, j) => <td key={colKeyStr(ck) + j} className="num">{fmt(d.colTotalMap.get(colKeyStr(ck))?.[j], formatFor(m, f), f)}</td>)) : null}
-          {(!colFields.length || showColTotals) && values.map((f, j) => <td key={'g' + j} className="num">{fmt(d.grand[j], formatFor(m, f), f)}</td>)}
+          {colFields.length ? d.colKeys.map(ck => values.map((f, j) => <td key={colKeyStr(ck) + j} className="num">{fmt(d.colTotalMap.get(colKeyStr(ck))?.[j], dynamicFormat(s, f, ck.map((x, i) => ({ field: colFields[i], value: x })), vcx) || formatFor(m, f), f)}</td>)) : null}
+          {(!colFields.length || showColTotals) && values.map((f, j) => <td key={'g' + j} className="num">{fmt(d.grand[j], dynamicFormat(s, f, [], vcx) || formatFor(m, f), f)}</td>)}
         </tr>}
         {!d.roots.length && values.length > 0 && <tr className="total"><td>Total</td>{d.colKeys.map(ck => values.map((f, j) => <td key={colKeyStr(ck) + j} className="num">{fmt(d.colTotalMap.get(colKeyStr(ck))?.[j], formatFor(m, f), f)}</td>))}{values.map((f, j) => <td key={'g' + j} className="num">{fmt(d.grand[j], formatFor(m, f), f)}</td>)}</tr>}
       </tbody>

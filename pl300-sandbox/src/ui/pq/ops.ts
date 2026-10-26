@@ -426,10 +426,10 @@ export const T = {
 
 export function nameSafe(n: string, taken: string[]) { let k = n, i = 2; while (taken.includes(k)) k = `${n} (${i++})`; return k; }
 
-export function addQuery(q: { name: string; code: string; group?: string; load?: boolean }, select = true) {
+export function addQuery(q: { name: string; code: string; group?: string; load?: boolean; storageMode?: Query['storageMode'] }, select = true) {
   const p = pq();
   const name = nameSafe(q.name, p.queries.map(x => x.name));
-  const nq: Query = { id: 'q' + Math.random().toString(36).slice(2, 9), name, code: q.code, load: q.load ?? true, refresh: true, group: q.group };
+  const nq: Query = { id: 'q' + Math.random().toString(36).slice(2, 9), name, code: q.code, load: q.load ?? true, refresh: true, group: q.group, storageMode: q.storageMode };
   store.setUI({ pq: { ...p, queries: [...p.queries, nq], selected: select ? name : p.selected, step: null, selectedCols: [], dirty: true } });
   invalidate();
   return name;

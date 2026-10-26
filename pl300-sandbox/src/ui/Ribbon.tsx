@@ -3,7 +3,7 @@ import React from 'react';
 import { useStore, store } from '../store';
 import { I } from './icons';
 import { menuBelow, MenuItem } from './common';
-import { addVisual, startNewMeasure, startNewColumn, startNewTable, openPowerQuery, refreshAll, newPage, copyVisuals, pasteVisuals, deleteSelected } from './actions';
+import { addVisual, startNewMeasure, startNewColumn, startNewTable, openPowerQuery, refreshAll, newPage, copyVisuals, pasteVisuals, deleteSelected, newCalculationGroup, startCalcItem } from './actions';
 import { THEMES } from './report/themes';
 import { VISUALS } from '../report/visuals';
 import { drillLevels } from '../report/query';
@@ -172,6 +172,7 @@ function TableTools() {
       <RBtn icon="quickmeasure" label="Quick measure" onClick={() => s.openDialog({ type: 'quickMeasure', table: t.name })} />
       <RBtn icon="newcolumn" label="New column" onClick={() => startNewColumn(t.name)} />
       <RBtn icon="newtable" label="New table" onClick={() => startNewTable()} />
+      {t.calculationGroup && <RBtn icon="calcgroup" label="New calculation item" onClick={() => startCalcItem(t.name)} />}
     </Group>
   </>;
 }
@@ -229,6 +230,7 @@ export function Ribbon() {
       <RBtn icon="quickmeasure" label="Quick measure" onClick={() => s.openDialog({ type: 'quickMeasure' })} disabled={!hasData} />
       {view !== 'report' && <RBtn icon="newcolumn" label="New column" onClick={() => startNewColumn()} disabled={!hasData} />}
       {view !== 'report' && <RBtn icon="newtable" label="New table" onClick={() => startNewTable()} />}
+      {view === 'model' && <RBtn icon="calcgroup" label="Calculation group" onClick={newCalculationGroup} disabled={!hasData} />}
     </Group>
     <Group label="Share">
       <RBtn icon="publish" label="Publish" onClick={() => s.openDialog({ type: 'publish' })} />
@@ -263,6 +265,7 @@ export function Ribbon() {
       <RBtn icon="quickmeasure" label="Quick measure" onClick={() => s.openDialog({ type: 'quickMeasure' })} disabled={!hasData} />
       <RBtn icon="newcolumn" label="New column" onClick={() => startNewColumn()} disabled={!hasData} />
       <RBtn icon="newtable" label="New table" onClick={() => startNewTable()} />
+      <RBtn icon="calcgroup" label="Calculation group" onClick={newCalculationGroup} disabled={!hasData} />
     </Group>
     <Group label="Parameters"><RBtn icon="param" label="New parameter" menu onClick={e => menuBelow(e.currentTarget, [{ label: 'Numeric range', onClick: () => s.openDialog({ type: 'whatIf' }) }, { label: 'Fields', onClick: () => s.openDialog({ type: 'fieldParam' }) }])} /></Group>
     <Group label="Security">

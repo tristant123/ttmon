@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { switchToImport } from './ui/actions';
 import { useStore, store } from './store';
 import { I } from './ui/icons';
 import { MenuHost } from './ui/common';
@@ -61,7 +62,12 @@ function StatusBar() {
     {s.ui.viewAs && <span style={{ background: '#fff4ce', padding: '0 8px', borderRadius: 3, color: '#252423' }}>Now viewing as: {s.ui.viewAs.roles.join(', ')}{s.ui.viewAs.user ? ` (${s.ui.viewAs.user})` : ''} · <button className="iconbtn" style={{ height: 18 }} onClick={() => { s.ui.viewAs = null; s.rebuildDax(); s.emit(); }}>Stop viewing</button></span>}
     {s.refreshErrors.length > 0 && <button className="iconbtn" style={{ height: 20, color: '#a4262c' }} onClick={() => s.openDialog({ type: 'loadErrors', errors: s.refreshErrors })}><I n="warning" s={13} /> {s.refreshErrors.length} issue{s.refreshErrors.length > 1 ? 's' : ''}</button>}
     <span className="grow" />
-    <span>Storage mode: Import</span>
+    {(() => {
+      const modes = new Set(s.project.model.tables.filter(x => !x.expression && !x.calculationGroup).map(x => x.storageMode ?? 'Import'));
+      const label = modes.size > 1 ? 'Mixed' : [...modes][0] === 'DirectLake' ? 'Direct Lake' : [...modes][0] ?? 'Import';
+      const dq = modes.has('DirectQuery') || modes.has('Dual');
+      return dq ? <button className="iconbtn" style={{ height: 20 }} title="Switch all tables to Import mode" onClick={() => switchToImport()}>Storage mode: {label} (click to change)</button> : <span>Storage mode: {label}</span>;
+    })()}
     {s.ui.view === 'report' && <><button className="iconbtn" style={{ height: 20 }} onClick={() => s.setUI({ zoom: Math.max(20, (s.ui.zoom || 100) - 10) })}>−</button>
       <input type="range" min={20} max={200} value={s.ui.zoom || 100} onChange={e => s.setUI({ zoom: +e.target.value })} aria-label="Zoom" />
       <button className="iconbtn" style={{ height: 20 }} onClick={() => s.setUI({ zoom: Math.min(200, (s.ui.zoom || 100) + 10) })}>+</button>

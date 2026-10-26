@@ -13,6 +13,8 @@ export interface Query {
   refresh: boolean;       // "Include in report refresh"
   group?: string;
   description?: string;
+  /** Storage mode chosen when the query was created (Get data › Data connectivity mode). */
+  storageMode?: 'Import' | 'DirectQuery' | 'DirectLake';
 }
 
 export interface ParamInfo { type: string; required: boolean; list?: any[] }

@@ -5,6 +5,8 @@ import { textFrom, convertValue } from '../m/convert';
 import { DaxEngine, emptyCtx, VTable } from '../dax/engine';
 import '../dax/functions';
 import { ColumnMeta, Model, ModelTable, Project, Relationship } from './types';
+import { directQueryProblem, foldingQueries } from '../m/folding';
+import { splitSteps } from '../m/parser';
 
 export function modelType(t: DataType): DataType {
   switch (t) {
@@ -50,9 +52,27 @@ export function refreshModel(project: Project, m: MEngine, only?: string[]): Ref
   const errors: RefreshResult['errors'] = [];
   const loaded: string[] = [];
   const keep: ModelTable[] = [];
+  const folding = foldingQueries(project.queries);
   for (const q of project.queries) {
     if (!q.load || paramInfo(q.code)) continue;
     const existing = model.tables.find(t => t.name === q.name);
+    const mode = existing?.storageMode ?? q.storageMode ?? 'Import';
+    if (mode === 'DirectLake') {
+      const steps = splitSteps(q.code)?.steps ?? [];
+      if (steps.length > 2 || !/^Sql\.Database\(/.test(steps[0]?.code ?? '')) {
+        errors.push({ table: q.name, message: `${q.name} is a Direct Lake table, so it can't have Power Query transformations. Direct Lake reads the Delta table in OneLake as it is: shape the data upstream (a dataflow, notebook or pipeline writing to the lakehouse), or use Import through the SQL analytics endpoint.` });
+        if (existing) keep.push(existing);
+        continue;
+      }
+    }
+    if (mode === 'DirectQuery' || mode === 'Dual') {
+      const prob = directQueryProblem(q.code, folding);
+      if (prob) {
+        errors.push({ table: q.name, message: prob.status === 'na' ? `${q.name} is in ${mode} mode, but its source doesn't support DirectQuery. ${prob.reason}` : `This step results in a query that is not supported in DirectQuery mode. (Step "${prob.name}": ${prob.reason}) Remove the step, or switch the table to Import mode.` });
+        if (existing) keep.push(existing);
+        continue;
+      }
+    }
     if (only && !only.includes(q.name) && existing) { keep.push(existing); continue; }
     if (!q.refresh && existing && existing.rows.length) { keep.push(existing); continue; }
     let v: any;
@@ -84,12 +104,12 @@ export function refreshModel(project: Project, m: MEngine, only?: string[]): Ref
     const calc = existing?.columns.filter(c => c.expression) ?? [];
     keep.push({
       ...(existing ?? {}), name: q.name, columns: [...cols, ...calc.filter(c => !cols.some(x => x.name === c.name))], rows: rows.map(r => [...r, ...calc.map(() => null)]),
-      loadErrors: errCount || undefined, expression: undefined,
+      loadErrors: errCount || undefined, expression: undefined, storageMode: mode === 'Import' ? existing?.storageMode : mode,
     });
     loaded.push(q.name);
   }
   // calculated tables survive refresh
-  for (const t of model.tables) if (t.expression && !keep.some(k => k.name === t.name)) keep.push(t);
+  for (const t of model.tables) if ((t.expression || t.calculationGroup) && !keep.some(k => k.name === t.name)) keep.push(t);
   model.tables = keep;
   // drop relationships to vanished columns
   model.relationships = model.relationships.filter(r => colExists(model, r.fromTable, r.fromColumn) && colExists(model, r.toTable, r.toColumn));
@@ -105,6 +125,7 @@ function colExists(model: Model, t: string, c: string) {
 /** Recompute calculated tables and calculated columns (in dependency-friendly order). */
 export function recalc(model: Model): { table: string; message: string }[] {
   const errors: { table: string; message: string }[] = [];
+  for (const t of model.tables) if (t.calculationGroup) buildCalcGroupRows(t);
   const eng = new DaxEngine(model);
   const calcCols = () => model.tables.flatMap(t => t.columns.filter(c => c.expression).map(c => ({ t, c })));
   // reset calculated column values so stale data doesn't leak into dependencies
@@ -157,6 +178,17 @@ export function recalc(model: Model): { table: string; message: string }[] {
   // second pass for normal tables in case they depend on calculated tables
   if (model.tables.some(t => t.expression)) evalCols(t => !t.expression);
   return errors;
+}
+
+/** A calculation group is a table with a Name column (one row per item) sorted by a hidden Ordinal column. */
+export function buildCalcGroupRows(t: ModelTable) {
+  const items = [...t.calculationGroup!.items].map((it, i) => ({ it, o: it.ordinal ?? i })).sort((a, b) => a.o - b.o);
+  const nameCol = t.columns.find(c => c.dataType === 'text' && !c.hidden)?.name ?? 'Name';
+  t.columns = [
+    { name: nameCol, dataType: 'text', summarizeBy: 'None', sortByColumn: 'Ordinal' },
+    { name: 'Ordinal', dataType: 'int', summarizeBy: 'None', hidden: true },
+  ];
+  t.rows = items.map(x => [x.it.name, x.o]);
 }
 
 /** Power BI's relationship autodetect: same column name, one side unique. */

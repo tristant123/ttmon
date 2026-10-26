@@ -26,9 +26,16 @@ export interface ModelTable {
   hidden?: boolean;
   dateColumn?: string;           // "Mark as date table"
   description?: string;
-  storageMode?: 'Import' | 'DirectQuery' | 'Dual';
+  storageMode?: StorageMode;
   loadErrors?: number;
+  calculationGroup?: { precedence: number; items: CalcItem[] };
+  /** Name of the data source the table comes from (for DirectQuery / Direct Lake behaviour). */
+  source?: string;
 }
+
+export type StorageMode = 'Import' | 'DirectQuery' | 'Dual' | 'DirectLake';
+
+export interface CalcItem { name: string; expression: string; ordinal?: number; formatStringExpression?: string; description?: string }
 
 export interface Measure {
   name: string;
@@ -63,6 +70,7 @@ export interface Model {
   relationships: Relationship[];
   hierarchies: Hierarchy[];
   roles: Role[];
+  discourageImplicitMeasures?: boolean;
 }
 
 // ---------- report ----------

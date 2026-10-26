@@ -36,7 +36,7 @@ export interface UI {
   dialogs: Dialog[];
   tableViewTable: string | null;
   field: { table: string; column?: string; measure?: string } | null;
-  formula: { kind: 'measure' | 'column' | 'table'; table: string; text: string; editing?: string } | null;
+  formula: { kind: 'measure' | 'column' | 'table' | 'calcitem'; table: string; text: string; editing?: string } | null;
   panes: { filters: boolean; viz: boolean; data: boolean; bookmarks: boolean; selection: boolean; perf: boolean; properties: boolean; sync: boolean };
   vizTab: 'build' | 'format' | 'analytics';
   cross: CrossSel | null;

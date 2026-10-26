@@ -4,7 +4,7 @@ import { useStore, store } from '../../store';
 import { I } from '../icons';
 import { menuAt, MenuItem, typeIcon } from '../common';
 import { FieldRef, ModelTable } from '../../model/types';
-import { checkField, startNewMeasure, startNewColumn, editMeasure, editColumn, deleteField, renameField, openPowerQuery, refreshAll, removeFieldEverywhere, editTable } from '../actions';
+import { checkField, startNewMeasure, startNewColumn, editMeasure, editColumn, deleteField, renameField, openPowerQuery, refreshAll, removeFieldEverywhere, editTable, startCalcItem, editCalcItem, updateCalcGroup } from '../actions';
 import { isNumericType } from '../../core/values';
 import { clearQueryCache } from '../report/vhelpers';
 
@@ -56,6 +56,7 @@ export function DataPane({ width = 230, mode = 'report' }: { width?: number; mod
   };
   const tableMenu = (e: React.MouseEvent, t: ModelTable) => {
     menuAt(e, [
+      ...(t.calculationGroup ? [{ label: 'New calculation item', icon: 'calcgroup', onClick: () => startCalcItem(t.name) }, { sep: true } as MenuItem] : []),
       { label: 'New measure', icon: 'measure', onClick: () => startNewMeasure(t.name) },
       { label: 'New column', icon: 'newcolumn', onClick: () => startNewColumn(t.name) },
       { label: 'New quick measure', icon: 'quickmeasure', onClick: () => s.openDialog({ type: 'quickMeasure', table: t.name }) },
@@ -112,7 +113,7 @@ export function DataPane({ width = 230, mode = 'report' }: { width?: number; mod
         for (const c of cols) {
           const f: FieldRef = { table: t.name, column: c.name };
           const isDate = (c.dataType === 'date' || c.dataType === 'datetime') && s.project.settings.autoDateTime && t.dateColumn !== c.name && !t.expression;
-          const icon = c.expression ? 'fieldCalcCol' : c.dataCategory && ['Country', 'City', 'State or Province', 'Continent', 'County', 'Postal code', 'Place', 'Address', 'Latitude', 'Longitude'].includes(c.dataCategory) ? 'fieldGeo' : isNumericType(c.dataType) && c.summarizeBy !== 'None' ? 'fieldNum' : typeIcon(c.dataType);
+          const icon = c.expression ? 'fieldCalcCol' : c.dataCategory && ['Country', 'City', 'State or Province', 'Continent', 'County', 'Postal code', 'Place', 'Address', 'Latitude', 'Longitude'].includes(c.dataCategory) ? 'fieldGeo' : isNumericType(c.dataType) && c.summarizeBy !== 'None' && !m.discourageImplicitMeasures ? 'fieldNum' : typeIcon(c.dataType);
           const node = <React.Fragment key={c.name}>{fieldRow(f, c.name, icon, t, { hidden: c.hidden })}
             {isDate && open[`${t.name}|${c.name}`] && <div>
               <div className="tree-item" style={{ paddingLeft: 40 }} draggable onDragStart={dragStart(f)}><I n="hierarchy" s={14} /><span className="nm">Date Hierarchy</span></div>
@@ -121,6 +122,27 @@ export function DataPane({ width = 230, mode = 'report' }: { width?: number; mod
           </React.Fragment>;
           push(c.displayFolder, isDate ? <div key={c.name} style={{ position: 'relative' }}>
             <button className="iconbtn" style={{ position: 'absolute', left: 2, top: 2, height: 18, minWidth: 16, zIndex: 1 }} onClick={() => setOpen({ ...open, [`${t.name}|${c.name}`]: !open[`${t.name}|${c.name}`] })} aria-label="Show date hierarchy"><I n={open[`${t.name}|${c.name}`] ? 'chevronDown' : 'chevronRight'} s={10} /></button>{node}</div> : node);
+        }
+        if (t.calculationGroup) {
+          const items = [...t.calculationGroup.items].sort((a, b) => (a.ordinal ?? 0) - (b.ordinal ?? 0));
+          const move = (name: string, d: number) => updateCalcGroup(t.name, g => {
+            const arr = [...g.items].sort((a, b) => (a.ordinal ?? 0) - (b.ordinal ?? 0)); const i = arr.findIndex(x => x.name === name); const j = i + d;
+            if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; arr.forEach((x, k) => { x.ordinal = k; }); g.items = arr;
+          });
+          push(undefined, <FolderNode key="__items" name="Calculation items">
+            {items.filter(it => match(it.name)).map(it => <div key={it.name} className={`tree-item ${s.ui.formula?.kind === 'calcitem' && s.ui.formula.editing === it.name && s.ui.formula.table === t.name ? 'selected' : ''}`} style={{ paddingLeft: 20 }}
+              onClick={() => editCalcItem(t.name, it.name)}
+              onContextMenu={e => menuAt(e, [
+                { label: 'Edit formula', icon: 'edit', onClick: () => editCalcItem(t.name, it.name) },
+                { label: 'New calculation item', icon: 'calcgroup', onClick: () => startCalcItem(t.name) },
+                { label: 'Move up', onClick: () => move(it.name, -1) },
+                { label: 'Move down', onClick: () => move(it.name, 1) },
+                { sep: true },
+                { label: 'Delete', icon: 'trash', disabled: items.length < 2, onClick: () => updateCalcGroup(t.name, g => { g.items = g.items.filter(x => x.name !== it.name); }) },
+              ])} title={it.expression}>
+              <I n="fieldCalc" s={15} /><span className="nm">{it.name}</span>
+            </div>)}
+          </FolderNode>);
         }
         for (const h of hiers) push(undefined, <div key={'h' + h.name}>
           {fieldRow({ table: t.name, hierarchy: h.name }, h.name, 'hierarchy', t)}
@@ -131,7 +153,7 @@ export function DataPane({ width = 230, mode = 'report' }: { width?: number; mod
             ? <input className="tx" autoFocus defaultValue={t.name} onBlur={e => { setRename(null); if (e.target.value.trim() && e.target.value !== t.name) renameField({ table: t.name }, e.target.value.trim()); }} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
             : <div className="tree-table" onClick={() => { setOpen({ ...open, [t.name]: !isOpen }); s.setUI({ field: { table: t.name }, tableViewTable: mode === 'table' ? t.name : s.ui.tableViewTable }); }} onContextMenu={e => tableMenu(e, t)} onDoubleClick={() => setRename(JSON.stringify({ table: t.name }))}>
               <I n={isOpen ? 'chevronDown' : 'chevronRight'} s={11} />
-              <I n={t.expression ? 'calcTable' : 'tableIcon'} s={15} />
+              <I n={t.calculationGroup ? 'calcgroup' : t.expression ? 'calcTable' : 'tableIcon'} s={15} />
               <span style={{ flex: 1, fontWeight: s.ui.field?.table === t.name && !s.ui.field.column && !s.ui.field.measure ? 600 : 400, fontStyle: t.hidden ? 'italic' : undefined, color: t.hidden ? '#8a8886' : undefined }}>{t.name}</span>
               {t.dateColumn && <span title="Marked as date table"><I n="calendar" s={13} /></span>}
               {t.loadErrors ? <span title={`${t.loadErrors} errors were replaced with blanks while loading`}><I n="warning" s={13} /></span> : null}

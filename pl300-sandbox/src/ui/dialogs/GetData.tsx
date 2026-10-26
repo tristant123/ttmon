@@ -11,11 +11,11 @@ import * as XLSX from 'xlsx';
 import { addQuery as pqAdd } from '../pq/ops';
 import { openPowerQuery } from '../actions';
 import { clearQueryCache } from '../report/vhelpers';
-import { contosoDW } from '../../data/sample';
+import { contosoDW, LAKEHOUSE_SERVER, LAKEHOUSE_DB } from '../../data/sample';
 
 const close = () => store.closeDialog();
 function AutoRun({ run }: { run: () => void }) { React.useEffect(() => { run(); }, []); return null; }
-type Q = { name: string; code: string; group?: string; load?: boolean };
+type Q = { name: string; code: string; group?: string; load?: boolean; storageMode?: 'Import' | 'DirectQuery' | 'DirectLake' };
 
 /** Add generated queries, then Load (refresh model) or Transform Data (open Power Query). */
 export function finishQueries(qs: Q[], mode: 'load' | 'transform', fromPQ: boolean) {
@@ -23,7 +23,7 @@ export function finishQueries(qs: Q[], mode: 'load' | 'transform', fromPQ: boole
   if (fromPQ && s.ui.pq) { let last = ''; for (const q of qs) last = pqAdd(q, true); store.setUI({ pq: { ...store.ui.pq!, selected: last } }); return; }
   const taken = s.project.queries.map(q => q.name);
   const named = qs.map(q => ({ ...q, name: taken.includes(q.name) ? uniqueName(q.name, [...taken, ...qs.map(x => x.name)]) : q.name }));
-  s.change(p => { for (const q of named) p.queries.push({ id: 'q' + Math.random().toString(36).slice(2, 9), name: q.name, code: q.code, load: q.load ?? true, refresh: true, group: q.group }); });
+  s.change(p => { for (const q of named) p.queries.push({ id: 'q' + Math.random().toString(36).slice(2, 9), name: q.name, code: q.code, load: q.load ?? true, refresh: true, group: q.group, storageMode: q.storageMode }); });
   if (mode === 'transform') { openPowerQuery(named[named.length - 1].name); return; }
   const res = s.refresh();
   clearQueryCache();
@@ -51,6 +51,8 @@ const CONNECTORS: { kind: string; name: string; icon: string; cat: string; accep
   { kind: 'pdf', name: 'PDF', icon: 'blank', cat: 'File', desc: 'Not available in the sandbox' },
   { kind: 'sharepoint', name: 'SharePoint folder', icon: 'folder', cat: 'File', desc: 'Not reachable from the sandbox; use Folder instead' },
   { kind: 'sql', name: 'SQL Server database', icon: 'sql', cat: 'Database', desc: 'Built-in sandbox server: localhost / ContosoDW' },
+  { kind: 'lakehouse', name: 'Lakehouses (OneLake catalog)', icon: 'lakehouse', cat: 'Microsoft Fabric', desc: 'Sandbox lakehouse ContosoLakehouse: Direct Lake, or Import/DirectQuery through the SQL analytics endpoint' },
+  { kind: 'semanticModel', name: 'Power BI semantic models', icon: 'plug', cat: 'Microsoft Fabric', desc: 'Live connection to a published semantic model in the sandbox service' },
   { kind: 'oracle', name: 'Oracle database', icon: 'database', cat: 'Database', desc: 'Not reachable from the sandbox' },
   { kind: 'dataverse', name: 'Dataverse', icon: 'database', cat: 'Power Platform', desc: 'Not reachable from the sandbox' },
   { kind: 'dataflow', name: 'Dataflows', icon: 'database', cat: 'Power Platform', desc: 'Not reachable from the sandbox' },
@@ -71,7 +73,7 @@ export function GetDataDialog({ d }: { d: DialogT }) {
     <div className="row" style={{ alignItems: 'stretch', flexWrap: 'nowrap', minHeight: 0, flex: 1 }}>
       <div style={{ width: 170, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <div className="pane-search" style={{ margin: '0 0 6px' }}><I n="search" s={13} /><input placeholder="Search" value={q} onChange={e => setQ(e.target.value)} autoFocus /></div>
-        {['All', 'File', 'Database', 'Power Platform', 'Other'].map(c => <button key={c} className={`btn sm ${cat === c ? 'primary' : ''}`} style={{ textAlign: 'left', border: 0 }} onClick={() => setCat(c)}>{c}</button>)}
+        {['All', 'File', 'Database', 'Microsoft Fabric', 'Power Platform', 'Other'].map(c => <button key={c} className={`btn sm ${cat === c ? 'primary' : ''}`} style={{ textAlign: 'left', border: 0 }} onClick={() => setCat(c)}>{c}</button>)}
       </div>
       <div className="list" style={{ flex: 1, minHeight: 300 }}>
         {list.map(c => <div key={c.kind} className="it" onDoubleClick={() => setKind(c.kind)} onClick={() => setKind(c.kind)}><I n={c.icon} s={20} /><div><div style={{ fontWeight: 600 }}>{c.name}</div><div className="tiny">{c.desc}</div></div></div>)}
@@ -123,6 +125,8 @@ function ConnectorFlow({ kind, fromPQ, onBack }: { kind: string; fromPQ: boolean
   if (kind === 'sample') return <SampleDataDialog d={{ type: 'sampleData', pq: fromPQ }} />;
   if (kind === 'blank') return <AutoRun run={() => done([blankQuery(uniqueName('Query1', taken()))], 'transform')} />;
   if (kind === 'sql') return <SqlDialog fromPQ={fromPQ} />;
+  if (kind === 'lakehouse') return <LakehouseDialog fromPQ={fromPQ} />;
+  if (kind === 'semanticModel') return <AutoRun run={() => { close(); store.openDialog({ type: 'liveConnect' }); }} />;
   if (kind === 'folder') return <FolderDialog fromPQ={fromPQ} />;
   const conn = CONNECTORS.find(c => c.kind === kind);
   if (!conn?.accept) return <Dialog title={conn?.name ?? 'Connector'} width={480} footer={<><button className="btn" onClick={onBack}>Back</button><button className="btn" onClick={close}>Close</button></>}>
@@ -210,7 +214,7 @@ function SqlDialog({ fromPQ }: { fromPQ: boolean }) {
   const [err, setErr] = useState('');
   const [sel, setSel] = useState<string[]>([]);
   const taken = (fromPQ && store.ui.pq ? store.ui.pq.queries : store.project.queries).map(q => q.name);
-  const done = (qs: Q[], m: 'load' | 'transform') => { close(); finishQueries(qs, m, fromPQ); if (mode === 'DirectQuery') store.toast('Storage mode set to DirectQuery for practice; the sandbox still evaluates in memory.'); };
+  const done = (qs: Q[], m: 'load' | 'transform') => { close(); finishQueries(qs.map(q => ({ ...q, storageMode: mode })), m, fromPQ); };
   if (nav) return <NavigatorShell title={`${server}: ${db}`} items={nav.rows.map(r => ({ id: String(r[0]), label: String(r[0]), icon: 'tableIcon' }))} sel={sel} setSel={setSel} done={done}
     build={() => sqlQueries(server, db, sel.map(id => { const r = nav.rows.find(x => x[0] === id)!; return { schema: String(r[2]), item: String(r[3]) }; }), taken)} preview={id => (nav.rows.find(r => r[0] === id)?.[1] as MTable) ?? null} />;
   return <Dialog title="SQL Server database" width={520} footer={<><button className="btn primary" onClick={() => { const t = contosoDW(server, db); if (!t) setErr(`Couldn't connect to '${server}' / '${db}'. The sandbox has one server: localhost with database ContosoDW.`); else setNav(t); }}>OK</button><button className="btn" onClick={close}>Cancel</button></>}>
@@ -219,6 +223,39 @@ function SqlDialog({ fromPQ }: { fromPQ: boolean }) {
     <div className="field"><label>Data Connectivity mode</label><div className="radio-row"><label><input type="radio" checked={mode === 'Import'} onChange={() => setMode('Import')} />Import</label><label><input type="radio" checked={mode === 'DirectQuery'} onChange={() => setMode('DirectQuery')} />DirectQuery</label></div></div>
     <div className="tiny">Exam tip: Import copies data into the model (fast, needs refresh). DirectQuery leaves data in the source and queries it live (always current, limited DAX/Power Query, slower). Dual tables can act as either.</div>
     {err && <div className="errbox">{err}</div>}
+  </Dialog>;
+}
+
+function LakehouseDialog({ fromPQ }: { fromPQ: boolean }) {
+  const nav = useMemo(() => contosoDW(LAKEHOUSE_SERVER, LAKEHOUSE_DB)!, []);
+  const [picked, setPicked] = useState(false);
+  const [sel, setSel] = useState<string[]>([]);
+  const [mode, setMode] = useState<'DirectLake' | 'Import' | 'DirectQuery'>('DirectLake');
+  const taken = (fromPQ && store.ui.pq ? store.ui.pq.queries : store.project.queries).map(q => q.name);
+  if (!picked) return <Dialog title="OneLake catalog" sub="Choose a lakehouse, warehouse or semantic model" width={720} footer={<button className="btn" onClick={close}>Cancel</button>}>
+    <table className="grid-table"><thead><tr><th>Name</th><th>Type</th><th>Workspace</th><th>Endorsement</th><th>Sensitivity</th></tr></thead><tbody>
+      <tr className="clickable" onClick={() => setPicked(true)}><td><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><I n="lakehouse" s={16} /><b>ContosoLakehouse</b></span></td><td>Lakehouse</td><td>Sales Analytics</td><td><span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><I n="certified" s={14} />Certified</span></td><td>General</td></tr>
+      <tr className="clickable" onClick={() => { close(); store.openDialog({ type: 'liveConnect' }); }}><td><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><I n="plug" s={16} /><b>Semantic models…</b></span></td><td>Semantic model</td><td>Any</td><td /><td /></tr>
+    </tbody></table>
+    <div className="tiny">The lakehouse stores Delta (Parquet) tables in OneLake. The sandbox lakehouse holds the same Contoso star schema as the sandbox SQL Server.</div>
+  </Dialog>;
+  return <Dialog title="ContosoLakehouse" sub="Sales Analytics workspace · Lakehouse" width={720} footer={<>
+    <button className="btn yellow" disabled={!sel.length} onClick={() => {
+      close();
+      const server = LAKEHOUSE_SERVER, db = LAKEHOUSE_DB;
+      const qs = sqlQueries(server, db, sel.map(id => { const r = nav.rows.find(x => x[0] === id)!; return { schema: String(r[2]), item: String(r[3]) }; }), taken).map(q => ({ ...q, storageMode: mode }));
+      finishQueries(qs, 'load', fromPQ);
+      if (mode === 'DirectLake') store.toast('Created Direct Lake tables. They read the Delta tables directly: no import refresh, only reframing, and no Power Query transformations.');
+    }}>{mode === 'DirectLake' ? 'Connect' : 'Load'}</button><button className="btn" onClick={() => setPicked(false)}>Back</button><button className="btn" onClick={close}>Cancel</button></>}>
+    <div className="field"><label>How do you want to connect?</label>
+      <div className="radio-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+        <label><input type="radio" checked={mode === 'DirectLake'} onChange={() => setMode('DirectLake')} /><b>Direct Lake</b> — query the Delta tables in OneLake directly. Import-like speed, no scheduled refresh. Requires Fabric capacity.</label>
+        <label><input type="radio" checked={mode === 'Import'} onChange={() => setMode('Import')} /><b>Import</b> through the SQL analytics endpoint — copy the data into the model; full Power Query.</label>
+        <label><input type="radio" checked={mode === 'DirectQuery'} onChange={() => setMode('DirectQuery')} /><b>DirectQuery</b> through the SQL analytics endpoint — live T-SQL queries; only steps that fold.</label>
+      </div>
+    </div>
+    <div className="section-h">Tables</div>
+    <div className="list" style={{ maxHeight: 260 }}>{nav.rows.map(r => { const id = String(r[0]); return <label key={id} className="it" style={{ cursor: 'pointer' }}><input type="checkbox" checked={sel.includes(id)} onChange={() => setSel(sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id])} /><I n="tableIcon" s={16} /><span>{String(r[3])}</span><span className="tiny" style={{ marginLeft: 'auto' }}>{(r[1] as MTable).rows.length.toLocaleString()} rows · Delta</span></label>; })}</div>
   </Dialog>;
 }
 

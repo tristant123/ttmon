@@ -5,6 +5,8 @@ import { I } from '../icons';
 import { menuAt } from '../common';
 import { PQRibbon } from './PQRibbon';
 import { PQGrid } from './PQGrid';
+import { analyseFolding, foldingQueries } from '../../m/folding';
+import { switchToImport } from '../actions';
 import { pq, setPQ, currentQuery, stepsOf, selectedStepIndex, stepResult, deleteStep, renameStep, moveStep, updateQuery, addQuery, invalidate, closeAndApply } from './ops';
 import { friendlyError, paramInfo, Query } from '../../m/engine';
 import { MTable, MRecord, MError, MFunction, MBinary, displayValue, MType } from '../../core/values';
@@ -79,6 +81,9 @@ function SettingsPane() {
   if (!q) return <div className="pq-settings"><h3>Query Settings</h3></div>;
   const sp = stepsOf(q);
   const sel = selectedStepIndex();
+  const folding = analyseFolding(q.code, foldingQueries(p.queries));
+  const mode = s.project.model.tables.find(t => t.name === q.name)?.storageMode ?? q.storageMode ?? 'Import';
+  const dqProblem = mode === 'DirectQuery' || mode === 'Dual' ? folding.find(f => f.status === 'notfolds') ?? (folding[0]?.status === 'na' ? folding[0] : null) : null;
   return <div className="pq-settings">
     <h3>Query Settings <button className="iconbtn" onClick={() => setPQ({ showSettings: false })} aria-label="Hide Query Settings"><I n="close" s={12} /></button></h3>
     <h4>Properties</h4>
@@ -88,6 +93,8 @@ function SettingsPane() {
       <button className="btn sm" style={{ marginTop: 6, padding: 0, border: 0, color: '#0f6cbd', background: 'transparent' }} onClick={() => s.openDialog({ type: 'pq:props' })}>All Properties</button>
     </div>
     <h4>Applied Steps</h4>
+    {mode !== 'Import' && <div className="tiny" style={{ padding: '0 12px 4px' }}>Storage mode: <b>{mode}</b></div>}
+    {dqProblem && <div className="errbox" style={{ margin: '0 8px 6px', fontSize: 11.5 }}>{dqProblem.status === 'na' ? 'This source doesn\'t support DirectQuery.' : <>This step results in a query that is not supported in DirectQuery mode: <b>{dqProblem.name}</b>. {dqProblem.reason}</>}<div style={{ marginTop: 4 }}><button className="btn sm" onClick={() => switchToImport(q.name)}>Switch all tables to Import mode</button></div></div>}
     <div className="steps">
       {!sp && <div className="tiny" style={{ padding: 6 }}>This query is a single expression. Open the Advanced Editor to edit it.</div>}
       {sp?.steps.map((st, i) => rename === i
@@ -103,10 +110,12 @@ function SettingsPane() {
             { label: 'Move Down', disabled: i === 0 || i >= sp.steps.length - 1, onClick: () => moveStep(i, 1) },
             { label: 'Extract Previous', disabled: i === 0, onClick: () => s.openDialog({ type: 'pq:extractPrevious', step: i }) },
             { sep: true },
-            { label: 'View Native Query', disabled: true },
+            { label: 'View Native Query', disabled: folding[i]?.status !== 'folds' || !folding[i]?.sql, onClick: () => s.openDialog({ type: 'message', title: 'Native Query', text: folding[i].sql }) },
+            { label: 'View query plan', disabled: !folding[i] || folding[i].status === 'na', onClick: () => s.openDialog({ type: 'message', title: 'Query plan', text: folding.slice(0, i + 1).map(f => `${f.status === 'folds' ? '⇢ Remote (folded)  ' : '⚙ Local (Power Query)'}  ${f.name}${f.reason && f.status !== 'folds' ? `\n        ${f.reason}` : ''}`).join('\n') }) },
           ])}>
           <I n={stepIcon(st.code)} s={14} />
           <span className="nm" title={st.name}>{st.name}</span>
+          {folding[i] && folding[i].status !== 'na' && <span className={`fold ${folding[i].status}`} title={folding[i].status === 'folds' ? 'Folding: this step is sent to the data source' : `Not folding: ${folding[i].reason ?? ''}`} />}
           {stepResult(q.name, i).e && <span title={friendlyError(stepResult(q.name, i).e).message}><I n="warning" s={13} /></span>}
           <button className="iconbtn x" style={{ height: 18, minWidth: 18 }} title="Delete step" onClick={e => { e.stopPropagation(); deleteStep(i); }}><I n="close" s={11} /></button>
         </div>)}

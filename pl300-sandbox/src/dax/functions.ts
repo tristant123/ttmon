@@ -162,6 +162,15 @@ fn('EARLIEST', (e, a, c) => { if (c.rows.length < 2) derr('EARLIEST refers to an
 fn('USERELATIONSHIP', () => derr('USERELATIONSHIP can only be used as a filter argument of CALCULATE or CALCULATETABLE.'), 2);
 fn('CROSSFILTER', () => derr('CROSSFILTER can only be used as a filter argument of CALCULATE or CALCULATETABLE.'), 3);
 
+// calculation group functions
+fn('SELECTEDMEASURE', (e, _a, c) => { if (!c.selMeasure) derr('SELECTEDMEASURE can only be used in a calculation item expression.'); return e.evalMeasure(c.selMeasure!, c); }, 0);
+fn('SELECTEDMEASURENAME', (_e, _a, c) => { if (!c.selMeasure) derr('SELECTEDMEASURENAME can only be used in a calculation item expression.'); return c.selMeasure!.name; }, 0);
+fn('SELECTEDMEASUREFORMATSTRING', (_e, _a, c) => { if (!c.selMeasure) derr('SELECTEDMEASUREFORMATSTRING can only be used in a calculation item or a dynamic format string.'); return c.selMeasure!.formatString ?? ''; }, 0);
+fn('ISSELECTEDMEASURE', (_e, a, c) => {
+  if (!c.selMeasure) derr('ISSELECTEDMEASURE can only be used in a calculation item expression.');
+  return a.some(x => x.k === 'col' && x.col.toLowerCase() === c.selMeasure!.name.toLowerCase());
+}, 1, 99);
+
 fn('SELECTEDVALUE', (e, a, c) => { const v = valuesOf(e, [a[0]], c); return v.rows.length === 1 ? v.rows[0][0] : opt(e, a, 1, c, null); }, 1, 2);
 fn('HASONEVALUE', (e, a, c) => valuesOf(e, [a[0]], c).rows.length === 1, 1);
 fn('HASONEFILTER', (e, a, c) => {

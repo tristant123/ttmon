@@ -191,8 +191,11 @@ export function sampleFiles(): StoredFile[] {
 
 // ---------- the sandbox SQL Server: Sql.Database("localhost", "ContosoDW") ----------
 let sqlNav: MTable | null = null;
+export const LAKEHOUSE_SERVER = 'contoso-sandbox.datawarehouse.fabric.microsoft.com';
+export const LAKEHOUSE_DB = 'ContosoLakehouse';
 export function contosoDW(server: string, db: string): MTable | undefined {
-  if (!/^(localhost|\.|\(local\)|127\.0\.0\.1|sandbox)$/i.test(server.trim()) || !/^contosodw$/i.test(db.trim())) return undefined;
+  const lake = /\.(datawarehouse|pbidedicated)\.fabric\.microsoft\.com$/i.test(server.trim()) && /^contosolakehouse$/i.test(db.trim());
+  if (!lake && (!/^(localhost|\.|\(local\)|127\.0\.0\.1|sandbox)$/i.test(server.trim()) || !/^contosodw$/i.test(db.trim()))) return undefined;
   if (sqlNav) return sqlNav;
   const tbl = (cols: [string, DataType][], rows: any[][]) => new MTable(cols.map(([name, type]) => ({ name, type })), rows);
   const dates: any[][] = [];

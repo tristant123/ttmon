@@ -10,6 +10,7 @@ import { PAGE_W, PAGE_H } from './report/Canvas';
 
 export function isValueLike(f: FieldRef) {
   if (f.measure) return true;
+  if (store.project.model.discourageImplicitMeasures) return false;
   const c = colMeta(store.project.model, f);
   return !!c && isNumericType(c.dataType) && c.summarizeBy !== 'None';
 }
@@ -23,6 +24,11 @@ function prep(f: FieldRef, valueWell: boolean): FieldRef {
 /** Drop a field on a visual: it goes into the well Power BI would choose. */
 export function addFieldToVisual(id: string, f: FieldRef, wellKey?: string) {
   const s = store;
+  const target = wellKey && vdef(s.findVisual(id)?.type ?? '')?.wells.find(w => w.key === wellKey);
+  if (s.project.model.discourageImplicitMeasures && f.column && !f.measure && target && target.kind === 'value') {
+    s.toast('This model discourages implicit measures, so columns can\'t be summarized in a visual. Create a measure (for example, Total = SUM(Table[Column])) and use that instead.', 'error');
+    return;
+  }
   s.updateVisual(id, v => {
     const def = vdef(v.type);
     let well = wellKey ? def.wells.find(w => w.key === wellKey) : undefined;
@@ -165,6 +171,36 @@ export function editTable(table: string) {
   if (t?.expression) store.setUI({ formula: { kind: 'table', table, text: `${t.name} = ${t.expression}`, editing: t.name } });
 }
 
+// ---------- calculation groups ----------
+/** Model view › Calculation group. Like Power BI, this turns on "Discourage implicit measures". */
+export function newCalculationGroup() {
+  const s = store;
+  const create = () => {
+    const name = uniq('Calculation group', s.project.model.tables.map(t => t.name));
+    s.change(p => {
+      p.model.discourageImplicitMeasures = true;
+      p.model.tables.push({ name, columns: [{ name: 'Name', dataType: 'text' }], rows: [], calculationGroup: { precedence: 0, items: [{ name: 'Calculation item', expression: 'SELECTEDMEASURE()', ordinal: 0 }] } });
+    }, { recalc: true });
+    clearQueryCache();
+    s.setUI({ field: { table: name }, formula: { kind: 'calcitem', table: name, text: 'Calculation item = SELECTEDMEASURE()', editing: 'Calculation item' } });
+  };
+  if (s.project.model.discourageImplicitMeasures) { create(); return; }
+  s.openDialog({ type: 'confirm', title: 'Discourage implicit measures', text: 'Calculation groups only apply to explicit measures, so creating one turns on the model property "Discourage implicit measures". Report authors will no longer be able to add a numeric column to a visual\'s values and have it summarized automatically. Create explicit measures instead (for example, Total Sales = SUM(Sales[Amount])).', ok: 'Yes', onOk: create });
+}
+export function startCalcItem(table: string) {
+  const s = store; const t = s.project.model.tables.find(x => x.name === table); if (!t?.calculationGroup) return;
+  const name = uniq('Calculation item', t.calculationGroup.items.map(i => i.name));
+  s.setUI({ formula: { kind: 'calcitem', table, text: `${name} = SELECTEDMEASURE()` }, field: { table } });
+}
+export function editCalcItem(table: string, item: string) {
+  const it = store.project.model.tables.find(x => x.name === table)?.calculationGroup?.items.find(i => i.name === item);
+  if (it) store.setUI({ formula: { kind: 'calcitem', table, text: `${it.name} = ${it.expression}`, editing: it.name }, field: { table } });
+}
+export function updateCalcGroup(table: string, f: (g: NonNullable<import('../model/types').ModelTable['calculationGroup']>) => void) {
+  store.change(p => { const t = p.model.tables.find(x => x.name === table); if (t?.calculationGroup) f(t.calculationGroup); }, { recalc: true });
+  clearQueryCache();
+}
+
 /** Commit the formula bar. Returns an error message or null. */
 export function commitFormula(): string | null {
   const s = store; const fm = s.ui.formula; if (!fm) return null;
@@ -174,6 +210,17 @@ export function commitFormula(): string | null {
   try { DaxParser.expr(def.expr); } catch (e) { return `The syntax for '${def.name}' is incorrect. ${(e as Error).message}`; }
   const model = s.project.model;
   const nameTaken = (n: string) => model.measures.some(m => m.name.toLowerCase() === n.toLowerCase() && m.name !== fm.editing) || (fm.kind !== 'table' && model.tables.find(t => t.name === fm.table)?.columns.some(c => c.name.toLowerCase() === n.toLowerCase() && c.name !== fm.editing));
+  if (fm.kind === 'calcitem') {
+    const g = model.tables.find(t => t.name === fm.table)?.calculationGroup; if (!g) return 'The calculation group no longer exists.';
+    if (g.items.some(i => i.name.toLowerCase() === def.name.toLowerCase() && i.name !== fm.editing)) return `A calculation item named '${def.name}' already exists in '${fm.table}'.`;
+    updateCalcGroup(fm.table, gg => {
+      const ex = fm.editing ? gg.items.find(i => i.name === fm.editing) : undefined;
+      if (ex) { ex.name = def.name; ex.expression = def.expr; }
+      else gg.items.push({ name: def.name, expression: def.expr, ordinal: Math.max(-1, ...gg.items.map((i, k) => i.ordinal ?? k)) + 1 });
+    });
+    s.setUI({ formula: null, field: { table: fm.table } });
+    return null;
+  }
   if (fm.kind === 'measure') {
     if (nameTaken(def.name)) return `The name '${def.name}' is already used by a column or measure. Measure names must be unique in the model.`;
     s.change(p => {
@@ -188,6 +235,7 @@ export function commitFormula(): string | null {
     try { s.dax.scalarOf(def.expr); } catch (e) { s.setUI({ formula: null, field: { table: fm.table, measure: def.name } }); clearQueryCache(); s.toast(`Measure saved, but it returns an error: ${(e as Error).message}`, 'error'); return null; }
     s.setUI({ formula: null, field: { table: fm.table, measure: def.name } });
   } else if (fm.kind === 'column') {
+    if (model.tables.find(t => t.name === fm.table)?.storageMode === 'DirectLake') return `Calculated columns aren't supported on Direct Lake tables. Add the column to the Delta table in the lakehouse, or create a measure instead.`;
     if (nameTaken(def.name)) return `The name '${def.name}' is already used in table '${fm.table}'.`;
     s.change(p => {
       const t = p.model.tables.find(x => x.name === fm.table)!;
@@ -289,6 +337,7 @@ export function appendRenameStep(code: string, oldName: string, newName: string)
 
 export function openPowerQuery(select?: string) {
   const s = store;
+  if (select && s.project.model.tables.find(t => t.name === select)?.storageMode === 'DirectLake') { s.toast(`${select} is a Direct Lake table. Direct Lake tables can't be transformed in Power Query; change the data in the lakehouse instead.`, 'error'); return; }
   const queries = JSON.parse(JSON.stringify(s.project.queries));
   s.setUI({ pq: { queries, selected: select ?? queries[0]?.name ?? null, step: null, selectedCols: [], dirty: false, profile: { quality: true, distribution: false, profile: false, whole: false }, formulaBar: true, showSettings: true, ribbon: 'Home' } });
 }
@@ -299,7 +348,11 @@ export function refreshAll() {
   const r = s.refresh({ autodetect: false });
   clearQueryCache();
   if (r.errors.length) s.openDialog({ type: 'loadErrors', errors: r.errors });
-  else s.toast(`Refreshed ${r.loaded.length} table${r.loaded.length === 1 ? '' : 's'}`);
+  else {
+    const modes = s.project.model.tables.map(t => t.storageMode ?? 'Import');
+    const note = modes.includes('DirectLake') ? ' Direct Lake tables were reframed (pointed at the latest Delta version).' : modes.includes('DirectQuery') ? ' DirectQuery tables have no imported data; their visuals query the source directly.' : '';
+    s.toast(`Refreshed ${r.loaded.length} table${r.loaded.length === 1 ? '' : 's'}.${note}`);
+  }
 }
 
 /** Modeling > New parameter > Numeric range (a "what-if" parameter). */
@@ -312,4 +365,35 @@ export function createWhatIf(name: string, min: number, max: number, step: numbe
   }, { recalc: true });
   if (slicer) { const id = addVisual('slicer'); addFieldToVisual(id, { table: name, column: name }); store.updateVisual(id, v => { v.format = { ...v.format, singleSelect: true }; }); }
   clearQueryCache();
+}
+
+// ---------- storage mode ----------
+/** Change a table's storage mode with Power BI's rules: Import is final, and only DirectQuery-capable tables can be DirectQuery or Dual. */
+export function setStorageMode(table: string, mode: 'Import' | 'DirectQuery' | 'Dual') {
+  const s = store; const t = s.project.model.tables.find(x => x.name === table); if (!t) return;
+  const cur = t.storageMode ?? 'Import';
+  if (cur === mode) return;
+  if (cur === 'DirectLake') { s.toast('Direct Lake tables read Delta tables in OneLake. To use Import, add the table again with Get data and choose Import.', 'error'); return; }
+  if (cur === 'Import') { s.openDialog({ type: 'message', title: 'Storage mode', text: `${table} is in Import mode. A table in Import mode can't be changed to ${mode}: its data was copied into the model when it was loaded. To use ${mode}, connect to the source again (for example Get data › SQL Server) and choose DirectQuery as the data connectivity mode.` }); return; }
+  const apply = () => {
+    s.change(p => {
+      const tt = p.model.tables.find(x => x.name === table)!; tt.storageMode = mode;
+      const q = p.queries.find(x => x.name === table); if (q) q.storageMode = mode === 'Import' ? 'Import' : 'DirectQuery';
+    });
+    if (mode === 'Import') { s.refresh({ only: [table], autodetect: false }); s.toast(`${table} is now in Import mode. Its data was loaded into the model; refresh it to get new data.`); }
+    clearQueryCache();
+  };
+  if (mode === 'Import') s.openDialog({ type: 'confirm', title: 'Storage mode', text: `Setting the storage mode to Import is an irreversible operation. You won't be able to switch ${table} back to ${cur}. The data will be loaded into the model and must be refreshed to stay current.`, ok: 'OK', onOk: apply });
+  else apply();
+}
+/** "Switch all tables to Import mode" (Power Query banner and the status bar). */
+export function switchToImport(focus?: string) {
+  const s = store;
+  const run = () => {
+    s.change(p => { for (const t of p.model.tables) if (t.storageMode === 'DirectQuery' || t.storageMode === 'Dual') t.storageMode = 'Import'; for (const q of p.queries) if (q.storageMode === 'DirectQuery') q.storageMode = 'Import'; });
+    if (s.ui.pq) s.setUI({ pq: { ...s.ui.pq, queries: s.ui.pq.queries.map(q => (q.storageMode === 'DirectQuery' ? { ...q, storageMode: 'Import' as const } : q)), dirty: true } });
+    clearQueryCache();
+    s.toast(`All tables are now in Import mode${focus ? `; ${focus} can use any Power Query step` : ''}. Apply your changes to load the data.`);
+  };
+  s.openDialog({ type: 'confirm', title: 'Switch all tables to Import mode', text: 'Switching to Import mode is an irreversible operation. You won\'t be able to switch back to DirectQuery. Do you want to continue?', ok: 'Switch', onOk: run });
 }

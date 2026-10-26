@@ -37,7 +37,7 @@ export function FormulaBar() {
       </div>
     </div>
     <div className="tiny" style={{ padding: '2px 10px', background: '#fff', borderBottom: '1px solid #e1dfdd' }}>
-      {fm.kind === 'measure' ? 'Measure' : fm.kind === 'column' ? 'Calculated column' : 'Calculated table'} in <b>{fm.kind === 'table' ? 'model' : fm.table}</b> · Enter to commit · Shift+Enter for a new line · Esc to cancel
+      {fm.kind === 'measure' ? 'Measure' : fm.kind === 'column' ? 'Calculated column' : fm.kind === 'calcitem' ? 'Calculation item' : 'Calculated table'} in <b>{fm.kind === 'table' ? 'model' : fm.table}</b>{fm.kind === 'calcitem' && <> · use SELECTEDMEASURE() for the measure in the visual</>} · Enter to commit · Shift+Enter for a new line · Esc to cancel
     </div>
     {err && <div className="formula"><div className="err" style={{ flex: 1 }}>{err}</div></div>}
   </div>;

@@ -94,10 +94,14 @@ export function importTmsl(schema: any, name: string, layout: any) {
       name: c.name, dataType: tmslType(c.dataType), formatString: c.formatString, hidden: c.isHidden, summarizeBy: c.summarizeBy ? (c.summarizeBy === 'none' ? 'None' : c.summarizeBy[0].toUpperCase() + c.summarizeBy.slice(1)) : undefined,
       sortByColumn: c.sortByColumn, dataCategory: c.dataCategory, displayFolder: c.displayFolder, description: c.description, expression: c.type === 'calculated' ? joinExpr(c.expression) : undefined,
     }));
-    if (src.type === 'calculated') tables.push({ name: t.name, columns: meta.filter((c: any) => c.expression), rows: [], expression: joinExpr(src.expression), hidden: t.isHidden, description: t.description });
+    if (t.calculationGroup || src.type === 'calculationGroup') {
+      const cg = t.calculationGroup ?? {};
+      tables.push({ name: t.name, columns: meta.filter((c: any) => c.dataType === 'text').slice(0, 1), rows: [], hidden: t.isHidden, description: t.description,
+        calculationGroup: { precedence: cg.precedence ?? 0, items: (cg.calculationItems ?? []).map((it: any, i: number) => ({ name: it.name, expression: joinExpr(it.expression), ordinal: it.ordinal ?? i, formatStringExpression: it.formatStringDefinition ? joinExpr(it.formatStringDefinition.expression) : undefined, description: it.description })) } });
+    } else if (src.type === 'calculated') tables.push({ name: t.name, columns: meta.filter((c: any) => c.expression), rows: [], expression: joinExpr(src.expression), hidden: t.isHidden, description: t.description });
     else {
       queries.push({ id: uid('q'), name: t.name, code: joinExpr(src.expression) || 'let\n    Source = ""\nin\n    Source', load: true, refresh: true, description: t.description });
-      tables.push({ name: t.name, columns: meta, rows: [], hidden: t.isHidden, description: t.description, storageMode: part?.mode === 'directQuery' ? 'DirectQuery' : part?.mode === 'dual' ? 'Dual' : 'Import' });
+      tables.push({ name: t.name, columns: meta, rows: [], hidden: t.isHidden, description: t.description, storageMode: part?.mode === 'directQuery' ? 'DirectQuery' : part?.mode === 'dual' ? 'Dual' : part?.mode === 'directLake' ? 'DirectLake' : 'Import' });
     }
     void calcCols;
     if (t.dataCategory === 'Time') { const key = (t.columns ?? []).find((c: any) => c.isKey); if (key) tables[tables.length - 1].dateColumn = key.name; }
@@ -113,7 +117,7 @@ export function importTmsl(schema: any, name: string, layout: any) {
   }));
   const roles: Role[] = (m.roles ?? []).map((r: any) => ({ name: r.name, filters: Object.fromEntries((r.tablePermissions ?? []).map((tp: any) => [tp.name, joinExpr(tp.filterExpression)])) }));
   p.queries = queries;
-  p.model = { tables, measures, relationships: rels, hierarchies, roles };
+  p.model = { tables, measures, relationships: rels, hierarchies, roles, discourageImplicitMeasures: m.discourageImplicitMeasures || tables.some(t => t.calculationGroup) || undefined };
   if (layout) p.report = importLayout(layout, p);
   s.loadProject(p);
   clearQueryCache();
@@ -186,11 +190,12 @@ export function exportBim() {
   const bim = {
     name: s.project.name, compatibilityLevel: 1567,
     model: {
-      culture: 'en-US', defaultPowerBIDataSourceVersion: 'powerBI_V3',
+      culture: 'en-US', defaultPowerBIDataSourceVersion: 'powerBI_V3', discourageImplicitMeasures: m.discourageImplicitMeasures || undefined,
       tables: m.tables.map(t => ({
         name: t.name, isHidden: t.hidden || undefined, dataCategory: t.dateColumn ? 'Time' : undefined,
         columns: t.columns.map(c => (c.expression ? { type: 'calculated', name: c.name, dataType: dt(c.dataType), expression: c.expression, formatString: c.formatString, isHidden: c.hidden || undefined, summarizeBy: (c.summarizeBy ?? 'None').toLowerCase() } : { name: c.name, dataType: dt(c.dataType), sourceColumn: c.name, formatString: c.formatString, isHidden: c.hidden || undefined, summarizeBy: (c.summarizeBy ?? 'None').toLowerCase(), sortByColumn: c.sortByColumn, dataCategory: c.dataCategory, displayFolder: c.displayFolder, isKey: t.dateColumn === c.name || undefined })),
-        partitions: [t.expression ? { name: t.name, mode: 'import', source: { type: 'calculated', expression: t.expression } } : { name: t.name, mode: (t.storageMode ?? 'Import').toLowerCase().replace('directquery', 'directQuery'), source: { type: 'm', expression: split(s.project.queries.find(q => q.name === t.name)?.code ?? '') } }],
+        calculationGroup: t.calculationGroup ? { precedence: t.calculationGroup.precedence, calculationItems: t.calculationGroup.items.map(it => ({ name: it.name, expression: it.expression, ordinal: it.ordinal, formatStringDefinition: it.formatStringExpression ? { expression: it.formatStringExpression } : undefined, description: it.description })) } : undefined,
+        partitions: [t.calculationGroup ? { name: t.name, mode: 'import', source: { type: 'calculationGroup' } } : t.expression ? { name: t.name, mode: 'import', source: { type: 'calculated', expression: t.expression } } : { name: t.name, mode: (t.storageMode ?? 'Import').toLowerCase().replace('directquery', 'directQuery').replace('directlake', 'directLake'), source: { type: 'm', expression: split(s.project.queries.find(q => q.name === t.name)?.code ?? '') } }],
         measures: m.measures.filter(x => x.table === t.name).map(x => ({ name: x.name, expression: x.expression, formatString: x.formatString, displayFolder: x.displayFolder, description: x.description })),
         hierarchies: m.hierarchies.filter(h => h.table === t.name).map(h => ({ name: h.name, levels: h.levels.map((l, i) => ({ name: l, ordinal: i, column: l })) })),
       })),

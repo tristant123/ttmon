@@ -34,6 +34,9 @@ export interface Ctx {
   selected: Filter[] | null;
   scope: Set<string> | null;
   cache: Map<string, any>;
+  /** Calculation groups already applied on this evaluation path, and the measure SELECTEDMEASURE() refers to. */
+  cg?: string[];
+  selMeasure?: Measure;
 }
 
 export function emptyCtx(): Ctx {
@@ -443,11 +446,35 @@ export class DaxEngine {
     return filters;
   }
 
+  /** Calculation groups in descending precedence. */
+  calcGroups(): ModelTable[] {
+    return this.model.tables.filter(t => t.calculationGroup).sort((a, b) => (b.calculationGroup!.precedence ?? 0) - (a.calculationGroup!.precedence ?? 0));
+  }
+  /** The calculation item selected in the filter context: exactly one visible item of a filtered group. */
+  activeItem(t: ModelTable, ctx: Ctx) {
+    if (!this.isFiltered(t.name, ctx)) return null;
+    const vis = this.visible(t.name, ctx);
+    if (vis.length !== 1) return null;
+    const name = t.rows[vis[0]][0];
+    return t.calculationGroup!.items.find(it => it.name === name) ?? null;
+  }
+
   evalMeasure(m: Measure, ctx: Ctx): any {
     const key = m.name.toLowerCase();
     if (this.measureStack.includes(key)) derr(`A circular dependency was detected: ${[...this.measureStack, key].map(x => `[${x}]`).join(' → ')}.`);
     const filters = ctx.rows.length ? this.transition(ctx) : ctx.filters;
     const c: Ctx = { ...ctx, filters, rows: [], vars: null, cache: ctx.rows.length ? new Map() : ctx.cache };
+    // calculation groups replace the measure with the selected item's expression, once per group
+    for (const g of this.calcGroups()) {
+      if (c.cg?.includes(g.name)) continue;
+      const item = this.activeItem(g, c);
+      if (!item) continue;
+      const ic: Ctx = { ...c, cg: [...(c.cg ?? []), g.name], selMeasure: m };
+      try { return this.scalar(this.parse(item.expression), ic); } catch (e) {
+        if (e instanceof DaxError && !e.message.startsWith('[')) throw new DaxError(`[${g.name}].[${item.name}]: ${e.message}`);
+        throw e;
+      }
+    }
     this.measureStack.push(key);
     try {
       const node = this.parse(m.expression);

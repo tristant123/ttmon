@@ -1,4 +1,5 @@
 // Model view: table cards, relationship lines with cardinality and cross-filter direction, Properties pane.
+import { FormulaBar } from '../FormulaBar';
 import React, { useMemo, useRef, useState } from 'react';
 import { useStore, store } from '../../store';
 import { DataPane } from '../panes/DataPane';
@@ -7,10 +8,19 @@ import { menuAt, Toggle, typeIcon } from '../common';
 import { Relationship, ModelTable } from '../../model/types';
 import { isNumericType, keyOf } from '../../core/values';
 import { clearQueryCache } from '../report/vhelpers';
-import { openPowerQuery, startNewMeasure, startNewColumn } from '../actions';
+import { openPowerQuery, startNewMeasure, startNewColumn, updateCalcGroup, editCalcItem, startCalcItem, setStorageMode } from '../actions';
 
 const CARD_W = 200;
 const cardH = (t: ModelTable, measures: number) => 34 + Math.min(260, (t.columns.filter(c => !c.hidden || true).length + measures) * 22 + 6);
+
+/** In a composite model, a relationship between tables in different source groups is limited (no blank row, no RI assumptions). */
+export function isLimited(r: Relationship, m: { tables: ModelTable[] }): boolean {
+  if (r.cardinality === 'many-many') return true;
+  const g = (t: string) => { const mode = m.tables.find(x => x.name === t)?.storageMode ?? 'Import'; return mode === 'Import' ? 'import' : mode === 'DirectLake' ? 'lake' : mode === 'DirectQuery' ? 'dq' : 'dual'; };
+  const a = g(r.fromTable), b = g(r.toTable);
+  if (a === 'dual' || b === 'dual') return false;
+  return a !== b;
+}
 
 export function relationshipValid(r: Relationship): string | null {
   const m = store.project.model;
@@ -114,6 +124,7 @@ export function ModelView() {
   ]);
   return <>
     <div className="center">
+      <FormulaBar />
       <div style={{ display: 'flex', gap: 6, padding: '6px 10px', background: '#fff', borderBottom: '1px solid #e1dfdd', alignItems: 'center', flexWrap: 'wrap' }}>
         <b style={{ marginRight: 8 }}>All tables</b>
         <button className="btn sm" onClick={() => s.openDialog({ type: 'relationships' })}>Manage relationships</button>
@@ -136,6 +147,7 @@ export function ModelView() {
             return <g key={r.id} className="rel-line" onClick={() => setSel({ kind: 'rel', id: r.id })} onDoubleClick={() => s.openDialog({ type: 'editRelationship', id: r.id })} onContextMenu={e => relMenu(e, r)}>
               <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="transparent" strokeWidth={12} />
               <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={selected ? '#0f6cbd' : '#8a8886'} strokeWidth={selected ? 2.5 : 1.5} strokeDasharray={r.active ? undefined : '6 4'} />
+              {isLimited(r, m) && [p1, p2].map((p, k) => { const o = k ? p1 : p2; const len = Math.hypot(o.x - p.x, o.y - p.y) || 1; const ux = (o.x - p.x) / len, uy = (o.y - p.y) / len; const c = { x: p.x + ux * 22, y: p.y + uy * 22 }; return <path key={k} d={`M${c.x - uy * 6 + ux * 3},${c.y + ux * 6 + uy * 3} Q${c.x - ux * 2},${c.y - uy * 2} ${c.x + uy * 6 + ux * 3},${c.y - ux * 6 + uy * 3}`} fill="none" stroke="#252423" strokeWidth={1.6}><title>Limited relationship</title></path>; })}
               <text x={l1.x} y={l1.y} fontSize={13} fontWeight={700} fill="#252423" textAnchor="middle">{r.cardinality === 'one-one' ? '1' : '*'}</text>
               <text x={l2.x} y={l2.y} fontSize={13} fontWeight={700} fill="#252423" textAnchor="middle">{r.cardinality === 'many-many' ? '*' : '1'}</text>
               <g transform={`translate(${mid.x},${mid.y}) rotate(${ang})`}>
@@ -150,7 +162,7 @@ export function ModelView() {
         {m.tables.map(t => {
           const p = pos(t.name);
           const ms = m.measures.filter(x => x.table === t.name);
-          return <div key={t.name} className={`mcard ${sel?.table === t.name && sel.kind === 'table' ? 'sel' : ''}`} style={{ left: p.x, top: p.y, width: CARD_W }}>
+          return <div key={t.name} className={`mcard ${sel?.table === t.name && sel.kind === 'table' ? 'sel' : ''} sm-${(t.storageMode ?? 'Import').toLowerCase()}`} style={{ left: p.x, top: p.y, width: CARD_W }} title={t.storageMode && t.storageMode !== 'Import' ? `Storage mode: ${t.storageMode === 'DirectLake' ? 'Direct Lake' : t.storageMode}` : undefined}>
             <div className="mcard-h" onMouseDown={e => startCardDrag(e, t.name)} onDoubleClick={() => (t.expression ? null : openPowerQuery(t.name))}
               onContextMenu={e => menuAt(e, [{ label: 'New measure', icon: 'measure', onClick: () => startNewMeasure(t.name) }, { label: 'New column', icon: 'newcolumn', onClick: () => startNewColumn(t.name) }, { label: 'Edit query', icon: 'transform', disabled: !!t.expression, onClick: () => openPowerQuery(t.name) }, { label: 'Mark as date table', icon: 'calendar', onClick: () => s.openDialog({ type: 'markDate', table: t.name }) }, { label: t.hidden ? 'Unhide in report view' : 'Hide in report view', onClick: () => s.change(pr => { pr.model.tables.find(x => x.name === t.name)!.hidden = !t.hidden; }) }])}>
               <I n={t.expression ? 'calcTable' : 'tableIcon'} s={15} /><span className="nm" style={{ fontStyle: t.hidden ? 'italic' : undefined }}>{t.name}</span>{t.dateColumn && <I n="calendar" s={13} />}{t.hidden && <I n="eyeOff" s={13} />}
@@ -212,7 +224,15 @@ export function createRelationship(t1: string, c1: string, t2: string, c2: strin
 function PropertiesPane({ sel }: { sel: { kind: string; table?: string; name?: string; id?: string } | null }) {
   const s = store; const m = s.project.model;
   const body = (() => {
-    if (!sel) return <div className="tiny">Select a table, column, measure or relationship to see its properties.</div>;
+    if (!sel) return <>
+      <div className="tiny">Select a table, column, measure or relationship to see its properties. These are the semantic model's properties.</div>
+      <div className="frow"><label>Model</label><b>{s.project.name}</b></div>
+      <div className="frow inline"><label title="Report authors can't summarize numeric columns automatically; they must use measures. Required for calculation groups.">Discourage implicit measures</label><Toggle on={!!m.discourageImplicitMeasures} onChange={b => {
+        if (!b && m.tables.some(t => t.calculationGroup)) { s.toast('This model has calculation groups, so implicit measures must stay discouraged.', 'error'); return; }
+        s.change(p => { p.model.discourageImplicitMeasures = b; }); clearQueryCache();
+      }} /></div>
+      <div className="frow"><label>Calculation groups</label>{m.tables.filter(t => t.calculationGroup).map(t => t.name).join(', ') || 'None'}</div>
+    </>;
     if (sel.kind === 'rel') {
       const r = m.relationships.find(x => x.id === sel.id); if (!r) return null;
       const set = (patch: Partial<Relationship>) => { s.change(p => { Object.assign(p.model.relationships.find(x => x.id === r.id)!, patch); }); clearQueryCache(); };
@@ -222,16 +242,31 @@ function PropertiesPane({ sel }: { sel: { kind: string; table?: string; name?: s
         <div className="frow"><label>Cardinality</label><select className="tx" value={r.cardinality} onChange={e => set({ cardinality: e.target.value as any })}><option value="many-one">Many to one (*:1)</option><option value="one-one">One to one (1:1)</option><option value="many-many">Many to many (*:*)</option></select></div>
         <div className="frow"><label>Cross-filter direction</label><select className="tx" value={r.crossFilter} onChange={e => set({ crossFilter: e.target.value as any })}><option value="single">Single</option><option value="both">Both</option></select></div>
         <div className="frow inline"><label>Make this relationship active</label><Toggle on={r.active} onChange={() => toggleActive(r)} /></div>
+        {isLimited(r, m) && <div className="info tiny">This is a <b>limited relationship</b>{r.cardinality === 'many-many' ? ' (many-to-many)' : ' (it crosses source groups in a composite model)'}. Unmatched rows don't produce a blank row, and RELATED can't be used across it.</div>}
         {relationshipValid(r) && <div className="errbox">{relationshipValid(r)}</div>}
         <button className="btn sm" onClick={() => s.openDialog({ type: 'editRelationship', id: r.id })}>Open editor…</button>
       </>;
     }
     const t = m.tables.find(x => x.name === sel.table); if (!t) return null;
+    if (sel.kind === 'table' && t.calculationGroup) return <>
+      <div className="frow"><label>Calculation group</label><b>{t.name}</b></div>
+      <div className="frow"><label title="When several calculation groups apply, the one with the higher precedence is applied first (outermost).">Precedence</label><input className="tx" type="number" defaultValue={t.calculationGroup.precedence} key={'p' + t.name} onBlur={e => updateCalcGroup(t.name, g => { g.precedence = +e.target.value || 0; })} /></div>
+      <div className="frow"><label>Calculation items</label></div>
+      {[...t.calculationGroup.items].sort((a, b) => (a.ordinal ?? 0) - (b.ordinal ?? 0)).map(it => <div key={it.name} style={{ borderTop: '1px solid var(--line)', paddingTop: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><b>{it.name}</b><button className="linkbtn" onClick={() => editCalcItem(t.name, it.name)}>Edit</button></div>
+        <code className="code" style={{ whiteSpace: 'pre-wrap', fontSize: 11 }}>{it.expression}</code>
+        <div className="frow" style={{ marginTop: 4 }}><label title="Optional DAX that returns a format string, for example &quot;0.0%&quot; or SELECTEDMEASUREFORMATSTRING()">Dynamic format string</label><input className="tx" defaultValue={it.formatStringExpression ?? ''} key={'fs' + it.name} placeholder="None" onBlur={e => updateCalcGroup(t.name, g => { const x = g.items.find(y => y.name === it.name); if (x) x.formatStringExpression = e.target.value.trim() || undefined; })} /></div>
+      </div>)}
+      <button className="btn sm" onClick={() => startCalcItem(t.name)}>New calculation item</button>
+    </>;
     if (sel.kind === 'table') return <>
       <div className="frow"><label>Name</label><b>{t.name}</b></div>
       <div className="frow"><label>Description</label><textarea className="tx" rows={2} defaultValue={t.description ?? ''} key={t.name} onBlur={e => s.change(p => { p.model.tables.find(x => x.name === t.name)!.description = e.target.value; })} /></div>
       <div className="frow"><label>Rows</label>{t.rows.length.toLocaleString()}</div>
-      <div className="frow"><label>Storage mode</label><select className="tx" value={t.storageMode ?? 'Import'} onChange={e => s.change(p => { p.model.tables.find(x => x.name === t.name)!.storageMode = e.target.value as any; })}><option>Import</option><option>DirectQuery</option><option>Dual</option></select><span className="tiny">The sandbox always evaluates in memory; the setting is recorded for practice.</span></div>
+      <div className="frow"><label>Storage mode</label>{t.storageMode === 'DirectLake' ? <b>Direct Lake</b> : <select className="tx" value={t.storageMode ?? 'Import'} onChange={e => setStorageMode(t.name, e.target.value as any)}><option>Import</option><option disabled={(t.storageMode ?? 'Import') === 'Import'}>DirectQuery</option><option disabled={(t.storageMode ?? 'Import') === 'Import'}>Dual</option></select>}
+        <span className="tiny">{(t.storageMode ?? 'Import') === 'Import' ? 'Data is copied into the model. Import tables can\'t be changed to DirectQuery or Dual.' : t.storageMode === 'DirectQuery' ? 'Queries go to the source each time a visual loads. Changing to Import is irreversible.' : t.storageMode === 'Dual' ? 'Acts as Import or DirectQuery, whichever avoids a limited relationship. Use for dimension tables in composite models.' : 'Reads Delta tables in OneLake; no import refresh, only reframing.'}</span>
+        {(() => { const lim = m.relationships.filter(r => (r.fromTable === t.name || r.toTable === t.name) && isLimited(r, m) && r.cardinality !== 'many-many'); return lim.length ? <div className="warnbox tiny" style={{ marginTop: 4 }}>{lim.length} limited relationship{lim.length > 1 ? 's' : ''} (Import ↔ DirectQuery). Set the dimension table to Dual to make {lim.length > 1 ? 'them' : 'it'} regular.</div> : null; })()}
+      </div>
       <div className="frow inline"><label>Is hidden</label><Toggle on={!!t.hidden} onChange={b => s.change(p => { p.model.tables.find(x => x.name === t.name)!.hidden = b; })} /></div>
       <div className="frow"><label>Marked as date table</label>{t.dateColumn ? `Yes, on ${t.dateColumn}` : 'No'}</div>
       {t.expression && <div className="frow"><label>DAX expression</label><code className="code" style={{ whiteSpace: 'pre-wrap' }}>{t.expression}</code></div>}

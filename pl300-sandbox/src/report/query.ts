@@ -330,6 +330,22 @@ export function defaultSort(type: string, groups: FieldRef[], store: Store): { i
   return { index: groups.length, desc: true };
 }
 
+/** A calculation item's dynamic format string for a measure cell, from the item on the row/column or selected in a slicer. */
+export function dynamicFormat(store: Store, f: FieldRef, pairs: { field: FieldRef; value: any }[], ctx?: Ctx): string | undefined {
+  if (!f.measure) return undefined;
+  const m = store.project.model;
+  const groups = m.tables.filter(t => t.calculationGroup?.items.some(i => i.formatStringExpression)).sort((a, b) => b.calculationGroup!.precedence - a.calculationGroup!.precedence);
+  if (!groups.length) return undefined;
+  const meas = m.measures.find(x => x.name === f.measure); if (!meas) return undefined;
+  for (const g of groups) {
+    const pr = pairs.find(p => p.field.table === g.name);
+    const item = pr ? g.calculationGroup!.items.find(i => i.name === pr.value) : ctx ? store.dax.activeItem(g, ctx) : null;
+    if (!item?.formatStringExpression) continue;
+    try { const v = store.dax.scalar(store.dax.parse(item.formatStringExpression), { ...(ctx ?? emptyCtx()), selMeasure: meas }); if (typeof v === 'string' && v) return v; } catch { /* fall back to the measure's format */ }
+  }
+  return undefined;
+}
+
 export function evalCard(store: Store, page: Page, v: Visual, f: FieldRef): any {
   const vc = visualContext(store, page, v);
   return store.dax.scalar(valueNode(store.project.model, f), vc.ctx);
